@@ -25,7 +25,7 @@ Export: 同じ FrameClock を fps 刻みで回す → VideoFrame → Mediabunny(
 ## 2. モジュール分割
 | モジュール | 責務 |
 |---|---|
-| `core/audio` | デコード、オフライン特徴抽出（FFT → bass/mid/high/rms/peak/beat/spectralEnergy/flux + 64帯域）、BPM・ビートグリッド、再生と時刻の管理 |
+| `core/audio` | デコード、オフライン特徴抽出（FFT → bass/mid/high/rms/peak/beat/spectralEnergy/flux + 64帯域、歌詞同期用の歌声らしさとonset）、BPM・ビートグリッド、再生と時刻の管理 |
 | `core/clock` | preview（再生同期）とexport（固定fps）で共通のフレーム時計 |
 | `core/visualizer` | `VisualizerPreset` 型、Registry（フォルダ追加で自動登録）、Host（生成、切替、resize、dispose） |
 | `core/render` | WebGLRenderer、PostFXスタック、Compositor |
@@ -33,7 +33,7 @@ Export: 同じ FrameClock を fps 刻みで回す → VideoFrame → Mediabunny(
 | `core/project` | スキーマ、`version`、migrate、検証（読み込むファイルは信頼しない前提。JIZURAの `mergeProject` と同じ方針）、save/load |
 | `core/assets` | 素材の参照管理（相対パスとsha-256）、IndexedDBキャッシュ、再リンク |
 | `core/export` | WebCodecs + Mediabunny、PNG連番（zip） |
-| `core/lyrics`（MVP後） | LRC/SRTパーサ、タップ同期、JIZURAアダプタ |
+| `core/lyrics`（MVP後） | LRC/SRTパーサ、半自動タップ同期（歌い出しへの吸着）、タイムライン編集、JIZURAアダプタ |
 | `ui` | Music / Visualizer / Lyrics / Overlay / Settings / Export の6パネル |
 | `visualizers/<id>/` | プリセット本体（1フォルダで完結） |
 
@@ -82,14 +82,14 @@ interface VisualizerPreset {
 - JIZURA（MIT）：移植、同梱したファイルには著作権表示とMIT全文を残します（`vendor/jizura/LICENSE`、`THIRD_PARTY_NOTICES.md`）。改変した場合はファイル冒頭にその旨を書きます。
 - Mediabunny（MPL-2.0）：改変せずnpm依存として使います。改変した場合、そのファイルは開示が必要です。NOTICEに記載します。
 - Three.js（MIT）、フォント（OFL-1.1）：NOTICEに記載します。
-- **Suno Import**：非公式APIに依存します。LYRIMOのブックマークレットはSunoのセッショントークン（`__session` / clerk JWT）を読み、`studio-api.prod.suno.com` の `aligned_lyrics` を叩いています。規約や仕様変更のリスクがあるので、自己責任機能として分離し、MVPには入れません。
+- **Suno連携**：LYRIMOのブックマークレットは、Sunoのセッショントークンを読み取って非公式APIを呼んでいます。規約や仕様変更のリスクがあるため採用しません。Suno曲は手動でダウンロードしたファイルとして扱います（「歌詞同期の方針」を参照）。
 - 生成物の権利は音源と画像の権利者にあります。この旨をREADMEに明記します。
 
 ## 6. MVPの範囲
 対象：音源読み込み、Audio Analyzer、Visualizer Preset Manager、Solar Gate、Milky Way、Live Stage、PNG Overlay、Project Save/Load（ユーザー指定どおり）。
 - プレビュー再生（再生、停止、シーク）と、共通パラメータ9項目の最小UIを含みます。
 - 書き出しは基盤のみです。MP4を1本出せるところまで作ります（Phase 2のExport基盤）。
-- 対象外：歌詞（Lyric Motion、同期）、Suno Import、WebM/PNG連番、自動歌詞解析（ローカルでも実質AIモデルが必要なので、後から任意機能として追加します）。
+- 対象外：歌詞（Lyric Motion、半自動同期、タイムライン編集）とWebM/PNG連番は、MVPのあとに作ります。Sunoのブックマークレットと、AIによる歌詞の自動アライメントは作りません。
 
 ## 7. 実装順序（1ステップごとにビルド、テスト、コミット）
 0. `docs/ARCHITECTURE.md` と、ライセンス、NOTICEの雛形をコミットします ← 承認後の最初の作業
@@ -126,7 +126,7 @@ zunzun/
   "audio":{"ref":"assets/song.mp3","sha256":"…","name":"…","duration":213.4,"sampleRate":48000,"bpm":128},
   "visualizer":{"preset":"solar-gate","presetVersion":1,"common":{"intensity":0.8,"sensitivity":0.6,"bass":1,"mid":1,"high":1,"glow":0.7,"motion":0.6,"colorTheme":"gold","cameraMotion":0.4},"params":{}},
   "overlays":[{"id":"ov1","ref":"assets/logo.png","sha256":"…","x":0.5,"y":0.8,"scale":0.3,"rotation":0,"opacity":1,"z":10,"glow":0,"float":0,"beat":0.2}],
-  "lyrics":{"engine":"jizura","source":"lrc","text":"…","timing":{"lineTimes":{}},"motion":{…JIZURA project subset…}},
+  "lyrics":{"engine":"jizura","source":"lrc","text":"…","timing":{"lineTimes":{},"lineEnds":{},"snap":true,"snapWindowMs":150},"motion":{…JIZURA project subset…}},
   "colors":{},"fonts":{},
   "export":{"width":1920,"height":1080,"fps":60,"format":"mp4","quality":"high","transparent":false} }
 ```
@@ -139,10 +139,34 @@ zunzun/
 - **Milky Way**：highで星のきらめき、midで天の川の輝度、beatで流星が発生（seedで決定）、rmsで湖面の反射の揺らぎが変わります。
 - **Live Stage**：ムービングライトをbeat同期のパターンで振り、bassでスモークの濃度（ボリューム風のコーン）、highでレーザーのストロボが反応します。
 
-## Suno Import（MVP後）の安全設計
-- ブックマークレットは曲ページ上で実行し、取得するもの（音源、歌詞、タイミング、曲名）をダイアログに明示してから動かします。
-- 受け渡しは2通りです。①曲データ一式をファイルとしてダウンロードし、ZUNZUNにドロップする（基本）。②ZUNZUNのウィンドウへ `postMessage`（targetOriginは固定。受信側で `origin` とスキーマを検証）。
-- トークンをページ外に送らない、外部スクリプトを読み込まない、コードを短く監査しやすく保つ、の3点を守ります。Suno側の仕様変更に備えて、パーサはバージョンごとに分けて持ちます。
+## 歌詞同期の方針（MVP後、`core/lyrics`）
+**決定：LYRIMOやSunoのブックマークレットは使いません。**「半自動タップ＋タイムラインでの後調整」を標準にします。AIは使いません。
+
+入力
+- 歌詞テキスト（貼り付け）、LRC、SRTを受け付けます。
+- Suno曲も、ユーザーが自分でダウンロードした音源と、コピーした歌詞テキストを読み込むだけで扱えます。Sunoのサイトには一切アクセスしません。
+
+1. **半自動タップ同期**
+   - 再生しながら Space/Enter で各行の頭を叩きます。Backspaceで1つ戻り、Escで中断します（JIZURAのタップ操作と同じ）。
+   - 叩いた時刻は、±150ms以内にある「歌い出し候補」へ自動で吸着します。候補がなければビートに吸着し、それもなければ叩いた時刻をそのまま使います。
+   - 吸着のオン/オフと吸着範囲は設定で変えられます。
+   - 歌い出し候補は、Audio Engineが作る**歌声らしさ（vocal activity）**から求めます。中央定位を強調し、300Hz〜3kHz帯のエネルギーとその立ち上がりから計算します。
+2. **タイムラインで後調整**
+   - 表示する段は、波形、歌声らしさ、ビートグリッド、歌詞の行ブロックです。
+   - 行ブロックは、開始位置と終了位置をドラッグで動かせます。ドラッグ中も吸着が効き、Alt/Optionを押している間は吸着しません。
+   - 矢印キーで微調整できます（10ms、Shiftを押すと100ms）。
+   - 選択した行、または全体をまとめて前後にずらせます（全体オフセット）。
+   - 取り消しとやり直しに対応します（Ctrl/Cmd+Z/Y）。
+   - 行を選ぶとその少し前から再生し、ループ試聴できます。
+3. **既存のLRC/SRTの自動オフセット補正**
+   - 読み込んだタイミングが全体的にずれている場合に使います。歌声らしさとの相互相関から全体オフセットを1つ推定し、提案します。適用するかどうかはユーザーが決めます。
+
+保存
+- 手で決めたタイミングはすべて `lyrics.timing.lineTimes`（行の開始）と `lineEnds`（行の終了、任意）に保存します。形式はJIZURAと互換で、LRCのタグより優先します。
+- 歌声らしさなどの解析結果はプロジェクトに保存しません。音源から毎回、同じ結果を再計算できるためです。
+
+MVPへの影響
+- Audio Engine（Step 2）で、歌声らしさとonsetの時系列も一緒に計算します。後から歌詞機能を足しても、Audio Engineを作り直さずに済みます。
 
 ## Verification
 - 各ステップで `npm run build`、`npm run lint`、`npm test`（Vitest）を実行します。
