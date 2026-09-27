@@ -70,10 +70,39 @@ describe('sanitizeProject', () => {
     expect(project.audio).toEqual({ ref: 'song.mp3', sha256: 'abc123', name: 'song.mp3', duration: 120, sampleRate: 48000, bpm: 128 });
   });
 
-  it('overlays は Step 6 実装まで常に空配列にする', () => {
+  it('overlays: id/ref/sha256 が欠けているレイヤーは除外する', () => {
     const raw = validRaw() as Record<string, unknown>;
-    raw.overlays = [{ id: 'x' }];
+    raw.overlays = [{ id: 'x' }, { id: 'y', ref: 'logo.png' }, 'not-an-object', 42];
     expect(sanitizeProject(raw).overlays).toEqual([]);
+  });
+
+  it('overlays: 正常なレイヤーはそのまま復元し、数値は clamp する', () => {
+    const raw = validRaw() as Record<string, unknown>;
+    raw.overlays = [
+      { id: 'ov1', ref: 'logo.png', sha256: 'abc', x: 0.5, y: 0.8, scale: 0.3, rotation: 0, opacity: 1, z: 0, glow: 0.2, float: 0, beat: 0.5 },
+      { id: 'ov2', ref: 'star.png', sha256: 'def', x: 99, scale: -1, opacity: 5, z: 1 },
+    ];
+    const project = sanitizeProject(raw);
+    expect(project.overlays).toHaveLength(2);
+    expect(project.overlays[0]).toEqual({
+      id: 'ov1', ref: 'logo.png', sha256: 'abc', x: 0.5, y: 0.8, scale: 0.3, rotation: 0, opacity: 1, z: 0, glow: 0.2, float: 0, beat: 0.5,
+    });
+    // 範囲外の値は clamp、欠けている数値フィールドは既定値で補う
+    expect(project.overlays[1]?.x).toBe(3);
+    expect(project.overlays[1]?.scale).toBe(0.01);
+    expect(project.overlays[1]?.opacity).toBe(1);
+    expect(project.overlays[1]?.y).toBe(0.5); // 既定値
+  });
+
+  it('overlays: id が重複する場合は先勝ちにする', () => {
+    const raw = validRaw() as Record<string, unknown>;
+    raw.overlays = [
+      { id: 'dup', ref: 'a.png', sha256: 'a', scale: 0.1 },
+      { id: 'dup', ref: 'b.png', sha256: 'b', scale: 0.9 },
+    ];
+    const project = sanitizeProject(raw);
+    expect(project.overlays).toHaveLength(1);
+    expect(project.overlays[0]?.ref).toBe('a.png');
   });
 
   it('seed は符号なし整数として保存/復元する', () => {

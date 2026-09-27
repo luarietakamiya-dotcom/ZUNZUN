@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { defaultCommonParams } from '../types';
+import { defaultCommonParams, type OverlayLayer } from '../types';
 import { buildProjectFile, type ProjectSourceState } from './serialize';
+
+function overlay(overrides: Partial<OverlayLayer> = {}): OverlayLayer {
+  return { id: 'ov1', ref: 'logo.png', sha256: 'abc', x: 0.5, y: 0.5, scale: 0.3, rotation: 0, opacity: 1, z: 0, glow: 0, float: 0, beat: 0, ...overrides };
+}
 
 function state(overrides: Partial<ProjectSourceState> = {}): ProjectSourceState {
   return {
@@ -8,6 +12,7 @@ function state(overrides: Partial<ProjectSourceState> = {}): ProjectSourceState 
     presetId: 'solar-gate',
     params: defaultCommonParams(),
     audio: { isLoaded: false, fileName: '', sha256: '', duration: 0, sampleRate: 0, bpm: 0 },
+    overlays: [],
     ...overrides,
   };
 }
@@ -46,5 +51,18 @@ describe('buildProjectFile', () => {
     const params = { ...defaultCommonParams(), glow: 0.9, colorTheme: 'gold' };
     const project = buildProjectFile(state({ params }));
     expect(project.visualizer.common).toEqual(params);
+  });
+
+  it('オーバーレイの設定をそのまま保存する (複製であり、参照は共有しない)', () => {
+    const layers = [overlay({ id: 'a' }), overlay({ id: 'b', z: 1 })];
+    const project = buildProjectFile(state({ overlays: layers }));
+    expect(project.overlays).toEqual(layers);
+    expect(project.overlays).not.toBe(layers);
+    expect(project.overlays[0]).not.toBe(layers[0]);
+  });
+
+  it('オーバーレイが無ければ空配列を保存する', () => {
+    const project = buildProjectFile(state());
+    expect(project.overlays).toEqual([]);
   });
 });

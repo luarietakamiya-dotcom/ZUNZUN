@@ -1,4 +1,4 @@
-import { defaultProject, type CommonParams, type ProjectFile } from '../types';
+import { defaultProject, type CommonParams, type OverlayLayer, type ProjectFile } from '../types';
 
 /** buildProjectFile が必要とする AudioEngine の最小の形 (実体は core/audio/engine.ts の AudioEngine)。 */
 export interface ProjectAudioSource {
@@ -16,6 +16,7 @@ export interface ProjectSourceState {
   presetId: string | null;
   params: CommonParams;
   audio: ProjectAudioSource;
+  overlays: OverlayLayer[];
 }
 
 /**
@@ -46,7 +47,7 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
       common: { ...state.params },
       params: {},
     },
-    overlays: [],
+    overlays: state.overlays.map((o) => ({ ...o })),
     colors: {},
     fonts: {},
     export: base.export,

@@ -1,4 +1,4 @@
-import { defaultCommonParams, defaultProject, type CommonParams, type ExportSettings, type ProjectFile } from '../types';
+import { defaultCommonParams, defaultProject, type CommonParams, type ExportSettings, type OverlayLayer, type ProjectFile } from '../types';
 
 /**
  * 外部由来 (ファイル読み込み) の JSON は信頼しない前提で検証する。
@@ -76,6 +76,62 @@ function sanitizeAudio(raw: unknown): ProjectFile['audio'] {
   };
 }
 
+const OVERLAY_NUMBER_RANGES: Record<Exclude<keyof OverlayLayer, 'id' | 'ref' | 'sha256'>, readonly [number, number]> = {
+  // 画面の外に半分はみ出す配置も許すため、0..1 より少し広めに取る
+  x: [-2, 3],
+  y: [-2, 3],
+  scale: [0.01, 5],
+  rotation: [-Math.PI * 4, Math.PI * 4],
+  opacity: [0, 1],
+  z: [-1000, 1000],
+  glow: [0, 2],
+  float: [0, 2],
+  beat: [0, 2],
+};
+
+function sanitizeOverlayLayer(raw: unknown): OverlayLayer | null {
+  if (!isPlainObject(raw)) return null;
+  if (typeof raw.id !== 'string' || raw.id === '') return null;
+  if (typeof raw.ref !== 'string' || raw.ref === '') return null;
+  if (typeof raw.sha256 !== 'string' || raw.sha256 === '') return null;
+
+  const num = (key: keyof typeof OVERLAY_NUMBER_RANGES, fallback: number): number => {
+    const v = raw[key];
+    const [min, max] = OVERLAY_NUMBER_RANGES[key];
+    return isFiniteNumber(v) ? clamp(v, min, max) : fallback;
+  };
+
+  return {
+    id: raw.id,
+    ref: raw.ref,
+    sha256: raw.sha256,
+    x: num('x', 0.5),
+    y: num('y', 0.5),
+    scale: num('scale', 0.3),
+    rotation: num('rotation', 0),
+    opacity: num('opacity', 1),
+    z: num('z', 0),
+    glow: num('glow', 0),
+    float: num('float', 0),
+    beat: num('beat', 0),
+  };
+}
+
+/** 壊れたレイヤーは黙って除外し、id が重複するレイヤーは後勝ちを捨てて先勝ちを残す。 */
+function sanitizeOverlays(raw: unknown): OverlayLayer[] {
+  if (!Array.isArray(raw)) return [];
+  const out: OverlayLayer[] = [];
+  const seenIds = new Set<string>();
+  for (const item of raw) {
+    const layer = sanitizeOverlayLayer(item);
+    if (layer && !seenIds.has(layer.id)) {
+      out.push(layer);
+      seenIds.add(layer.id);
+    }
+  }
+  return out;
+}
+
 function sanitizeColors(raw: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   if (!isPlainObject(raw)) return out;
@@ -98,8 +154,6 @@ function sanitizeFonts(raw: unknown): Record<string, string> {
  * 未検証の値 (JSON.parse の結果) を、安全な ProjectFile に変換する。
  * format/version が想定と違う場合のみ例外を投げる。それ以外の壊れたフィールドは
  * 既定値で補い、読み込み自体は失敗させない (JIZURA の mergeProject と同じ寛容さ)。
- *
- * overlays は Step 6 (Overlay Manager) 実装までは常に空配列にする。
  */
 export function sanitizeProject(raw: unknown): ProjectFile {
   if (!isPlainObject(raw)) {
@@ -129,7 +183,7 @@ export function sanitizeProject(raw: unknown): ProjectFile {
       common: sanitizeCommonParams(visualizerRaw.common),
       params: isPlainObject(visualizerRaw.params) ? { ...visualizerRaw.params } : {},
     },
-    overlays: [],
+    overlays: sanitizeOverlays(raw.overlays),
     colors: sanitizeColors(raw.colors),
     fonts: sanitizeFonts(raw.fonts),
     export: sanitizeExport(raw.export, base.export),

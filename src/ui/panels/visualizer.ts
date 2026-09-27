@@ -1,5 +1,5 @@
 import { store } from '../../core/store';
-import type { AudioFrame, CommonParams } from '../../core/types';
+import type { AudioFrame, CommonParams, OverlayLayer } from '../../core/types';
 import { BAND_COUNT } from '../../core/audio';
 import { VisualizerHost } from '../../core/visualizer/host';
 import { visualizerRegistry } from '../../visualizers';
@@ -117,6 +117,14 @@ export function renderVisualizerPanel(): HTMLElement {
   paramsWrap.appendChild(colorRow);
 
   const host = new VisualizerHost(canvas);
+
+  // Overlay タブで設定されたレイヤーを、その時点の store の状態から一括で読み込む。
+  // 画像本体はタブをまたいで保持されないため (core/store.ts 参照)、まだ再選択されていない
+  // レイヤー (getOverlayFile が undefined) は読み込まずスキップする。
+  const overlayEntries = store.overlays
+    .map((config) => ({ config, file: store.getOverlayFile(config.id) }))
+    .filter((e): e is { config: OverlayLayer; file: File } => e.file != null);
+  void host.overlay.loadFrom(overlayEntries);
 
   const applyPreset = (id: string): void => {
     const mod = visualizerRegistry.get(id);

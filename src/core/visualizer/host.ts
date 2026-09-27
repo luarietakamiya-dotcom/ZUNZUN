@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OverlayManager } from '../overlay/manager';
 import { deriveSeed, makeRng } from '../random';
 import { PostFxStack } from '../render/postfx';
 import type { AudioFrame, CommonParams, VisualizerPreset } from '../types';
@@ -21,6 +22,8 @@ export interface VisualizerHostOptions {
 export class VisualizerHost {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly postfx: PostFxStack;
+  /** PNG/WebP/JPG オーバーレイ。Bloom を通さず、プリセット本体の描画のあとに重ね描きする (Compositor の「前」層) */
+  readonly overlay = new OverlayManager();
   private current: { preset: VisualizerPreset; moduleId: string } | null = null;
   private width = 1;
   private height = 1;
@@ -47,6 +50,7 @@ export class VisualizerHost {
     this.height = Math.max(1, Math.floor(height));
     this.renderer.setSize(this.width, this.height, false);
     this.postfx.resize(this.width, this.height);
+    this.overlay.resize(this.width, this.height);
     this.current?.preset.resize(this.width, this.height);
   }
 
@@ -86,13 +90,16 @@ export class VisualizerHost {
     previous?.preset.dispose();
   }
 
-  /** 現在のプリセットを毎フレーム更新して描画する。プリセット未設定なら何もしない。 */
+  /** 現在のプリセット + オーバーレイを毎フレーム更新して描画する。 */
   render(frame: AudioFrame, params: CommonParams & Record<string, unknown>): void {
-    if (!this.current) return;
-    const { preset } = this.current;
-    preset.update(frame, params);
-    this.postfx.setGlow(params.glow);
-    this.postfx.render();
+    if (this.current) {
+      const { preset } = this.current;
+      preset.update(frame, params);
+      this.postfx.setGlow(params.glow);
+      this.postfx.render();
+    }
+    this.overlay.animate(frame);
+    this.overlay.render(this.renderer);
   }
 
   dispose(): void {
@@ -100,6 +107,7 @@ export class VisualizerHost {
     this.current?.preset.dispose();
     this.current = null;
     this.postfx.dispose();
+    this.overlay.dispose();
     this.renderer.dispose();
   }
 }
