@@ -1,0 +1,87 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0c0f;
+  --panel: #15171c;
+  --border: #262a33;
+  --fg: #e7e9ee;
+  --fg-dim: #9aa1ad;
+  --accent: #7c9bff;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-header h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 12px 0 0;
+  letter-spacing: 0.04em;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.tab-button {
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tab-button:hover { color: var(--fg); }
+
+.tab-button[aria-selected="true"] {
+  color: var(--fg);
+  background: var(--panel);
+  border-color: var(--border);
+}
+
+.app-body {
+  overflow: auto;
+  padding: 20px;
+}
+
+.panel h2 {
+  margin-top: 0;
+  font-size: 16px;
+}
+
+.panel p {
+  color: var(--fg-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.placeholder-card {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  color: var(--fg-dim);
+  font-size: 13px;
+}
