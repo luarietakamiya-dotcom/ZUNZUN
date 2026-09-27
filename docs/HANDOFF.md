@@ -1,6 +1,6 @@
 # 引き継ぎメモ（Cloud Session → ローカル Claude Code）
 
-最終更新: 2026-09-27（Cloud Session での作業終了時点）。
+最終更新: 2026-09-28（ローカル Claude Code で Step 10 を実装した時点）。
 これまでの作業は Claude Code の Cloud Session で行い、`npm install` が必要な確認だけをユーザーがローカル PC（Windows / PowerShell）で実行していた。
 ローカルの Claude Code なら `npm` も `git` も直接使えるので、以後は同じ場所で実装と検証を完結できる。
 
@@ -17,20 +17,24 @@
 | Step 6 | Overlay Manager（PNG/WebP/JPG） | 完了 | `6702adf` `a30c3b5` |
 | Step 7 | MP4 書き出し（WebCodecs + Mediabunny） | 完了・実機で音ズレ 1 フレーム以内を確認 | `c4af441` |
 | Step 8 | プリセット **Solar Gate** | 完了・ユーザー確認済み | `e85632b` |
-| Step 9 | プリセット **Milky Way** | push 済み。**ユーザーのローカル確認待ち** | `0ee8a0d` |
-| Step 10 | プリセット **Live Stage** | **次の作業** | — |
+| Step 9 | プリセット **Milky Way** | ローカルで build / lint / test 成功。見た目のユーザー確認待ち | `0ee8a0d` |
+| Step 10 | プリセット **Live Stage** | 実装・ヘッドレス描画で確認済み（ローカルコミット、未 push）。**ユーザーの見た目確認待ち** | 下記 |
 
-最後に確認できたテスト結果: 10 ファイル / 83 テストすべて成功（Cloud Session 上で実物の three.js r180 を使って実行）。
+最後に確認できたテスト結果: 11 ファイル / 93 テストすべて成功（ローカル Windows、three.js r180、mediabunny 1.60.0）。
 
 ## 次にやること
 
-1. **Milky Way のローカル確認**（ユーザーにお願いしている段階）: `npm run build` / `lint` / `test`（10 ファイル 83 件）と、Visualizer タブで曲を流しての見た目。
-2. **Step 10: Live Stage**（`docs/ARCHITECTURE.md`「プリセット初期3種の反応設計」）
-   - beat 同期のパターンでムービングライトを振る
-   - bass でスモークの濃度（ボリューム風のコーン）
-   - high でレーザーのストロボ
-   - Solar Gate / Milky Way と同じ作り方: `src/visualizers/live-stage/`（`index.ts` / `preset.ts` / `palette.ts` / `shaders.ts` / `live-stage.test.ts`）、`src/visualizers/index.ts` に 2 行追加、5 テーマ（default / gold / ice / neon / mono）、縦長 9:16 でも破綻しないカメラ。
-3. Live Stage が終わったら MVP の機能はそろう。その先は下の「未解決の設計課題」と「MVP 後」をユーザーと相談する。
+1. **Milky Way と Live Stage の見た目の確認**（ユーザー）: `npm run dev` → Visualizer タブで曲を流す。ヘッドレス描画のスクリーンショットは `shots.local/`（git 管理外）。
+2. 問題なければ push（毎回ユーザーに確認）。`package-lock.json` が未追跡のまま。コミットするかユーザーに確認する。
+3. これで MVP の機能はそろう。その先は下の「未解決の設計課題」と「MVP 後」をユーザーと相談する。
+
+### Live Stage の要点（Step 10）
+
+- ムービングライト 8 台（底の開いた円錐 + ボリューム風シェーダー、加算）。向きは `leanX/leanZ`（真下からの傾き）で持ち、ビートごとにパターン表の次の段を目標にして滑らかに追う。パターン（fan / cross / wave / chase / converge）は 8 ビートごとに `ctx.rng` で選び直す（直前と同じものは選ばない）。ビートが無い区間はゆっくりのスイープ。
+- bass → スモーク濃度（立ち上がり速く・引きはゆっくり）。光の筋の濃さ・床近くの霞・奥の壁の照り返しに効く。
+- high → レーザーのストロボ。**光過敏性への配慮として点灯の立ち上がりは毎秒 3 回まで**（`MAX_STROBE_HZ`、ユーザー承認済み）。周期の頭でだけ「この周期で光らせるか」を決めるので、high がしきい値付近で揺れても余計に点滅しない。ビートでの光の筋の明滅も幅を控えめにしている（0.65〜1.0 倍）。
+- 床は Reflector（半解像度、ユーザー承認済み）。
+- 縦長では `layoutScale`（16:9 で 1、最小 0.45）でトラス・灯体・レーザーの間隔と横の振り幅を詰める。
 
 ## プリセットの作り方（Solar Gate / Milky Way で固まった型）
 
@@ -57,7 +61,10 @@ Cloud Session では、ヘッドレス Chromium（Playwright、SwiftShader の W
 - **`createImageBitmap()` を Three.js のテクスチャにすると上下が反転する。** `{ imageOrientation: 'flipY' }` を渡す（`texture.flipY` は ImageBitmap には効かない）。
 - **`npm run build` はテストファイルも型チェックする。** テストだけの型エラーでもビルドが落ちる。
 - **TypeScript**: `CommonParams` のようなインターフェースは `Record<string, unknown>` にそのまま代入できない（プリセットの `update()` に渡すときは `as CommonParams & Record<string, unknown>`）。キーがユニオン型の書き込みは `never` 扱いになりやすいので、`store.setParam()` のような総称型のセッターにする。
-- **Mediabunny** は `package.json` が `^1.0.0` 指定で、どの版が入っているか Cloud Session から見えなかったため、どの 1.x でも通る `bitrate: QUALITY_*`（新しい版では非推奨）を使っている。`npm ls mediabunny` で版を確認したら `quality: new Quality('high')` に置き換えてよい。
+- **Mediabunny** は `package.json` が `^1.0.0` 指定で、どの版が入っているか Cloud Session から見えなかったため、どの 1.x でも通る `bitrate: QUALITY_*`（新しい版では非推奨）を使っている。ローカルで確認した版は **1.60.0** なので、`quality: new Quality('high')` に置き換えてよい（未対応）。
+- **Live Stage の最初の版も描いてみるまで問題が見えなかった。** 床近くの霞が灰色の霧になった（濃度を 1/4 程度に下げた）。客席側へ傾けた光の筋がカメラに迫って画面を覆った（`MAX_LEAN_Z` で上限）。レーザーがカメラの近くを通り、太い帯になって白飛びした（カメラ手前の面 `LASER_TARGET_Z` で終わらせた）。
+- **`shapeAudio()` は NaN をそのまま通す**（`clamp01(NaN)` が NaN）。Live Stage は `finite01()` で受けてから使っている。
+- **ヘッドレス描画のハーネス**: `VisualizerHost.dispose()` は `forceContextLoss()` するので、同じ canvas で次の Host を作ると WebGL コンテキストが取れない。撮影ごとに canvas を作り直す。Windows ローカルでは Playwright 同梱の Chromium に `--use-angle=swiftshader --enable-unsafe-swiftshader` を付けて動いた（960×540・約 7 秒分の描画で 1 枚 20 秒ほど）。
 
 ## 未解決の設計課題（変更前にユーザーと相談。Phase 4 = Plan Mode 相当）
 
