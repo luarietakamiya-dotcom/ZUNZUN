@@ -92,6 +92,17 @@ export interface VisualizerManifest {
   thumbnail: string;
   version: number;
   defaults: Record<string, unknown>;
+  /** このプリセットの Bloom/Light Rays 基準値。省略時は PostFxStack の既定値を使う (core/render/postfx.ts) */
+  post?: Partial<PostFxConfig>;
+}
+
+/** Bloom/Light Rays の基準値。core/render/postfx.ts の PostFxStack が実装を持つ。 */
+export interface PostFxConfig {
+  bloomStrength: number;
+  bloomRadius: number;
+  bloomThreshold: number;
+  lightRays: boolean;
+  lightRayPosition: readonly [number, number];
 }
 
 /** ZUNZUN プロジェクトファイル (*.zunzun.json) の最上位スキーマ。version は将来の migrate 用。 */

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { deriveSeed, makeRng } from '../random';
+import { PostFxStack } from '../render/postfx';
 import type { AudioFrame, CommonParams, VisualizerPreset } from '../types';
 import type { VisualizerModule } from './registry';
 
@@ -10,14 +11,16 @@ export interface VisualizerHostOptions {
 
 /**
  * 1 つの canvas 上で Visualizer プリセットを生成・切り替え・破棄する。
- * docs/ARCHITECTURE.md の「core/visualizer」責務 (Registry / Host) のうち Host にあたる。
+ * docs/ARCHITECTURE.md の「core/visualizer」「core/render」責務 (Registry / Host / Compositor) の
+ * うち Host + Compositor にあたる。実際の描画は PostFxStack (Bloom + Light Rays) を経由する。
  *
  * プリセットは互いに独立 (`init/update/resize/dispose` 以外の外部状態を共有しない) という
- * 設計を守るため、Host はプリセット固有の状態を一切持たず、WebGLRenderer と現在のプリセットの
- * ライフサイクルだけを管理する。
+ * 設計を守るため、Host はプリセット固有の状態を一切持たず、WebGLRenderer/PostFxStack と
+ * 現在のプリセットのライフサイクルだけを管理する。
  */
 export class VisualizerHost {
   private readonly renderer: THREE.WebGLRenderer;
+  private readonly postfx: PostFxStack;
   private current: { preset: VisualizerPreset; moduleId: string } | null = null;
   private width = 1;
   private height = 1;
@@ -28,6 +31,7 @@ export class VisualizerHost {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     this.renderer.setClearColor(opts.clearColor ?? 0x000000, 1);
+    this.postfx = new PostFxStack(this.renderer, this.width, this.height);
   }
 
   get domElement(): HTMLCanvasElement {
@@ -42,6 +46,7 @@ export class VisualizerHost {
     this.width = Math.max(1, Math.floor(width));
     this.height = Math.max(1, Math.floor(height));
     this.renderer.setSize(this.width, this.height, false);
+    this.postfx.resize(this.width, this.height);
     this.current?.preset.resize(this.width, this.height);
   }
 
@@ -76,6 +81,8 @@ export class VisualizerHost {
 
     const previous = this.current;
     this.current = { preset, moduleId: mod.manifest.id };
+    this.postfx.setScene(preset.scene, preset.camera);
+    this.postfx.configure(mod.manifest.post ?? {});
     previous?.preset.dispose();
   }
 
@@ -84,13 +91,15 @@ export class VisualizerHost {
     if (!this.current) return;
     const { preset } = this.current;
     preset.update(frame, params);
-    this.renderer.render(preset.scene, preset.camera);
+    this.postfx.setGlow(params.glow);
+    this.postfx.render();
   }
 
   dispose(): void {
     this.generation++; // 進行中の setPreset() の結果を無効化する
     this.current?.preset.dispose();
     this.current = null;
+    this.postfx.dispose();
     this.renderer.dispose();
   }
 }

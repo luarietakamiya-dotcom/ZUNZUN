@@ -84,6 +84,8 @@ export const manifest: VisualizerManifest = {
   thumbnail: '',
   version: 1,
   defaults: {},
+  // 素の棒グラフを判読しやすくするため、既定より控えめな bloom にしておく
+  post: { bloomStrength: 0.6, bloomRadius: 0.4, bloomThreshold: 0.25 },
 };
 
 export const debugBarsModule: VisualizerModule = {
