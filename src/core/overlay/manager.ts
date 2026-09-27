@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hashString } from '../random';
 import type { AudioFrame, OverlayLayer } from '../types';
 
 interface InternalLayer {
@@ -8,7 +9,7 @@ interface InternalLayer {
   texture: THREE.Texture;
   /** 画像の width/height (px)。正規化スケールを画面のアスペクト比に合わせて歪ませないために使う */
   naturalAspect: number;
-  /** float アニメーションの位相をレイヤーごとにずらすための乱数オフセット */
+  /** float アニメーションの位相をレイヤーごとにずらすためのオフセット (レイヤー id から決定論的に作る) */
   phase: number;
 }
 
@@ -100,7 +101,8 @@ export class OverlayManager {
           glowSprite,
           texture,
           naturalAspect: bitmap.width / Math.max(1, bitmap.height),
-          phase: Math.random() * Math.PI * 2,
+          // Math.random() だとプレビューと書き出しで揺れ方が変わってしまうので、id のハッシュから決める
+          phase: ((hashString(config.id) % 10000) / 10000) * Math.PI * 2,
         };
         this.layers.push(internal);
         this.scene.add(glowSprite);

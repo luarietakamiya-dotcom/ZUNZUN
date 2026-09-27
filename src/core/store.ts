@@ -1,6 +1,13 @@
 import { AudioEngine } from './audio';
 import { sha256Hex } from './hash';
-import { defaultCommonParams, defaultProject, type CommonParams, type OverlayLayer, type ProjectFile } from './types';
+import {
+  defaultCommonParams,
+  defaultProject,
+  type CommonParams,
+  type ExportSettings,
+  type OverlayLayer,
+  type ProjectFile,
+} from './types';
 
 type Listener = () => void;
 
@@ -24,7 +31,18 @@ class Store {
   private _expectedAudio: ProjectFile['audio'] = null;
   private _overlays: OverlayLayer[] = [];
   private readonly overlayFiles = new Map<string, File>();
+  private _exportSettings: ExportSettings = defaultProject().export;
   private readonly listeners = new Set<Listener>();
+
+  /** Export タブの書き出し設定 (サイズ/fps/画質)。Project JSON の export に保存される。 */
+  get exportSettings(): ExportSettings {
+    return this._exportSettings;
+  }
+
+  setExportSettings(patch: Partial<ExportSettings>): void {
+    this._exportSettings = { ...this._exportSettings, ...patch };
+    this.emit();
+  }
 
   /**
    * 直近で読み込んだ Project JSON が参照していた音源情報 (再リンク照合用)。
@@ -157,6 +175,7 @@ class Store {
     this._expectedAudio = project.audio;
     this._overlays = project.overlays;
     this.overlayFiles.clear();
+    this._exportSettings = { ...project.export };
     this.emit();
   }
 

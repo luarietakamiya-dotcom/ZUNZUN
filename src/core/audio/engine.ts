@@ -16,6 +16,7 @@ export class AudioEngine {
   private _analysis: AudioAnalysis | null = null;
   private _timeline: AudioTimeline | null = null;
   private _player: AudioPlayer | null = null;
+  private _audioBuffer: AudioBuffer | null = null;
   private _fileName = '';
   private _sha256 = '';
   private _lastT = 0;
@@ -30,6 +31,11 @@ export class AudioEngine {
 
   get timeline(): AudioTimeline | null {
     return this._timeline;
+  }
+
+  /** デコード済みの音声 (書き出し時に音声トラックとしてエンコードする元データ)。 */
+  get audioBuffer(): AudioBuffer | null {
+    return this._audioBuffer;
   }
 
   get fileName(): string {
@@ -64,6 +70,7 @@ export class AudioEngine {
     this._analysis = analyzeSamples(decoded.mono, decoded.sampleRate, opts);
     this._timeline = new AudioTimeline(this._analysis);
     this._player = new AudioPlayer(decoded.audioBuffer);
+    this._audioBuffer = decoded.audioBuffer;
     this._fileName = file.name;
     this._lastT = 0;
     this._sha256 = await sha256Hex(decoded.raw);
@@ -103,6 +110,7 @@ export class AudioEngine {
   dispose(): void {
     this._player?.dispose();
     this._player = null;
+    this._audioBuffer = null;
     this._analysis = null;
     this._timeline = null;
     this._fileName = '';

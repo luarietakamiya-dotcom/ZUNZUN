@@ -32,8 +32,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Mediabunny (MPL-2.0)
+
+- Source: https://github.com/Vanilagy/mediabunny
+- 用途: MP4 書き出し時のエンコード (WebCodecs) とコンテナ化 (`src/core/export/mp4.ts`)。
+- 改変せず npm 依存 (`mediabunny`) としてそのまま使用している。MPL-2.0 はファイル単位のコピーレフトのため、
+  Mediabunny のソースファイルを改変した場合はその改変ファイルの公開が必要になる (現状は改変なし)。
+- License text: https://www.mozilla.org/en-US/MPL/2.0/
+
 ## 予定（導入時に正式な表記を追記）
 
 - three.js — MIT
-- Mediabunny — MPL-2.0（改変せず npm 依存として使用）
 - 同梱フォント — SIL Open Font License 1.1

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultCommonParams, type OverlayLayer } from '../types';
+import { defaultCommonParams, defaultProject, type OverlayLayer } from '../types';
 import { buildProjectFile, type ProjectSourceState } from './serialize';
 
 function overlay(overrides: Partial<OverlayLayer> = {}): OverlayLayer {
@@ -13,6 +13,7 @@ function state(overrides: Partial<ProjectSourceState> = {}): ProjectSourceState 
     params: defaultCommonParams(),
     audio: { isLoaded: false, fileName: '', sha256: '', duration: 0, sampleRate: 0, bpm: 0 },
     overlays: [],
+    exportSettings: defaultProject().export,
     ...overrides,
   };
 }
@@ -64,5 +65,12 @@ describe('buildProjectFile', () => {
   it('オーバーレイが無ければ空配列を保存する', () => {
     const project = buildProjectFile(state());
     expect(project.overlays).toEqual([]);
+  });
+
+  it('書き出し設定をそのまま保存する (複製であり、参照は共有しない)', () => {
+    const exportSettings = { ...defaultProject().export, width: 1080, height: 1920, fps: 30, quality: 'max' as const };
+    const project = buildProjectFile(state({ exportSettings }));
+    expect(project.export).toEqual(exportSettings);
+    expect(project.export).not.toBe(exportSettings);
   });
 });

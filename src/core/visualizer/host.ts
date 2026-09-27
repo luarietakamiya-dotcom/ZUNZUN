@@ -8,6 +8,16 @@ import type { VisualizerModule } from './registry';
 export interface VisualizerHostOptions {
   /** 背景色。プリセット自身の背景描画で上書きされる想定だが、初期状態やエラー時の色として使う */
   clearColor?: number;
+  /**
+   * 描画解像度の倍率。省略時はプレビュー向けに min(2, devicePixelRatio)。
+   * 書き出しでは canvas のピクセル数を書き出しサイズぴったりにしたいので 1 を渡す。
+   */
+  pixelRatio?: number;
+  /**
+   * true のとき描画結果をフレームをまたいで保持する (WebGL の preserveDrawingBuffer)。
+   * 書き出し時に canvas から VideoFrame を取り込む前に中身が消えないよう、書き出し用 Host でだけ使う。
+   */
+  preserveDrawingBuffer?: boolean;
 }
 
 /**
@@ -31,8 +41,14 @@ export class VisualizerHost {
   private generation = 0;
 
   constructor(canvas: HTMLCanvasElement, opts: VisualizerHostOptions = {}) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    this.renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: false,
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: opts.preserveDrawingBuffer ?? false,
+    });
+    this.renderer.setPixelRatio(opts.pixelRatio ?? Math.min(2, window.devicePixelRatio || 1));
     this.renderer.setClearColor(opts.clearColor ?? 0x000000, 1);
     this.postfx = new PostFxStack(this.renderer, this.width, this.height);
   }
@@ -109,5 +125,8 @@ export class VisualizerHost {
     this.postfx.dispose();
     this.overlay.dispose();
     this.renderer.dispose();
+    // WebGL コンテキストは GC 任せだとしばらく残り、ブラウザの同時コンテキスト数上限 (Chrome は 16) に
+    // 近づく。タブ切り替えや書き出しのたびに Host を作り直すので、ここで明示的に手放す。
+    this.renderer.forceContextLoss();
   }
 }

@@ -176,6 +176,23 @@ body {
   font-size: 13px;
 }
 
+.export-progress {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  height: 10px;
+  margin-top: 12px;
+  accent-color: var(--accent);
+}
+
+.export-status {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--fg-dim);
+  max-width: 720px;
+  line-height: 1.6;
+}
+
 .overlay-name {
   font-size: 13px;
   color: var(--fg);
