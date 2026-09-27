@@ -73,7 +73,11 @@ export class OverlayManager {
     const sorted = [...entries].sort((a, b) => a.config.z - b.config.z);
     for (const { config, file } of sorted) {
       try {
-        const bitmap = await createImageBitmap(file);
+        // three.js は ImageBitmap ソースの場合、WebGL の UNPACK_FLIP_Y_WEBGL を設定できない
+        // (ブラウザの仕様上 ImageBitmap には効かない) ため、texture.flipY ではなく
+        // createImageBitmap() 自体に imageOrientation: 'flipY' を渡して上下を補正する必要がある。
+        // これを忘れると画像が上下反転して表示される。
+        const bitmap = await createImageBitmap(file, { imageOrientation: 'flipY' });
         const texture = new THREE.Texture(bitmap);
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.needsUpdate = true;
