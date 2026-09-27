@@ -57,7 +57,7 @@ describe('sanitizeProject', () => {
     const project = sanitizeProject(raw);
     expect(project.visualizer.preset).toBe(defaultProject().visualizer.preset);
     expect(project.colors).toEqual({ accent: '#ff00ff' });
-    expect((project as Record<string, unknown>).unknownTopLevelField).toBeUndefined();
+    expect((project as unknown as Record<string, unknown>).unknownTopLevelField).toBeUndefined();
   });
 
   it('audio は ref/sha256 の両方があるときだけ受け入れる', () => {

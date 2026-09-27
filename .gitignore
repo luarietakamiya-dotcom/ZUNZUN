@@ -6,6 +6,9 @@ dist-ssr/
 # vite
 .vite/
 
+# TypeScript incremental build cache (tsc -b)
+*.tsbuildinfo
+
 # tests
 test-results/
 playwright-report/
