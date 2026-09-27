@@ -3,6 +3,7 @@
  * docs/ARCHITECTURE.md の「Visualizer 共通インターフェース」「Project JSON」に対応する。
  * Step 2 以降 (AudioEngine, Visualizer Registry, Project) はこれらの型を実装していく。
  */
+import type * as THREE from 'three';
 
 /** オフライン解析された音声から、時刻 t について取り出される 1 フレーム分のデータ。 */
 export interface AudioFrame {
@@ -59,12 +60,13 @@ export const defaultCommonParams = (): CommonParams => ({
 
 /** Visualizer プリセットが初期化時に受け取るコンテキスト。 */
 export interface VisualizerInitContext {
-  renderer: unknown; // Step 3/4 で THREE.WebGLRenderer に置き換える
+  renderer: THREE.WebGLRenderer;
   width: number;
   height: number;
+  /** project.seed から Host がプリセット id ごとに派生させた整数 seed */
   seed: number;
   params: CommonParams & Record<string, unknown>;
-  /** project.seed から派生した決定論的な乱数生成器 (0..1 を返す) */
+  /** 上記 seed から作った決定論的な乱数生成器 (0..1 を返す) */
   rng: () => number;
 }
 
@@ -72,8 +74,11 @@ export interface VisualizerInitContext {
  * すべての Visualizer プリセットが実装する共通インターフェース。
  * 各プリセットは 1 フォルダ (src/visualizers/<id>/) に閉じて実装し、
  * Host が渡す AudioFrame 以外の外部状態を共有しない。
+ * scene/camera は init() の後に必ず存在している前提 (Host は init 完了後にのみ読む)。
  */
 export interface VisualizerPreset {
+  readonly scene: THREE.Scene;
+  readonly camera: THREE.Camera;
   init(ctx: VisualizerInitContext): Promise<void> | void;
   update(frame: AudioFrame, params: CommonParams & Record<string, unknown>): void;
   resize(width: number, height: number): void;

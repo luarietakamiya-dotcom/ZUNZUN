@@ -1,0 +1,96 @@
+import * as THREE from 'three';
+import { deriveSeed, makeRng } from '../random';
+import type { AudioFrame, CommonParams, VisualizerPreset } from '../types';
+import type { VisualizerModule } from './registry';
+
+export interface VisualizerHostOptions {
+  /** 背景色。プリセット自身の背景描画で上書きされる想定だが、初期状態やエラー時の色として使う */
+  clearColor?: number;
+}
+
+/**
+ * 1 つの canvas 上で Visualizer プリセットを生成・切り替え・破棄する。
+ * docs/ARCHITECTURE.md の「core/visualizer」責務 (Registry / Host) のうち Host にあたる。
+ *
+ * プリセットは互いに独立 (`init/update/resize/dispose` 以外の外部状態を共有しない) という
+ * 設計を守るため、Host はプリセット固有の状態を一切持たず、WebGLRenderer と現在のプリセットの
+ * ライフサイクルだけを管理する。
+ */
+export class VisualizerHost {
+  private readonly renderer: THREE.WebGLRenderer;
+  private current: { preset: VisualizerPreset; moduleId: string } | null = null;
+  private width = 1;
+  private height = 1;
+  /** setPreset() の呼び出し世代。init() が完了する前に別の setPreset() が来た場合に古い方を捨てる */
+  private generation = 0;
+
+  constructor(canvas: HTMLCanvasElement, opts: VisualizerHostOptions = {}) {
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    this.renderer.setClearColor(opts.clearColor ?? 0x000000, 1);
+  }
+
+  get domElement(): HTMLCanvasElement {
+    return this.renderer.domElement;
+  }
+
+  get currentPresetId(): string | null {
+    return this.current?.moduleId ?? null;
+  }
+
+  resize(width: number, height: number): void {
+    this.width = Math.max(1, Math.floor(width));
+    this.height = Math.max(1, Math.floor(height));
+    this.renderer.setSize(this.width, this.height, false);
+    this.current?.preset.resize(this.width, this.height);
+  }
+
+  /**
+   * プリセットを切り替える。前のプリセットは、新しいプリセットの init() が成功したあとに破棄する
+   * (init 中に例外が出ても画面が真っ黒になったまま壊れないようにするため)。
+   */
+  async setPreset(
+    mod: VisualizerModule,
+    baseSeed: number,
+    params: CommonParams & Record<string, unknown>,
+  ): Promise<void> {
+    const myGeneration = ++this.generation;
+    const preset = mod.create();
+    const seed = deriveSeed(baseSeed, mod.manifest.id);
+    const rng = makeRng(seed);
+
+    await preset.init({
+      renderer: this.renderer,
+      width: this.width,
+      height: this.height,
+      seed,
+      params,
+      rng,
+    });
+
+    if (myGeneration !== this.generation) {
+      // 待っている間にさらに別の setPreset() が呼ばれていた場合、この結果は捨てる
+      preset.dispose();
+      return;
+    }
+
+    const previous = this.current;
+    this.current = { preset, moduleId: mod.manifest.id };
+    previous?.preset.dispose();
+  }
+
+  /** 現在のプリセットを毎フレーム更新して描画する。プリセット未設定なら何もしない。 */
+  render(frame: AudioFrame, params: CommonParams & Record<string, unknown>): void {
+    if (!this.current) return;
+    const { preset } = this.current;
+    preset.update(frame, params);
+    this.renderer.render(preset.scene, preset.camera);
+  }
+
+  dispose(): void {
+    this.generation++; // 進行中の setPreset() の結果を無効化する
+    this.current?.preset.dispose();
+    this.current = null;
+    this.renderer.dispose();
+  }
+}
