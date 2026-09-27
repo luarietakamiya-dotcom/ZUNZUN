@@ -13,6 +13,8 @@ export interface DecodedAudio {
   mono: Float32Array;
   sampleRate: number;
   duration: number;
+  /** デコード前の生バイト列 (Project JSON の audio.sha256 計算用)。decodeAudioData には複製を渡すため、これは無傷のまま残る */
+  raw: ArrayBuffer;
 }
 
 /** File (音源) をデコードし、再生用の AudioBuffer と解析用のモノラル PCM を返す。 */
@@ -20,10 +22,10 @@ export async function decodeAudioFile(file: File): Promise<DecodedAudio> {
   const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   if (!AC) throw new Error('この環境は Web Audio API (AudioContext) に対応していません');
   const ac = new AC();
+  const raw = await file.arrayBuffer();
   let audioBuffer: AudioBuffer;
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    audioBuffer = await ac.decodeAudioData(arrayBuffer.slice(0));
+    audioBuffer = await ac.decodeAudioData(raw.slice(0));
   } finally {
     try {
       await ac.close();
@@ -39,5 +41,5 @@ export async function decodeAudioFile(file: File): Promise<DecodedAudio> {
     for (let i = 0; i < length; i++) mono[i]! += data[i]! / numberOfChannels;
   }
 
-  return { file, audioBuffer, mono, sampleRate, duration };
+  return { file, audioBuffer, mono, sampleRate, duration, raw };
 }

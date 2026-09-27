@@ -1,4 +1,5 @@
 import type { AudioFrame } from '../types';
+import { sha256Hex } from '../hash';
 import { analyzeSamples, type AnalyzeOptions, type AudioAnalysis } from './analyze';
 import { decodeAudioFile } from './decode';
 import { AudioPlayer } from './player';
@@ -16,6 +17,7 @@ export class AudioEngine {
   private _timeline: AudioTimeline | null = null;
   private _player: AudioPlayer | null = null;
   private _fileName = '';
+  private _sha256 = '';
   private _lastT = 0;
 
   get isLoaded(): boolean {
@@ -32,6 +34,15 @@ export class AudioEngine {
 
   get fileName(): string {
     return this._fileName;
+  }
+
+  /** Project JSON の audio.sha256 用。読み込み直したファイルが同じものかの照合に使う */
+  get sha256(): string {
+    return this._sha256;
+  }
+
+  get sampleRate(): number {
+    return this._analysis?.sampleRate ?? 0;
   }
 
   get duration(): number {
@@ -55,6 +66,7 @@ export class AudioEngine {
     this._player = new AudioPlayer(decoded.audioBuffer);
     this._fileName = file.name;
     this._lastT = 0;
+    this._sha256 = await sha256Hex(decoded.raw);
   }
 
   play(): void {
@@ -94,6 +106,7 @@ export class AudioEngine {
     this._analysis = null;
     this._timeline = null;
     this._fileName = '';
+    this._sha256 = '';
     this._lastT = 0;
   }
 }

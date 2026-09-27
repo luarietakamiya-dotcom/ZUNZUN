@@ -41,13 +41,22 @@ export function renderMusicPanel(): HTMLElement {
   const refreshStatus = (): void => {
     const { audio } = store;
     if (!audio.isLoaded) {
-      status.textContent = '音源が読み込まれていません';
+      status.textContent = store.expectedAudio
+        ? `音源が読み込まれていません (読み込んだプロジェクトは「${store.expectedAudio.name}」を参照しています)`
+        : '音源が読み込まれていません';
       playBtn.disabled = true;
       pauseBtn.disabled = true;
       return;
     }
     const bpmText = audio.bpm > 0 ? `${audio.bpm} BPM` : 'BPM検出できず';
-    status.textContent = `${audio.fileName} — ${audio.duration.toFixed(1)}秒 / ${bpmText}`;
+    let text = `${audio.fileName} — ${audio.duration.toFixed(1)}秒 / ${bpmText}`;
+    if (store.expectedAudio) {
+      text +=
+        store.expectedAudio.sha256 === audio.sha256
+          ? ' (プロジェクトが参照する音源と一致しました)'
+          : ` (注意: プロジェクトが参照する音源「${store.expectedAudio.name}」とは別のファイルです)`;
+    }
+    status.textContent = text;
     playBtn.disabled = false;
     pauseBtn.disabled = false;
   };

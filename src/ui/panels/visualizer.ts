@@ -37,8 +37,6 @@ function syntheticIdleFrame(t: number, prevT: number): AudioFrame {
   };
 }
 
-const DEBUG_SEED = 1; // Step 5 (Project JSON) で project.seed に置き換える
-
 export function renderVisualizerPanel(): HTMLElement {
   const el = document.createElement('section');
   el.className = 'panel';
@@ -124,7 +122,7 @@ export function renderVisualizerPanel(): HTMLElement {
     const mod = visualizerRegistry.get(id);
     if (!mod) return;
     store.setPresetId(id);
-    void host.setPreset(mod, DEBUG_SEED, store.params as CommonParams & Record<string, unknown>);
+    void host.setPreset(mod, store.seed, store.params as CommonParams & Record<string, unknown>);
   };
 
   const firstId = visualizerRegistry.list()[0]?.id;
