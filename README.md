@@ -6,6 +6,7 @@
 音楽に反応する映像を作って書き出せることを目指しています。音源・歌詞・画像は外部に送信しません。
 
 - 設計: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- 開発の現在地・引き継ぎ: [docs/HANDOFF.md](docs/HANDOFF.md)
 - サードパーティ: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 生成した映像の権利は、使用した音源・画像の権利者の許諾範囲に従います。
