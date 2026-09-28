@@ -11,3 +11,6 @@ export type { LineTimeMap } from './tap';
 export { History } from './history';
 export { estimateOffset } from './offset';
 export type { OffsetEstimate, OffsetOptions } from './offset';
+export { formatTime, parseTimeInput } from './time-format';
+export { buildLyricsView, syncTargetsFor } from './view';
+export type { LineTimeSource, LyricsView, SyncTargets } from './view';

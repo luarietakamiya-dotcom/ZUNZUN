@@ -76,9 +76,13 @@ export function computeLineTimes(
       if (beat && !(L.interlude && L.secs != null && L.secs > 0)) d = Math.max(2, Math.round(d / beat)) * beat;
       e = s + d;
     }
-    // ZUNZUN の拡張: 手で決めた終了。次の行より後ろには伸ばさない (JIZURA のカット割りは行が重ならない前提)
+    // ZUNZUN の拡張: 手で決めた終了。次の行より後ろには伸ばさない (JIZURA のカット割りは行が重ならない前提)。
+    // 最後の行は次の行が無いので、見積もりより長くても手で決めた終了をそのまま使う
     const manEnd = lookup(timing.lineEnds, i);
-    if (manEnd != null) e = Math.min(e, Math.max(s + MIN_LINE_DURATION, manEnd));
+    if (manEnd != null) {
+      const wanted = Math.max(s + MIN_LINE_DURATION, manEnd);
+      e = i < starts.length - 1 ? Math.min(e, wanted) : wanted;
+    }
     return e;
   });
 

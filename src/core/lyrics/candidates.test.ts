@@ -29,6 +29,18 @@ describe('findOnsetCandidates', () => {
     });
   });
 
+  it('打楽器のアタックや音の切れ目のような「一瞬だけの山」は候補にしない', () => {
+    // 0.5 秒ごとに 2 フレームだけの山 (キックのアタック) と、歌の出だし 2 つ (続く音)
+    const v = synthVocal(6, [1.3, 3.8]);
+    for (let t = 0; t < 6; t += 0.5) {
+      const f = Math.round(t * FPS);
+      v[f] = (v[f] ?? 0) + 0.45;
+      if (f + 1 < v.length) v[f + 1] = v[f + 1]! + 0.3;
+    }
+    const c = findOnsetCandidates(v, FPS);
+    expect(c.map((x) => Math.round(x.t * 10) / 10)).toEqual([1.3, 3.8]);
+  });
+
   it('ほぼ一定 (雑音だけ) なら候補は出ない、短すぎる入力は空', () => {
     expect(findOnsetCandidates(synthVocal(4, []), FPS)).toEqual([]);
     expect(findOnsetCandidates(new Float32Array(2), FPS)).toEqual([]);

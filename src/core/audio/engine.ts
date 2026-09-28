@@ -76,8 +76,19 @@ export class AudioEngine {
     this._sha256 = await sha256Hex(decoded.raw);
   }
 
+  /**
+   * 一時停止・シークした位置から再生する。
+   * 以前は _lastT (currentFrame() を呼んだときだけ更新される) から再生していたため、Visualizer タブ以外
+   * (Lyrics タブなど) で一時停止 → 再生すると、止めた位置ではなく古い位置に戻ってしまっていた。
+   * 位置は AudioPlayer 自身が pause/seek で覚えているので、それに任せる。
+   */
   play(): void {
-    this._player?.play(this._lastT);
+    this._player?.play();
+  }
+
+  /** 現在の再生位置 (秒)。currentFrame() と違い、内部の状態 (dt 計算用の前回時刻) を進めない。 */
+  get currentTime(): number {
+    return this._player ? this._player.currentTime() : this._lastT;
   }
 
   pause(): void {

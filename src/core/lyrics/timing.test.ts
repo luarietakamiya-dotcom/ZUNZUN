@@ -48,6 +48,14 @@ describe('computeLineTimes (JIZURA の J.computeTiming と同じ規則 + lineEnd
     expect(ends[2]).toBeCloseTo(9 + MIN_LINE_DURATION);
   });
 
+  it('最後の行は次の行が無いので、見積もりより長い終了もそのまま使う (SRT の最後の字幕など)', () => {
+    const parsed = parseLyrics('[00:01.00]a\n[00:05.00]b');
+    // 'b' の見積もりは 1.5 秒 (6.5 秒まで) だが、手で 12 秒と決めたらそれを使う
+    const { ends, duration } = computeLineTimes(parsed, { lineTimes: {}, lineEnds: { '1': 12 } });
+    expect(ends[1]).toBe(12);
+    expect(duration).toBeCloseTo(12.9);
+  });
+
   it('全体の長さは最後の行 + 余白、音源があれば音源の長さ以上', () => {
     const parsed = parseLyrics('[00:01.00]a\n[00:05.00]b');
     const noAudio = computeLineTimes(parsed, none);
