@@ -2,3 +2,12 @@ export { lyricsForEngine, parseLyrics, parseLyricsSource, srtToLrc } from './par
 export type { LyricLine, ParsedLyrics } from './parse';
 export { computeLineTimes, lineAt, MIN_LINE_DURATION } from './timing';
 export type { LineTimes, LineTimingOptions } from './timing';
+export { findOnsetCandidates } from './candidates';
+export type { CandidateOptions, OnsetCandidate } from './candidates';
+export { nearest, snapTime } from './snap';
+export type { SnapKind, SnapResult, SnapTargets } from './snap';
+export { setLineStart, TAP_CONFLICT_MARGIN, TAP_PREROLL, tapStartTime, TapSession } from './tap';
+export type { LineTimeMap } from './tap';
+export { History } from './history';
+export { estimateOffset } from './offset';
+export type { OffsetEstimate, OffsetOptions } from './offset';
