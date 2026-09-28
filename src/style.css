@@ -308,3 +308,6 @@ body {
 .lyrics-src-manual { color: var(--accent); border-color: var(--accent); }
 
 .lyrics-clear { padding: 2px 8px; }
+.lyrics-row.unsynced .lyrics-text { color: var(--fg-dim); }
+.lyrics-time-input::placeholder { color: var(--fg-dim); opacity: 0.5; }
+.lyrics-src-estimate { border-style: dashed; }

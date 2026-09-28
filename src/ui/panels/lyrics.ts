@@ -43,7 +43,12 @@ const SOURCE_LABELS: Record<LyricsSource, string> = {
   srt: 'SRT',
 };
 
-const START_SOURCE_LABELS = { manual: '手動', lrc: 'LRC', estimate: '見積' } as const;
+/**
+ * 時刻の由来の表示。'estimate' (タップも LRC の時刻も無い行) は、JIZURA の規則で文字数から仮の時刻が付いているだけなので
+ * 「未同期」と出し、プレビューにも出さない (1 行目が 0.4 秒から始まるため、イントロで歌詞が出て吸着したように見えていた)。
+ * 仮の時刻は歌詞モーション (L5) では使うので、内部では持っておく。
+ */
+const START_SOURCE_LABELS = { manual: '手動', lrc: 'LRC', estimate: '未同期' } as const;
 
 /** 由来の表示。タグから来た時刻は、SRT を読み込んだときは SRT と出す */
 function startSourceLabel(src: keyof typeof START_SOURCE_LABELS, source: LyricsSource): string {
@@ -247,6 +252,8 @@ export function renderLyricsPanel(): HTMLElement {
 
   // ------------------------------------------------------------ 状態
   let view: LyricsView = buildLyricsView(currentLyrics(), store.audio.isLoaded ? store.audio.duration : undefined);
+  /** プレビュー用: 未同期の行は開始を +∞ にして「今の行」にならないようにした時刻 */
+  let syncedTimes = { starts: [] as number[], ends: [] as number[] };
   let tap: TapSession | null = null;
   let shownLine = -2;
   let shownTime = '';
@@ -258,6 +265,10 @@ export function renderLyricsPanel(): HTMLElement {
     syncHistoryWithStore();
     const lyrics = currentLyrics();
     view = buildLyricsView(lyrics, store.audio.isLoaded ? store.audio.duration : undefined);
+    syncedTimes = {
+      starts: view.times.starts.map((s, i) => (view.startSource[i] === 'estimate' ? Infinity : s)),
+      ends: view.times.ends,
+    };
     if (sourceSelect.value !== lyrics.source) sourceSelect.value = lyrics.source;
     if (document.activeElement !== textarea && textarea.value !== lyrics.text) textarea.value = lyrics.text;
     snapCheck.checked = lyrics.timing.snap;
@@ -300,21 +311,26 @@ export function renderLyricsPanel(): HTMLElement {
     rows = view.parsed.lines.map((line, i) => {
       const tr = el('tr', { className: 'lyrics-row' });
       tr.dataset.index = String(i);
+      const src = view.startSource[i]!;
+      const unsynced = src === 'estimate';
+      const shownStart = (): string => (unsynced ? '' : formatTime(view.times.starts[i]!));
+      if (unsynced) tr.classList.add('unsynced');
       const startInput = el('input', { className: 'lyrics-time-input' });
-      startInput.value = formatTime(view.times.starts[i]!);
+      startInput.value = shownStart();
+      // 未同期の行は、仮の時刻を薄く出すだけにする (入力すると手動の時刻になる)
+      if (unsynced) startInput.placeholder = formatTime(view.times.starts[i]!);
       startInput.title = '開始時刻 (例: 1:23.45)。入力すると手動の時刻になります';
       startInput.addEventListener('click', (e) => e.stopPropagation());
       startInput.addEventListener('change', () => {
         const t = parseTimeInput(startInput.value);
         if (t == null) {
-          startInput.value = formatTime(view.times.starts[i]!);
+          startInput.value = shownStart();
           return;
         }
         const cur = history.current;
         commitTiming({ lineTimes: { ...cur.lineTimes, [String(i)]: t }, lineEnds: cur.lineEnds });
         refresh();
       });
-      const src = view.startSource[i]!;
       const clearBtn = button('×', () => {
         const cur = history.current;
         const lineTimes = { ...cur.lineTimes };
@@ -331,7 +347,7 @@ export function renderLyricsPanel(): HTMLElement {
         el('td', { className: 'lyrics-num', textContent: String(i + 1) }),
         el('td', {}, [startInput]),
         el('td', {}, [el('span', { className: `lyrics-src lyrics-src-${src}`, textContent: startSourceLabel(src, currentLyrics().source) })]),
-        el('td', { className: 'lyrics-end', textContent: formatTime(view.times.ends[i]!) + (view.endManual[i] ? ' (手動)' : '') }),
+        el('td', { className: 'lyrics-end', textContent: unsynced && !view.endManual[i] ? '—' : formatTime(view.times.ends[i]!) + (view.endManual[i] ? ' (手動)' : '') }),
         el('td', { className: 'lyrics-text', textContent: line.interlude ? `〔間奏${line.secs ? ` ${line.secs}秒` : ''}〕` : line.text }),
         el('td', {}, [clearBtn]),
       );
@@ -396,7 +412,21 @@ export function renderLyricsPanel(): HTMLElement {
     syncHistoryWithStore();
     tap = new TapSession(view.parsed.lines.length, from);
     lastSnap.textContent = '';
-    store.audio.seek(tapStartTime(view.times.starts, tap.line));
+    // 再生を始める位置は同期済みの時刻だけから決める (未同期の行の仮の時刻は当てにならない)。
+    // 叩く行がまだ未同期なら、その前で最後に同期済みの行の頭から流す (無ければ曲の頭から)
+    const line = tap.line;
+    let startAt = 0;
+    if (view.startSource[line] !== 'estimate') {
+      startAt = tapStartTime(view.times.starts.map((t, k) => (view.startSource[k] === 'estimate' ? -Infinity : t)), line);
+    } else {
+      for (let k = line - 1; k >= 0; k--) {
+        if (view.startSource[k] !== 'estimate') {
+          startAt = view.times.starts[k]!;
+          break;
+        }
+      }
+    }
+    store.audio.seek(startAt);
     store.audio.play();
     refreshControls();
     tapButton.focus();
@@ -508,7 +538,7 @@ export function renderLyricsPanel(): HTMLElement {
     const playText = playing ? '一時停止' : '再生';
     if (playBtn.textContent !== playText) playBtn.textContent = playText;
 
-    const cur = lineAt(view.times, t);
+    const cur = lineAt(syncedTimes, t);
     if (cur !== shownLine) {
       shownLine = cur;
       highlightRows(cur);
@@ -518,8 +548,16 @@ export function renderLyricsPanel(): HTMLElement {
         return !l ? '' : l.interlude ? '〔間奏〕' : l.text;
       };
       nowLine.textContent = cur >= 0 ? showText(cur) : '';
-      // 次の行: 今の行の次、行の外なら次に始まる行
-      let next = cur >= 0 ? cur + 1 : view.times.starts.findIndex((s) => s > t);
+      // 次の行: 今の行の次。行の外なら、すでに過ぎた同期済みの行のうち最後のものの次の行
+      // (イントロなら 1 行目、同期済みの行のあとに未同期の行があればその行 = 次に叩く行)
+      let next = cur + 1;
+      if (cur < 0) {
+        let last = -1;
+        syncedTimes.starts.forEach((s, i) => {
+          if (s <= t) last = Math.max(last, i);
+        });
+        next = last + 1;
+      }
       if (next >= lines.length) next = -1;
       nextLine.textContent = next >= 0 ? `次: ${showText(next)}` : '';
       // ページ全体ではなく、一覧の枠の中だけをスクロールして今の行を見せる
