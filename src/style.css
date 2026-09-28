@@ -246,7 +246,7 @@ body {
 
 /* 前の行 (小さく薄く) → 今の行 → 次の行 (いちばん大きく = これから叩く行) */
 .lyrics-prev-line { font-size: 13px; color: var(--fg-dim); opacity: 0.7; min-height: 1.4em; }
-.lyrics-now-line { font-size: 17px; color: var(--fg-dim); margin-top: 6px; min-height: 1.4em; }
+.lyrics-now-line { font-size: 21px; font-weight: 600; color: #c9ced8; margin-top: 6px; min-height: 1.4em; }
 .lyrics-next-line { font-size: 30px; font-weight: 700; color: var(--fg); margin-top: 10px; min-height: 1.4em; }
 .lyrics-next-line[data-label]:not([data-label=""])::before {
   content: attr(data-label);
@@ -335,3 +335,35 @@ body {
 .lyrics-row.unsynced .lyrics-text { color: var(--fg-dim); }
 .lyrics-time-input::placeholder { color: var(--fg-dim); opacity: 0.5; }
 .lyrics-src-estimate { border-style: dashed; }
+
+/* 確認モード: 今の行をいちばん大きく、次の行は控えめに。今の行の進み具合をバーで出す */
+.lyrics-now.mode-check .lyrics-now-line { font-size: 32px; font-weight: 700; color: var(--fg); }
+.lyrics-now.mode-check .lyrics-next-line { font-size: 16px; font-weight: 400; color: var(--fg-dim); }
+.lyrics-progress { display: none; height: 3px; margin: 8px auto 0; max-width: 480px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.lyrics-now.mode-check .lyrics-progress { display: block; }
+.lyrics-progress-fill { height: 100%; width: 0; background: var(--accent); }
+
+.lyrics-mode-switch { display: flex; gap: 0; align-self: flex-start; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.lyrics-mode-button {
+  background: transparent;
+  color: var(--fg-dim);
+  border: none;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.lyrics-mode-button[aria-pressed="true"] { background: var(--accent); color: #0b0c0f; font-weight: 700; }
+
+.lyrics-big-button {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px 22px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lyrics-big-button:hover:not(:disabled) { background: rgba(124, 155, 255, 0.15); }
+.lyrics-big-button:disabled { opacity: 0.4; cursor: default; }
+.lyrics-card[hidden] { display: none; }

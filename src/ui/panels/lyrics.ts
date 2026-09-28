@@ -38,6 +38,14 @@ type TimingSnapshot = Pick<LyricsTiming, 'lineTimes' | 'lineEnds'>;
 const EMPTY_TIMING: TimingSnapshot = { lineTimes: {}, lineEnds: {} };
 const history = new History<TimingSnapshot>(EMPTY_TIMING);
 let selectedLine = 0;
+/**
+ * 'tap' = タップで合わせる (再生中の Space で記録、プレビューは次の行がいちばん大きい)。
+ * 'check' = 確認する (Space は再生/一時停止だけ、プレビューは今の行がいちばん大きい、行を押すと 1 秒前から再生)。
+ * タブを切り替えても残す。
+ */
+let mode: 'tap' | 'check' = 'tap';
+/** 確認モードで行を押したとき、その行の何秒前から再生するか */
+const CHECK_PREROLL = 1.0;
 
 const SOURCE_LABELS: Record<LyricsSource, string> = {
   text: 'テキスト (JIZURA の記法)',
@@ -185,21 +193,29 @@ export function renderLyricsPanel(): HTMLElement {
   const backBtn = button('−3秒', () => store.audio.seek(Math.max(0, store.audio.currentTime - 3)));
   const fwdBtn = button('+3秒', () => store.audio.seek(Math.min(store.audio.duration, store.audio.currentTime + 3)));
   const timeLabel = el('span', { className: 'lyrics-time', textContent: '0:00.00' });
-  // 前の行 (小さく)・今の行・次の行 (いちばん大きく = これから叩く行)
+  // 前の行・今の行・次の行。タップのときは次の行 (これから叩く行)、確認のときは今の行をいちばん大きく
   const prevLine = el('div', { className: 'lyrics-prev-line' });
   const nowLine = el('div', { className: 'lyrics-now-line' });
   const nextLine = el('div', { className: 'lyrics-next-line' });
+  const progressFill = el('div', { className: 'lyrics-progress-fill' });
+  const progress = el('div', { className: 'lyrics-progress' }, [progressFill]);
+  const nowBox = el('div', { className: 'lyrics-now' }, [prevLine, nowLine, progress, nextLine]);
+  const tapModeBtn = button('タップで合わせる', () => setMode('tap'), 'lyrics-mode-button');
+  const checkModeBtn = button('確認する', () => setMode('check'), 'lyrics-mode-button');
+  const modeHelp = el('div', { className: 'param-label' });
   playCard.append(
+    el('div', { className: 'lyrics-mode-switch' }, [tapModeBtn, checkModeBtn]),
+    modeHelp,
     audioStatus,
     el('div', { className: 'row-gap lyrics-row-wrap' }, [playBtn, backBtn, fwdBtn, timeLabel]),
-    el('div', { className: 'lyrics-now' }, [prevLine, nowLine, nextLine]),
+    nowBox,
   );
   root.appendChild(playCard);
 
   // ------------------------------------------------------------ タップ同期
   const tapCard = el('div', { className: 'lyrics-card' });
-  const startFirstBtn = button('1 行目からタップ', () => startTap(0));
-  const startSelBtn = button('選択した行からタップ', () => startTap(selectedLine));
+  const startFirstBtn = button('1 行目からタップ', () => startTap(0), 'lyrics-big-button');
+  const startSelBtn = button('選択した行からタップ', () => startTap(selectedLine), 'lyrics-big-button');
   const stopBtn = button('中断 (Esc)', () => stopTap());
   const tapInfo = el('div', { className: 'lyrics-tap-info' });
   const tapButton = el('button', { className: 'lyrics-tap-button', textContent: 'ここで叩く (Space / Enter)' });
@@ -311,6 +327,14 @@ export function renderLyricsPanel(): HTMLElement {
     startSelBtn.disabled = !loaded || !hasLines || tap != null;
     startSelBtn.textContent = `選択した行 (${selectedLine + 1} 行目) からタップ`;
     tapActive.hidden = tap == null;
+    tapCard.hidden = mode !== 'tap';
+    nowBox.classList.toggle('mode-check', mode === 'check');
+    tapModeBtn.setAttribute('aria-pressed', String(mode === 'tap'));
+    checkModeBtn.setAttribute('aria-pressed', String(mode === 'check'));
+    modeHelp.textContent =
+      mode === 'tap'
+        ? '再生中に Space で「次の行」の歌い出しを記録します。止まっているときの Space は再生、Esc で一時停止。'
+        : '歌詞が歌と合っているかを見るモードです (記録はしません)。Space で再生/一時停止、一覧の行を押すとその 1 秒前から再生します。';
     tapBackBtn.disabled = !tap?.canBack;
     const manualCount = Object.keys(history.current.lineTimes).length;
     snapBtn.disabled = !loaded || tap != null || manualCount === 0;
@@ -375,7 +399,12 @@ export function renderLyricsPanel(): HTMLElement {
       );
       tr.addEventListener('click', () => {
         selectedLine = i;
-        if (store.audio.isLoaded) store.audio.seek(view.times.starts[i]!);
+        if (store.audio.isLoaded) {
+          if (mode === 'check') {
+            store.audio.seek(Math.max(0, view.times.starts[i]! - CHECK_PREROLL));
+            store.audio.play();
+          } else store.audio.seek(view.times.starts[i]!);
+        }
         highlightRows(shownLine);
         refreshControls();
       });
@@ -559,6 +588,14 @@ export function renderLyricsPanel(): HTMLElement {
     if (applyHistory(history.redo())) refresh();
   }
 
+  function setMode(next: 'tap' | 'check'): void {
+    if (mode === next) return;
+    if (tap) stopTap();
+    mode = next;
+    refreshControls();
+    shownLine = -2;
+  }
+
   // ------------------------------------------------------------ キーボード
   const onKey = (e: KeyboardEvent): void => {
     if (!root.isConnected) {
@@ -573,6 +610,11 @@ export function renderLyricsPanel(): HTMLElement {
     if (isTapKey) {
       e.preventDefault();
       if (e.repeat || !store.audio.isLoaded) return;
+      if (mode === 'check') {
+        if (store.audio.isPlaying) store.audio.pause();
+        else store.audio.play();
+        return;
+      }
       if (tap) doTap();
       else if (store.audio.isPlaying && view.parsed.lines.length > 0) {
         // 再生中に叩いたら、その場でタップを始めて「次に叩く行」の頭として記録する
@@ -628,6 +670,9 @@ export function renderLyricsPanel(): HTMLElement {
     if (playBtn.textContent !== playText) playBtn.textContent = playText;
 
     const cur = lineAt(syncedTimes, t);
+    // 今の行の中でどこまで進んだか (確認モードで表示)
+    const pct = cur >= 0 ? Math.min(1, Math.max(0, (t - syncedTimes.starts[cur]!) / Math.max(0.01, syncedTimes.ends[cur]! - syncedTimes.starts[cur]!))) : 0;
+    progressFill.style.width = `${(pct * 100).toFixed(1)}%`;
     if (cur !== shownLine) {
       shownLine = cur;
       highlightRows(cur);
