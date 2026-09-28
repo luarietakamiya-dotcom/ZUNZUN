@@ -1,0 +1,109 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { defaultLyrics, type LyricsSettings } from '../types';
+import { LyricMotion } from './jizura-adapter';
+import { LyricMotionProvider, motionKey, wantsMotion, type MotionRequest } from './motion-provider';
+
+const lyrics = (o: Partial<LyricsSettings> = {}): LyricsSettings => ({ ...defaultLyrics(), text: 'あ\nい', ...o });
+const req = (o: Partial<MotionRequest> = {}): MotionRequest => ({
+  lyrics: lyrics(),
+  analysis: null,
+  projectSeed: 1,
+  width: 1920,
+  height: 1080,
+  fps: 30,
+  ...o,
+});
+
+/** 本物の JIZURA を読み込まないように、LyricMotion.create を差し替える */
+function stubCreate(): { calls: number; resolveAll: () => Promise<void> } {
+  const pending: (() => void)[] = [];
+  const state = {
+    calls: 0,
+    resolveAll: async () => {
+      while (pending.length) pending.shift()!();
+      await new Promise((r) => setTimeout(r, 0));
+    },
+  };
+  vi.spyOn(LyricMotion, 'create').mockImplementation(() => {
+    state.calls++;
+    const n = state.calls;
+    return new Promise((resolve) => pending.push(() => resolve({ id: n } as unknown as LyricMotion)));
+  });
+  return state;
+}
+
+afterEach(() => vi.restoreAllMocks());
+
+describe('wantsMotion / motionKey', () => {
+  it('歌詞が無い・空・オフのときは出さない', () => {
+    expect(wantsMotion(req({ lyrics: null }))).toBe(false);
+    expect(wantsMotion(req({ lyrics: lyrics({ text: '  \n ' }) }))).toBe(false);
+    expect(wantsMotion(req({ lyrics: lyrics({ motion: { ...defaultLyrics().motion, enabled: false } }) }))).toBe(false);
+    expect(wantsMotion(req())).toBe(true);
+  });
+
+  it('比率が同じ書き出しサイズどうしは同じキー、比率・時刻・スタイルが変わればキーも変わる', () => {
+    const a = req() as MotionRequest & { lyrics: LyricsSettings };
+    expect(motionKey({ ...a, width: 1280, height: 720 })).toBe(motionKey(a));
+    expect(motionKey({ ...a, width: 1080, height: 1920 })).not.toBe(motionKey(a));
+    const moved = { ...a, lyrics: lyrics({ timing: { ...defaultLyrics().timing, lineTimes: { '0': 1 } } }) };
+    expect(motionKey(moved)).not.toBe(motionKey(a));
+    const styled = { ...a, lyrics: lyrics({ motion: { ...defaultLyrics().motion, style: 'crimson' } }) };
+    expect(motionKey(styled)).not.toBe(motionKey(a));
+  });
+});
+
+describe('LyricMotionProvider', () => {
+  it('設定が落ち着いてから (350ms) 作り、同じ設定の間は作り直さない', async () => {
+    const stub = stubCreate();
+    let now = 0;
+    const p = new LyricMotionProvider(() => now);
+    expect(p.get(req())).toBeNull();
+    now = 100;
+    p.get(req());
+    expect(stub.calls).toBe(0);
+    now = 400;
+    p.get(req());
+    expect(stub.calls).toBe(1);
+    await stub.resolveAll();
+    const m = p.get(req());
+    expect(m).toEqual({ id: 1 });
+    now = 5000;
+    expect(p.get(req())).toBe(m);
+    expect(stub.calls).toBe(1);
+  });
+
+  it('作り直している間はひとつ前のものを返し続け、できたら差し替える', async () => {
+    const stub = stubCreate();
+    let now = 0;
+    const p = new LyricMotionProvider(() => now);
+    p.get(req());
+    now = 400;
+    p.get(req());
+    await stub.resolveAll();
+    const first = p.get(req());
+    const changed = req({ lyrics: lyrics({ text: 'う' }) });
+    expect(p.get(changed)).toBe(first);
+    now = 800;
+    expect(p.get(changed)).toBe(first);
+    expect(p.isBuilding).toBe(true);
+    await stub.resolveAll();
+    expect(p.get(changed)).toEqual({ id: 2 });
+    expect(p.isBuilding).toBe(false);
+  });
+
+  it('作るのに失敗したら null とエラーを返し、同じ設定では作り直さない', async () => {
+    vi.spyOn(LyricMotion, 'create').mockRejectedValue(new Error('boom'));
+    let now = 0;
+    const p = new LyricMotionProvider(() => now);
+    p.get(req());
+    now = 400;
+    p.get(req());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(p.get(req())).toBeNull();
+    expect(p.lastError).toBe('boom');
+    now = 2000;
+    p.get(req());
+    expect(LyricMotion.create).toHaveBeenCalledTimes(1);
+  });
+});

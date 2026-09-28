@@ -1,6 +1,7 @@
 import { store } from '../../core/store';
 import type { AudioFrame, CommonParams, OverlayLayer } from '../../core/types';
 import { BAND_COUNT } from '../../core/audio';
+import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { VisualizerHost } from '../../core/visualizer/host';
 import { visualizerRegistry } from '../../visualizers';
 
@@ -116,7 +117,8 @@ export function renderVisualizerPanel(): HTMLElement {
   colorRow.appendChild(colorSelect);
   paramsWrap.appendChild(colorRow);
 
-  const host = new VisualizerHost(canvas);
+  // 歌詞モーションはプレビューでは軽く描く (書き出しでは全部描く)
+  const host = new VisualizerHost(canvas, { fastLyrics: true });
 
   // Overlay タブで設定されたレイヤーを、その時点の store の状態から一括で読み込む。
   // 画像本体はタブをまたいで保持されないため (core/store.ts 参照)、まだ再選択されていない
@@ -157,6 +159,20 @@ export function renderVisualizerPanel(): HTMLElement {
     const t = performance.now() / 1000;
     const frame = store.audio.isLoaded ? store.audio.currentFrame() : syntheticIdleFrame(t, prevT);
     prevT = t;
+    // 歌詞モーション: 音源があるときだけ重ねる (音源が無いとダミーの時刻になるため)。
+    // 設定が変わってから作り直すまでの間は、ひとつ前の歌詞モーションが表示され続ける
+    host.lyrics.setMotion(
+      store.audio.isLoaded
+        ? previewMotionProvider.get({
+            lyrics: store.lyrics,
+            analysis: store.audio.analysis,
+            projectSeed: store.seed,
+            width: store.exportSettings.width,
+            height: store.exportSettings.height,
+            fps: store.exportSettings.fps,
+          })
+        : null,
+    );
     if (frame) host.render(frame, store.params as CommonParams & Record<string, unknown>);
     requestAnimationFrame(tick);
   };

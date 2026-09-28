@@ -59,7 +59,7 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
             lineTimes: { ...state.lyrics.timing.lineTimes },
             lineEnds: { ...state.lyrics.timing.lineEnds },
           },
-          motion: {},
+          motion: { ...state.lyrics.motion },
         }
       : null,
     colors: {},

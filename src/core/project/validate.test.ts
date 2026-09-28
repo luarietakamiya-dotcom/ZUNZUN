@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultCommonParams, defaultLyrics, defaultProject } from '../types';
+import { defaultCommonParams, defaultLyrics, defaultLyricsMotion, defaultProject } from '../types';
 import { MAX_LYRICS_LENGTH, ProjectParseError, sanitizeProject } from './validate';
 
 function validRaw(): unknown {
@@ -131,7 +131,7 @@ describe('sanitizeProject', () => {
         snapWindowMs: 5000,
         evil: '<script>',
       },
-      motion: { style: 'noir' },
+      motion: { style: 'crimson', motion: 3, decor: -1, density: 'x', enabled: false, evil: 1 },
       extra: 1,
     };
     const lyrics = sanitizeProject(raw).lyrics!;
@@ -142,8 +142,17 @@ describe('sanitizeProject', () => {
     expect(lyrics.timing.lineEnds).toEqual({ '0': 86400 });
     expect(lyrics.timing.snap).toBe(true);
     expect(lyrics.timing.snapWindowMs).toBe(1000);
-    expect(lyrics.motion).toEqual({});
+    // 歌詞モーション: 範囲外は clamp、壊れた値は既定値、未知のキーは捨てる
+    expect(lyrics.motion).toEqual({ enabled: false, style: 'crimson', motion: 1, decor: 0, density: defaultLyricsMotion().density });
     expect(Object.keys(lyrics)).toEqual(['engine', 'source', 'text', 'timing', 'motion']);
+  });
+
+  it('lyrics.motion: 無い・壊れているときは既定値、スタイル名はキーの形のものだけ', () => {
+    const raw = validRaw() as Record<string, unknown>;
+    raw.lyrics = { text: 'a' };
+    expect(sanitizeProject(raw).lyrics!.motion).toEqual(defaultLyricsMotion());
+    raw.lyrics = { text: 'a', motion: { style: '<img onerror=x>' } };
+    expect(sanitizeProject(raw).lyrics!.motion.style).toBe('noir');
   });
 
   it('lyrics: 長すぎる歌詞は上限で切る', () => {

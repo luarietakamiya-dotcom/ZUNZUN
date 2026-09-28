@@ -382,3 +382,7 @@ body {
   border-radius: 4px;
   padding: 3px 6px;
 }
+
+/* 歌詞モーション (L6) */
+.lyrics-motion-canvas { display: block; width: 100%; max-width: 640px; border-radius: 8px; background: #000; }
+.lyrics-motion-grid { margin-top: 0; max-width: none; }

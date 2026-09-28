@@ -93,6 +93,71 @@ for (const presetId of ['solar-gate', 'milky-way', 'live-stage']) {
   });
 }
 
+test('歌詞モーション: 重ねるときに使う場面転換・レイアウトは、映像を覆い隠さない (JIZURA 更新時の見張り)', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async () => {
+    const { buildJizuraProject, COVERING_LAYOUTS, COVERING_TRANSITIONS, keepLightTextSchemes, loadJizura } = await import(
+      '/src/core/lyrics/jizura-adapter.ts'
+    );
+    const { defaultLyrics } = await import('/src/core/types.ts');
+    const J = (await loadJizura()) as unknown as {
+      order(group: string): string[];
+      plan(p: Record<string, unknown>, a: null): Parameters<typeof keepLightTextSchemes>[0];
+      Renderer: new () => { frame(ctx: CanvasRenderingContext2D, plan: unknown, t: number, o: Record<string, unknown>): void };
+      lum(c: string): number;
+      defaultProject(): Record<string, unknown> & { timing: Record<string, unknown> };
+      cutAt(plan: unknown, t: number): { start: number } | null;
+    };
+    const canvas = document.createElement('canvas');
+    canvas.width = 160;
+    canvas.height = 90;
+    const ctx = canvas.getContext('2d')!;
+    const covering: [string, number][] = [];
+    /** 2 行目にだけ指定を当てて (JIZURA の行ごとの指定)、区間 [t0, t1) で画面の何割が不透明になるかの最大 */
+    const maxCover = (override: Record<string, string>, t0: number, t1: number): number => {
+      const lyrics = { ...defaultLyrics(), text: 'あいうえお\nかきくけこさしす', timing: { ...defaultLyrics().timing, lineTimes: { '0': 0.5, '1': 3 }, lineEnds: { '1': 6 } } };
+      const project = buildJizuraProject(lyrics, J.defaultProject(), { seed: 1, aspect: '16:9', fps: 30 });
+      project.overrides = { 1: override };
+      const plan = keepLightTextSchemes(J.plan(project, null), (c) => J.lum(c));
+      const r = new J.Renderer();
+      let max = 0;
+      for (let t = t0; t < t1; t += 0.1) {
+        r.frame(ctx, plan, t, { scale: 160 / 1920, transparent: true, fast: true });
+        const d = ctx.getImageData(0, 0, 160, 90).data;
+        let op = 0;
+        for (let i = 3; i < d.length; i += 4) if (d[i]! > 200) op++;
+        max = Math.max(max, op / (160 * 90));
+      }
+      return max;
+    };
+    // 場面転換: 切り替わりの前後で、画面の半分以上を覆わない
+    const transitions = J.order('trans').filter((k) => !COVERING_TRANSITIONS.includes(k));
+    for (const k of transitions) {
+      const v = maxCover({ trans: k }, 2.4, 3.8);
+      if (v > 0.5) covering.push([`trans:${k}`, v]);
+    }
+    // レイアウト: 場面転換を覆わないものに固定して、行の間に画面の 9 割以上を塗らない。
+    // (COVERING_LAYOUTS は 8 割以上で決めたが、文字で埋める「wall」などは書体の読み込み具合で 8 割前後を行き来するので、
+    //  見張りは背景ごと塗るものだけを確実に捕まえる 9 割にしている)
+    const neutral = transitions[0]!;
+    const layouts = J.order('layout').filter((k) => !COVERING_LAYOUTS.includes(k));
+    for (const k of layouts) {
+      const v = maxCover({ layout: k, trans: neutral }, 3.05, 5.9);
+      if (v >= 0.9) covering.push([`layout:${k}`, v]);
+    }
+    const unknown = [
+      ...COVERING_TRANSITIONS.filter((k) => !J.order('trans').includes(k)),
+      ...COVERING_LAYOUTS.filter((k) => !J.order('layout').includes(k)),
+    ];
+    return { covering, unknown, checked: transitions.length + layouts.length };
+  });
+  // 新しく映像を覆うものが見つかったら、COVERING_TRANSITIONS / COVERING_LAYOUTS に足す
+  expect(result.covering).toEqual([]);
+  // 一覧にあるのに JIZURA に無い名前は、JIZURA 側で名前が変わった可能性がある
+  expect(result.unknown).toEqual([]);
+  expect(result.checked).toBeGreaterThan(100);
+});
+
 test('歌詞モーション (JIZURA): 透過で描け、同じ seed なら同じ画像、seed が違えば違う画像', async ({ page }) => {
   await openApp(page);
   const render = (seed: number) =>

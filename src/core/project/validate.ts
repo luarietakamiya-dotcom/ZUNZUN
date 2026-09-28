@@ -1,9 +1,11 @@
 import {
   defaultCommonParams,
   defaultLyrics,
+  defaultLyricsMotion,
   defaultProject,
   type CommonParams,
   type ExportSettings,
+  type LyricsMotion,
   type LyricsSettings,
   type OverlayLayer,
   type ProjectFile,
@@ -173,8 +175,21 @@ function sanitizeLyrics(raw: unknown): LyricsSettings | null {
       snap: typeof timingRaw.snap === 'boolean' ? timingRaw.snap : base.timing.snap,
       snapWindowMs: isFiniteNumber(timingRaw.snapWindowMs) ? Math.round(clamp(timingRaw.snapWindowMs, 0, 1000)) : base.timing.snapWindowMs,
     },
-    // 歌詞モーションの設定項目は L5 (JIZURA の同梱) で決める。それまでは未知のキーとしてすべて捨てる
-    motion: {},
+    motion: sanitizeLyricsMotion(raw.motion),
+  };
+}
+
+/** 歌詞モーションの設定。スタイル名はキーの形だけ確かめる (存在しないスタイルは JIZURA 側で既定の noir になる) */
+function sanitizeLyricsMotion(raw: unknown): LyricsMotion {
+  const base = defaultLyricsMotion();
+  if (!isPlainObject(raw)) return base;
+  const unit = (v: unknown, fallback: number): number => (isFiniteNumber(v) ? clamp(v, 0, 1) : fallback);
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : base.enabled,
+    style: typeof raw.style === 'string' && ID_PATTERN.test(raw.style) && raw.style.length <= 64 ? raw.style : base.style,
+    motion: unit(raw.motion, base.motion),
+    decor: unit(raw.decor, base.decor),
+    density: unit(raw.density, base.density),
   };
 }
 

@@ -21,9 +21,11 @@ import {
   type SnapAllResult,
   type SyncTargets,
 } from '../../core/lyrics';
+import { jizuraStyles, loadJizura } from '../../core/lyrics/jizura-adapter';
+import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { MAX_LYRICS_LENGTH } from '../../core/project/validate';
 import { store } from '../../core/store';
-import { defaultLyrics, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
+import { defaultLyrics, type LyricsMotion, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
 import { LyricsTimeline } from './lyrics-timeline';
 
 /**
@@ -281,6 +283,86 @@ export function renderLyricsPanel(): HTMLElement {
   ]);
   root.appendChild(timelineCard);
 
+  // ------------------------------------------------------------ 歌詞モーション (L6)
+  const motionEnabled = el('input');
+  motionEnabled.type = 'checkbox';
+  const styleSelect = el('select', { className: 'select' });
+  const motionStatus = el('span', { className: 'param-label' });
+  const MOTION_SLIDERS: { key: 'motion' | 'decor' | 'density'; label: string }[] = [
+    { key: 'motion', label: '動きの大きさ' },
+    { key: 'decor', label: '装飾の量' },
+    { key: 'density', label: '区切りの細かさ (大きいほど 1 行を細かいカットに分ける)' },
+  ];
+  const motionInputs = new Map<string, { input: HTMLInputElement; label: HTMLSpanElement }>();
+  const updateMotion = (patch: Partial<LyricsMotion>): void => {
+    const base = currentLyrics();
+    store.setLyrics({ ...base, motion: { ...base.motion, ...patch } });
+    refreshMotionControls();
+  };
+  motionEnabled.addEventListener('change', () => updateMotion({ enabled: motionEnabled.checked }));
+  styleSelect.addEventListener('change', () => updateMotion({ style: styleSelect.value }));
+  const sliderRows = MOTION_SLIDERS.map((def) => {
+    const input = el('input');
+    input.type = 'range';
+    input.min = '0';
+    input.max = '1';
+    input.step = '0.01';
+    const label = el('span', { className: 'param-label' });
+    input.addEventListener('input', () => updateMotion({ [def.key]: parseFloat(input.value) }));
+    motionInputs.set(def.key, { input, label });
+    return el('label', { className: 'param-row' }, [label, input]);
+  });
+  const motionCanvas = el('canvas', { className: 'lyrics-motion-canvas' });
+  motionCanvas.width = 640;
+  motionCanvas.height = 360;
+  const motionCtx = motionCanvas.getContext('2d');
+  const motionCard = el('div', { className: 'lyrics-card' }, [
+    el('h3', { className: 'lyrics-h3', textContent: '歌詞モーション (JIZURA)' }),
+    el('p', {
+      className: 'lyrics-help',
+      textContent:
+        '歌詞をアニメーションさせてビジュアライザーの上に重ねます。映像と重ねた見た目は Visualizer タブ、書き出しは Export タブで。' +
+        '書体は Google Fonts から読み込みます (外部と通信するのは書体の取得だけです)。',
+    }),
+    el('label', { className: 'row-gap param-label' }, [motionEnabled, 'ビジュアライザーの上に歌詞モーションを重ねる']),
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: 'スタイル:' }), styleSelect, motionStatus]),
+    el('div', { className: 'param-grid lyrics-motion-grid' }, sliderRows),
+    motionCanvas,
+  ]);
+  root.appendChild(motionCard);
+
+  /** スタイルの一覧は JIZURA を読み込んでから埋める (読み込むまでは今のスタイルだけ出す) */
+  let styleOptions: [string, string][] | null = null;
+  void loadJizura()
+    .then((J) => {
+      styleOptions = jizuraStyles(J);
+      refreshMotionControls();
+    })
+    .catch(() => {
+      motionStatus.textContent = '歌詞モーションのエンジンを読み込めませんでした';
+    });
+
+  function refreshMotionControls(): void {
+    const m = currentLyrics().motion;
+    motionEnabled.checked = m.enabled;
+    const options = styleOptions ?? [[m.style, m.style]];
+    if (styleSelect.options.length !== options.length) {
+      styleSelect.textContent = '';
+      for (const [key, name] of options) {
+        const opt = el('option', { textContent: name });
+        opt.value = key;
+        styleSelect.appendChild(opt);
+      }
+    }
+    styleSelect.value = m.style;
+    for (const def of MOTION_SLIDERS) {
+      const row = motionInputs.get(def.key)!;
+      row.input.value = String(m[def.key]);
+      row.label.textContent = `${def.label}: ${m[def.key].toFixed(2)}`;
+    }
+    for (const c of [styleSelect, ...[...motionInputs.values()].map((r) => r.input)]) c.disabled = !m.enabled;
+  }
+
   // ------------------------------------------------------------ タップ同期
   const tapCard = el('div', { className: 'lyrics-card' });
   const startFirstBtn = button('1 行目からタップ', () => startTap(0), 'lyrics-big-button');
@@ -382,6 +464,7 @@ export function renderLyricsPanel(): HTMLElement {
     if (selectedLine >= lineCount) selectedLine = Math.max(0, lineCount - 1);
     renderRows();
     refreshControls();
+    refreshMotionControls();
     const analysis = store.audio.analysis;
     const buffer = store.audio.audioBuffer;
     const targets = snapTargets();
@@ -400,6 +483,42 @@ export function renderLyricsPanel(): HTMLElement {
       loop: loopRegion(),
     });
     shownLine = -2; // 次のフレームでプレビューを描き直す
+  }
+
+  /** 歌詞モーションだけのプレビュー (黒地)。映像と重ねた見た目は Visualizer タブで見る */
+  function drawMotionPreview(t: number): void {
+    if (!motionCtx) return;
+    const motion = store.audio.isLoaded
+      ? previewMotionProvider.get({
+          lyrics: store.lyrics,
+          analysis: store.audio.analysis,
+          projectSeed: store.seed,
+          width: store.exportSettings.width,
+          height: store.exportSettings.height,
+          fps: store.exportSettings.fps,
+        })
+      : null;
+    const status = !store.audio.isLoaded
+      ? '音源を読み込むとプレビューが出ます'
+      : previewMotionProvider.lastError
+        ? `作れませんでした: ${previewMotionProvider.lastError}`
+        : previewMotionProvider.isBuilding
+          ? '準備中… (書体の読み込みなど)'
+          : '';
+    if (motionStatus.textContent !== status) motionStatus.textContent = status;
+    if (motion) {
+      const h = Math.round((motionCanvas.width * motion.plan.H) / motion.plan.W);
+      if (motionCanvas.height !== h) motionCanvas.height = h;
+    }
+    motionCtx.fillStyle = '#000';
+    motionCtx.fillRect(0, 0, motionCanvas.width, motionCanvas.height);
+    // JIZURA は描く前に canvas を消すので、黒地は別の canvas に重ねずに「描いたあとに下へ敷く」
+    if (motion) {
+      motion.render(motionCtx, t, { fast: true });
+      motionCtx.globalCompositeOperation = 'destination-over';
+      motionCtx.fillRect(0, 0, motionCanvas.width, motionCanvas.height);
+      motionCtx.globalCompositeOperation = 'source-over';
+    }
   }
 
   function refreshControls(): void {
@@ -854,6 +973,7 @@ export function renderLyricsPanel(): HTMLElement {
     if (region && playing && t >= region.end) store.audio.seek(region.start);
     timeline.setSelection(selectedLine, region);
     timeline.draw(t, playing);
+    drawMotionPreview(t);
     const playText = playing ? '一時停止' : '再生';
     if (playBtn.textContent !== playText) playBtn.textContent = playText;
 

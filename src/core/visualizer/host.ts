@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { LyricLayer } from '../lyrics/layer';
 import { OverlayManager } from '../overlay/manager';
 import { deriveSeed, makeRng } from '../random';
 import { PostFxStack } from '../render/postfx';
@@ -18,6 +19,8 @@ export interface VisualizerHostOptions {
    * 書き出し時に canvas から VideoFrame を取り込む前に中身が消えないよう、書き出し用 Host でだけ使う。
    */
   preserveDrawingBuffer?: boolean;
+  /** 歌詞モーションを軽く描く (ぼかしなどを省く)。プレビュー向け。書き出しでは false (既定) */
+  fastLyrics?: boolean;
 }
 
 /**
@@ -34,6 +37,11 @@ export class VisualizerHost {
   private readonly postfx: PostFxStack;
   /** PNG/WebP/JPG オーバーレイ。Bloom を通さず、プリセット本体の描画のあとに重ね描きする (Compositor の「前」層) */
   readonly overlay = new OverlayManager();
+  /**
+   * 歌詞モーション (JIZURA)。PostFX のあと・オーバーレイの前に重ねる (Compositor の「中」層)。
+   * 描く LyricMotion は呼び出し側が lyrics.setMotion() で渡す (歌詞が無ければ何も描かない)
+   */
+  readonly lyrics: LyricLayer;
   private current: { preset: VisualizerPreset; moduleId: string } | null = null;
   private width = 1;
   private height = 1;
@@ -51,6 +59,7 @@ export class VisualizerHost {
     this.renderer.setPixelRatio(opts.pixelRatio ?? Math.min(2, window.devicePixelRatio || 1));
     this.renderer.setClearColor(opts.clearColor ?? 0x000000, 1);
     this.postfx = new PostFxStack(this.renderer, this.width, this.height);
+    this.lyrics = new LyricLayer({ fast: opts.fastLyrics ?? false });
   }
 
   get domElement(): HTMLCanvasElement {
@@ -67,6 +76,9 @@ export class VisualizerHost {
     this.renderer.setSize(this.width, this.height, false);
     this.postfx.resize(this.width, this.height);
     this.overlay.resize(this.width, this.height);
+    // 歌詞の 2D canvas は実際の描画ピクセル数に合わせる (にじまないように)
+    const pr = this.renderer.getPixelRatio();
+    this.lyrics.resize(this.width * pr, this.height * pr);
     this.current?.preset.resize(this.width, this.height);
   }
 
@@ -106,7 +118,7 @@ export class VisualizerHost {
     previous?.preset.dispose();
   }
 
-  /** 現在のプリセット + オーバーレイを毎フレーム更新して描画する。 */
+  /** 現在のプリセット → 歌詞モーション → オーバーレイ の順に、毎フレーム更新して描画する。 */
   render(frame: AudioFrame, params: CommonParams & Record<string, unknown>): void {
     if (this.current) {
       const { preset } = this.current;
@@ -114,6 +126,7 @@ export class VisualizerHost {
       this.postfx.setGlow(params.glow);
       this.postfx.render();
     }
+    this.lyrics.render(this.renderer, frame.t);
     this.overlay.animate(frame);
     this.overlay.render(this.renderer);
   }
@@ -123,6 +136,7 @@ export class VisualizerHost {
     this.current?.preset.dispose();
     this.current = null;
     this.postfx.dispose();
+    this.lyrics.dispose();
     this.overlay.dispose();
     this.renderer.dispose();
     // WebGL コンテキストは GC 任せだとしばらく残り、ブラウザの同時コンテキスト数上限 (Chrome は 16) に

@@ -157,16 +157,35 @@ export interface LyricsSettings {
   /** 入力された歌詞そのもの (LRC/SRT のときはタグ付きの原文) */
   text: string;
   timing: LyricsTiming;
-  /** 歌詞モーション (JIZURA) の設定。L5 で扱う項目を決めるまでは空 (読み込み時も未知のキーとして捨てる) */
-  motion: Record<string, never>;
+  /** 歌詞モーション (JIZURA) の設定 */
+  motion: LyricsMotion;
 }
+
+/**
+ * 歌詞モーション (JIZURA) の設定。JIZURA の project のうち、ZUNZUN で扱う分だけ。
+ * 数値の既定値は JIZURA の defaultProject().fx と同じ。
+ */
+export interface LyricsMotion {
+  /** ビジュアライザーの上に歌詞モーションを重ねるか */
+  enabled: boolean;
+  /** JIZURA のスタイル (J.STYLE_ORDER のキー。知らないキーは JIZURA 側で既定の noir になる) */
+  style: string;
+  /** 動きの大きさ (0..1) */
+  motion: number;
+  /** 装飾の量 (0..1) */
+  decor: number;
+  /** 文字の区切りの細かさ (0..1、大きいほど 1 行を細かいカットに分ける) */
+  density: number;
+}
+
+export const defaultLyricsMotion = (): LyricsMotion => ({ enabled: true, style: 'noir', motion: 0.7, decor: 0.5, density: 0.55 });
 
 export const defaultLyrics = (): LyricsSettings => ({
   engine: 'jizura',
   source: 'text',
   text: '',
   timing: { lineTimes: {}, lineEnds: {}, snap: true, snapWindowMs: 150 },
-  motion: {},
+  motion: defaultLyricsMotion(),
 });
 
 export interface OverlayLayer {

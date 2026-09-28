@@ -18,12 +18,18 @@ import { applyManualEnds } from './timing';
 
 // ------------------------------------------------------------------ JIZURA の型 (使う分だけ)
 
+export interface JizuraScheme {
+  bg: string;
+  fg: string;
+}
+
 export interface JizuraPlan {
   W: number;
   H: number;
   duration: number;
   lines: { text: string; start: number; end: number }[];
   cuts: unknown[];
+  style: { schemes: JizuraScheme[] };
 }
 
 export interface JizuraRenderer {
@@ -54,6 +60,10 @@ export interface JizuraApi {
   ensureFonts(text: string, keys: string[] | null): Promise<void>;
   glyphs: { clear(): void };
   metrics: { clear(): void };
+  STYLE_ORDER: string[];
+  STYLES: Record<string, { name: string; desc?: string }>;
+  /** 色の明るさ (0..1) */
+  lum(color: string): number;
   __zunzunTimingPatched?: boolean;
 }
 
@@ -162,20 +172,98 @@ export function buildJizuraProject(
   defaults: Record<string, unknown> & { timing: Record<string, unknown> },
   opts: JizuraProjectOptions,
 ): Record<string, unknown> {
+  const fx = (defaults.fx ?? {}) as Record<string, unknown>;
+  const enabled = (defaults.enabled ?? {}) as Record<string, Record<string, boolean>>;
+  const trans = { ...(enabled.trans ?? {}) };
+  for (const k of COVERING_TRANSITIONS) trans[k] = false;
+  const layout = { ...(enabled.layout ?? {}) };
+  for (const k of COVERING_LAYOUTS) layout[k] = false;
   return {
     ...defaults,
+    enabled: { ...enabled, trans, layout },
     lyrics: lyricsForEngine(lyrics.text, lyrics.source),
     title: '',
     artist: '',
     seed: opts.seed >>> 0,
     aspect: opts.aspect,
     fps: opts.fps,
+    style: lyrics.motion.style,
+    fx: { ...fx, motion: lyrics.motion.motion, decor: lyrics.motion.decor, density: lyrics.motion.density },
     timing: {
       ...defaults.timing,
       lineTimes: { ...lyrics.timing.lineTimes },
       lineEnds: { ...lyrics.timing.lineEnds },
     },
   };
+}
+
+/**
+ * ビジュアライザーの上に重ねるときに使わない場面転換 (JIZURA の enabled.trans で無効にする)。
+ * 途中のコマで画面の半分以上を塗りつぶすもの。JIZURA 単体 (背景を描く) なら見栄えのする演出だが、重ねると
+ * その間ビジュアライザーが隠れる (クリムゾンで knCornerSwing が画面全体を赤く塗った)。
+ * 2026-09-28 に commit 8da975f の 27 種を 1 つずつ強制して描いて測った結果。レイアウトや文字の処理なども
+ * 測ったが、覆っていたのは同じコマで偶然選ばれた場面転換だけだった。
+ * JIZURA を更新したときは tests/e2e/visual.spec.ts の「画面を覆う場面転換」のテストが新しい候補を見つける。
+ */
+export const COVERING_TRANSITIONS: readonly string[] = [
+  'knCornerSwing',
+  'knStutterCut',
+  'uncover',
+  'zoomThrough',
+  'doorsOpen',
+  'whipPan',
+  'spinOut',
+  'inkBlob',
+  'cubeTurn',
+  'hrBlink',
+];
+
+/**
+ * ビジュアライザーの上に重ねるときに使わないレイアウト (JIZURA の enabled.layout で無効にする)。
+ * 画面の 8 割以上を塗る (障子・カーテン・ジッパー・字幕の帯・新聞など、背景ごと描くもの) ため、重ねると映像が隠れる。
+ * 場面転換を固定して、noir と crimson でレイアウト 184 種を 1 つずつ描いて測った (2026-09-28、commit 8da975f)。
+ * 紙やカードを描くもの (はがき・ポラロイドなど、5〜6 割) は「歌詞が書かれた小道具」なので残した。
+ * 文字の飾り (treat)・装飾 (decor)・画面効果 (fx) は画面を覆わなかった。
+ */
+export const COVERING_LAYOUTS: readonly string[] = [
+  'hrFlashlight',
+  'subtitleBar',
+  'shoji',
+  'zipper',
+  'curtain',
+  'hrDoorGap',
+  'hrCctv',
+  'magnets',
+  'newspaper',
+  'wordSearch',
+];
+
+/** 文字が明るい配色とみなす明るさ (これ以上) */
+const LIGHT_TEXT_LUM = 0.45;
+
+/**
+ * 背景なしでビジュアライザーの上に重ねるための配色の選び直し。JIZURA のスタイルにはカットごとに
+ * 「明るい背景 + 暗い文字」(例: noir の 2 つ目) や「暗い背景 + 暗い文字」(例: acid) の配色が混ざっていて、
+ * 背景を描かずに暗い映像へ重ねると文字が読めない。文字が明るい配色だけを残し、各カットの配色番号を付け替える。
+ * 同梱ファイルは改変せず、J.plan が返した plan のデータだけを調整する。文字が明るい配色が 1 つも無ければ何もしない。
+ * 書き換えた plan を返す (引数の plan を直接書き換える)。
+ */
+export function keepLightTextSchemes(plan: JizuraPlan, lum: (color: string) => number): JizuraPlan {
+  const schemes = plan.style.schemes;
+  const keep = schemes.flatMap((s, i) => (lum(s.fg) >= LIGHT_TEXT_LUM ? [i] : []));
+  if (keep.length === 0 || keep.length === schemes.length) return plan;
+  plan.style.schemes = keep.map((i) => schemes[i]!);
+  for (const cut of plan.cuts as { scheme?: number }[]) {
+    if (typeof cut.scheme !== 'number') continue;
+    const at = keep.indexOf(cut.scheme % schemes.length);
+    cut.scheme = at >= 0 ? at : cut.scheme % keep.length;
+  }
+  return plan;
+}
+
+/** スタイルの一覧 (選択肢の表示用): [キー, 名前] */
+export function jizuraStyles(J: JizuraApi): [string, string][] {
+  return J.STYLE_ORDER.filter((k) => J.STYLES[k]).map((k) => [k, J.STYLES[k]!.name]);
 }
 
 // ------------------------------------------------------------------ 描画
@@ -263,7 +351,7 @@ export class LyricMotion {
     const J = await loadJizura();
     const seed = lyricMotionSeed(opts.projectSeed);
     const project = buildJizuraProject(lyrics, J.defaultProject(), { seed, aspect: nearestAspect(opts.width, opts.height), fps: opts.fps });
-    const plan = J.plan(project, audio);
+    const plan = keepLightTextSchemes(J.plan(project, audio), (c) => J.lum(c));
     await prepareFonts(J, plan, lyricsForEngine(lyrics.text, lyrics.source) + HUD_CHARS);
     // 本番の Renderer は書体の準備が終わってから作る (内部のキャッシュに仮の書体の文字を残さない)
     const renderer = withSeededRandom(deriveSeed(seed, 'renderer'), () => {
