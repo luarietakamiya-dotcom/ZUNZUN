@@ -59,7 +59,8 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
             lineTimes: { ...state.lyrics.timing.lineTimes },
             lineEnds: { ...state.lyrics.timing.lineEnds },
           },
-          motion: { ...state.lyrics.motion },
+          // オリジナルのスタイルは入れ子のオブジェクトなので、まるごと複製する (保存したあとに画面で変えても共有しない)
+          motion: JSON.parse(JSON.stringify(state.lyrics.motion)) as typeof state.lyrics.motion,
         }
       : null,
     colors: {},

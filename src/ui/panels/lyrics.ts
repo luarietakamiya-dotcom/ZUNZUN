@@ -21,11 +21,12 @@ import {
   type SnapAllResult,
   type SyncTargets,
 } from '../../core/lyrics';
-import { jizuraStyles, loadJizura } from '../../core/lyrics/jizura-adapter';
+import { customFromStyle, jizuraStyles, loadJizura, type JizuraApi } from '../../core/lyrics/jizura-adapter';
 import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { MAX_LYRICS_LENGTH } from '../../core/project/validate';
 import { store } from '../../core/store';
-import { defaultLyrics, type LyricsMotion, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
+import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsMotion, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
+import { createStyleEditor } from './lyrics-style-editor';
 import { LyricsTimeline } from './lyrics-timeline';
 
 /**
@@ -316,6 +317,34 @@ export function renderLyricsPanel(): HTMLElement {
   motionCanvas.width = 640;
   motionCanvas.height = 360;
   const motionCtx = motionCanvas.getContext('2d');
+
+  // オリジナルのスタイル (L7): 今のスタイルを元に作り、色・書体・質感を変える
+  let jz: JizuraApi | null = null;
+  const customBtn = button('このスタイルを元にマイスタイルを作る', () => createCustomStyle(), 'tab-button lyrics-custom-button');
+  const styleEditor = createStyleEditor({
+    onChange: (custom) => updateMotion({ custom }),
+    onResetFromBase: (baseKey) => {
+      if (!jz) return;
+      const name = currentLyrics().motion.custom?.name;
+      const fresh = customFromStyle(baseKey, jz.STYLES[baseKey] ?? jz.STYLES.noir!, (c) => jz!.lum(c));
+      updateMotion({ custom: { ...fresh, name: name ?? fresh.name } });
+    },
+    onDelete: () => {
+      const base = currentLyrics().motion.custom?.base ?? 'noir';
+      updateMotion({ custom: null, style: base });
+    },
+  });
+  function createCustomStyle(): void {
+    if (!jz) return;
+    const m = currentLyrics().motion;
+    // すでにマイスタイルがあれば、それを選び直すだけ (作り直すと調整が消えるため)
+    if (m.custom) {
+      updateMotion({ style: CUSTOM_STYLE_KEY });
+      return;
+    }
+    const baseKey = m.style !== CUSTOM_STYLE_KEY && jz.STYLES[m.style] ? m.style : 'noir';
+    updateMotion({ style: CUSTOM_STYLE_KEY, custom: customFromStyle(baseKey, jz.STYLES[baseKey]!, (c) => jz!.lum(c)) });
+  }
   const motionCard = el('div', { className: 'lyrics-card' }, [
     el('h3', { className: 'lyrics-h3', textContent: '歌詞モーション (JIZURA)' }),
     el('p', {
@@ -325,7 +354,8 @@ export function renderLyricsPanel(): HTMLElement {
         '書体は Google Fonts から読み込みます (外部と通信するのは書体の取得だけです)。',
     }),
     el('label', { className: 'row-gap param-label' }, [motionEnabled, 'ビジュアライザーの上に歌詞モーションを重ねる']),
-    el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: 'スタイル:' }), styleSelect, motionStatus]),
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: 'スタイル:' }), styleSelect, customBtn, motionStatus]),
+    styleEditor.element,
     el('div', { className: 'param-grid lyrics-motion-grid' }, sliderRows),
     motionCanvas,
   ]);
@@ -335,7 +365,9 @@ export function renderLyricsPanel(): HTMLElement {
   let styleOptions: [string, string][] | null = null;
   void loadJizura()
     .then((J) => {
+      jz = J;
       styleOptions = jizuraStyles(J);
+      styleEditor.setJizura(J);
       refreshMotionControls();
     })
     .catch(() => {
@@ -345,8 +377,14 @@ export function renderLyricsPanel(): HTMLElement {
   function refreshMotionControls(): void {
     const m = currentLyrics().motion;
     motionEnabled.checked = m.enabled;
-    const options = styleOptions ?? [[m.style, m.style]];
-    if (styleSelect.options.length !== options.length) {
+    // マイスタイルがあれば、一覧の先頭に「★ 名前」で出す
+    const options: [string, string][] = [
+      ...(m.custom ? [[CUSTOM_STYLE_KEY, `★ ${m.custom.name}`] as [string, string]] : []),
+      ...(styleOptions ?? (m.style !== CUSTOM_STYLE_KEY ? [[m.style, m.style] as [string, string]] : [])),
+    ];
+    const signature = options.map((o) => o.join('=')).join('|');
+    if (styleSelect.dataset.signature !== signature) {
+      styleSelect.dataset.signature = signature;
       styleSelect.textContent = '';
       for (const [key, name] of options) {
         const opt = el('option', { textContent: name });
@@ -355,6 +393,11 @@ export function renderLyricsPanel(): HTMLElement {
       }
     }
     styleSelect.value = m.style;
+    const usingCustom = m.style === CUSTOM_STYLE_KEY && m.custom != null;
+    styleEditor.refresh(usingCustom ? m.custom : null);
+    customBtn.hidden = usingCustom;
+    customBtn.textContent = m.custom ? `マイスタイル (${m.custom.name}) を使う` : 'このスタイルを元にマイスタイルを作る';
+    customBtn.disabled = !jz || !m.enabled;
     for (const def of MOTION_SLIDERS) {
       const row = motionInputs.get(def.key)!;
       row.input.value = String(m[def.key]);

@@ -143,7 +143,7 @@ describe('sanitizeProject', () => {
     expect(lyrics.timing.snap).toBe(true);
     expect(lyrics.timing.snapWindowMs).toBe(1000);
     // 歌詞モーション: 範囲外は clamp、壊れた値は既定値、未知のキーは捨てる
-    expect(lyrics.motion).toEqual({ enabled: false, style: 'crimson', motion: 1, decor: 0, density: defaultLyricsMotion().density });
+    expect(lyrics.motion).toEqual({ enabled: false, style: 'crimson', motion: 1, decor: 0, density: defaultLyricsMotion().density, custom: null });
     expect(Object.keys(lyrics)).toEqual(['engine', 'source', 'text', 'timing', 'motion']);
   });
 
@@ -153,6 +153,41 @@ describe('sanitizeProject', () => {
     expect(sanitizeProject(raw).lyrics!.motion).toEqual(defaultLyricsMotion());
     raw.lyrics = { text: 'a', motion: { style: '<img onerror=x>' } };
     expect(sanitizeProject(raw).lyrics!.motion.style).toBe('noir');
+  });
+
+  it('lyrics.motion.custom (オリジナルのスタイル): 色は #rrggbb、書体はキーの形、数値は範囲内、名前は 40 文字まで', () => {
+    const raw = validRaw() as Record<string, unknown>;
+    raw.lyrics = {
+      text: 'a',
+      motion: {
+        style: 'zz-custom',
+        custom: {
+          name: `  すごい\u0007スタイル${'x'.repeat(60)}`,
+          base: 'crimson',
+          colors: { fg: '#FFEEDD', sub: 'red', accent: '#12345', accent2: '#abcdef', ghostA: '#000000', ghostB: 7 },
+          fonts: { display: 'dela', serif: '../../evil', body: '' },
+          texture: { grain: 3, scan: -1, ghost: 1.4, glow: 'x' },
+          evil: 1,
+        },
+      },
+    };
+    const m = sanitizeProject(raw).lyrics!.motion;
+    expect(m.style).toBe('zz-custom');
+    expect(m.custom!.name).toHaveLength(40);
+    expect(m.custom!.name.startsWith('すごいスタイル')).toBe(true);
+    expect(m.custom!.base).toBe('crimson');
+    expect(m.custom!.colors).toEqual({ fg: '#ffeedd', sub: '#bbbbbb', accent: '#f5a50c', accent2: '#abcdef', ghostA: '#000000', ghostB: '#16f4d4' });
+    expect(m.custom!.fonts).toEqual({ display: 'dela', serif: '', body: '' });
+    expect(m.custom!.texture).toEqual({ grain: 1, scan: 0, ghost: 1.4, glow: 0 });
+    expect(Object.keys(m.custom!)).toEqual(['name', 'base', 'colors', 'fonts', 'texture']);
+  });
+
+  it('lyrics.motion.custom: 元のスタイルが無い・壊れているときは null', () => {
+    const raw = validRaw() as Record<string, unknown>;
+    raw.lyrics = { text: 'a', motion: { custom: { name: 'x', colors: {} } } };
+    expect(sanitizeProject(raw).lyrics!.motion.custom).toBeNull();
+    raw.lyrics = { text: 'a', motion: { custom: { base: '<x>' } } };
+    expect(sanitizeProject(raw).lyrics!.motion.custom).toBeNull();
   });
 
   it('lyrics: 長すぎる歌詞は上限で切る', () => {

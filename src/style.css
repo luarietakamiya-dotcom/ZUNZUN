@@ -386,3 +386,17 @@ body {
 /* 歌詞モーション (L6) */
 .lyrics-motion-canvas { display: block; width: 100%; max-width: 640px; border-radius: 8px; background: #000; }
 .lyrics-motion-grid { margin-top: 0; max-width: none; }
+
+/* オリジナルのスタイル (L7) */
+.lyrics-style-editor { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--accent); border-radius: 8px; padding: 10px; }
+.lyrics-style-editor[hidden] { display: none; }
+.lyrics-style-section { display: flex; flex-direction: column; gap: 6px; }
+.lyrics-style-title { font-size: 12px; font-weight: 600; color: var(--fg); }
+.lyrics-color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px 12px; }
+.lyrics-color-row { display: flex; align-items: center; gap: 8px; }
+.lyrics-color-input { width: 36px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: none; cursor: pointer; }
+.lyrics-warning { font-size: 12px; color: #ffcf66; }
+.lyrics-warning[hidden] { display: none; }
+.lyrics-text-input { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; width: 14em; }
+.lyrics-custom-button { border: 1px solid var(--accent); color: var(--fg); }
+.lyrics-custom-button[hidden] { display: none; }

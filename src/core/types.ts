@@ -176,9 +176,47 @@ export interface LyricsMotion {
   decor: number;
   /** 文字の区切りの細かさ (0..1、大きいほど 1 行を細かいカットに分ける) */
   density: number;
+  /** オリジナルのスタイル (L7)。style が CUSTOM_STYLE_KEY のときに使う。作っていなければ null */
+  custom: LyricsCustomStyle | null;
 }
 
-export const defaultLyricsMotion = (): LyricsMotion => ({ enabled: true, style: 'noir', motion: 0.7, decor: 0.5, density: 0.55 });
+/** オリジナルのスタイルを選んでいるときの LyricsMotion.style の値 */
+export const CUSTOM_STYLE_KEY = 'zz-custom';
+
+/**
+ * オリジナルのスタイル (L7)。JIZURA のスタイルを 1 つ元にして、色・書体・質感を差し替える。
+ * 演出の好み (どのレイアウトや登場の仕方が出やすいか) は元のスタイルのものを引き継ぐ。
+ * 色はすべて #rrggbb。書体は JIZURA の書体のキー ('' なら元のスタイルのまま)。
+ */
+export interface LyricsCustomStyle {
+  name: string;
+  /** 元にする JIZURA のスタイルのキー */
+  base: string;
+  colors: {
+    /** 文字の色 */
+    fg: string;
+    /** 補助の色 (小さな文字や線) */
+    sub: string;
+    accent: string;
+    accent2: string;
+    /** 色ズレの 2 色 */
+    ghostA: string;
+    ghostB: string;
+  };
+  fonts: { display: string; serif: string; body: string };
+  texture: {
+    /** フィルムの粒 (0..1) */
+    grain: number;
+    /** 走査線 (0..1) */
+    scan: number;
+    /** 色ズレの強さ (0..1.5) */
+    ghost: number;
+    /** 光のにじみ (0..1) */
+    glow: number;
+  };
+}
+
+export const defaultLyricsMotion = (): LyricsMotion => ({ enabled: true, style: 'noir', motion: 0.7, decor: 0.5, density: 0.55, custom: null });
 
 export const defaultLyrics = (): LyricsSettings => ({
   engine: 'jizura',

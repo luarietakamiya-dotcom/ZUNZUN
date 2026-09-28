@@ -5,6 +5,7 @@ import {
   defaultProject,
   type CommonParams,
   type ExportSettings,
+  type LyricsCustomStyle,
   type LyricsMotion,
   type LyricsSettings,
   type OverlayLayer,
@@ -190,6 +191,43 @@ function sanitizeLyricsMotion(raw: unknown): LyricsMotion {
     motion: unit(raw.motion, base.motion),
     decor: unit(raw.decor, base.decor),
     density: unit(raw.density, base.density),
+    custom: sanitizeCustomStyle(raw.custom),
+  };
+}
+
+const HEX6_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+/** オリジナルのスタイル。形が崩れていれば null (元のスタイルが無いと作れないため、部分的には直さない) */
+function sanitizeCustomStyle(raw: unknown): LyricsCustomStyle | null {
+  if (!isPlainObject(raw)) return null;
+  if (typeof raw.base !== 'string' || !ID_PATTERN.test(raw.base) || raw.base.length > 64) return null;
+  const colorsRaw = isPlainObject(raw.colors) ? raw.colors : {};
+  const fontsRaw = isPlainObject(raw.fonts) ? raw.fonts : {};
+  const textureRaw = isPlainObject(raw.texture) ? raw.texture : {};
+  const color = (v: unknown, fallback: string): string => (typeof v === 'string' && HEX6_PATTERN.test(v) ? v.toLowerCase() : fallback);
+  const font = (v: unknown): string => (typeof v === 'string' && ID_PATTERN.test(v) && v.length <= 64 ? v : '');
+  const num = (v: unknown, max: number, fallback: number): number => (isFiniteNumber(v) ? clamp(v, 0, max) : fallback);
+  // 名前: 制御文字を取り除いて 40 文字まで
+  // eslint-disable-next-line no-control-regex
+  const name = typeof raw.name === 'string' ? raw.name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40) : '';
+  return {
+    name: name || 'マイスタイル',
+    base: raw.base,
+    colors: {
+      fg: color(colorsRaw.fg, '#ffffff'),
+      sub: color(colorsRaw.sub, '#bbbbbb'),
+      accent: color(colorsRaw.accent, '#f5a50c'),
+      accent2: color(colorsRaw.accent2, '#16f4d4'),
+      ghostA: color(colorsRaw.ghostA, '#f5a50c'),
+      ghostB: color(colorsRaw.ghostB, '#16f4d4'),
+    },
+    fonts: { display: font(fontsRaw.display), serif: font(fontsRaw.serif), body: font(fontsRaw.body) },
+    texture: {
+      grain: num(textureRaw.grain, 1, 0.5),
+      scan: num(textureRaw.scan, 1, 0),
+      ghost: num(textureRaw.ghost, 1.5, 1),
+      glow: num(textureRaw.glow, 1, 0),
+    },
   };
 }
 

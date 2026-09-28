@@ -1,16 +1,87 @@
 import { describe, expect, it } from 'vitest';
 import { defaultLyrics } from '../types';
 import {
+  buildCustomStyle,
   buildJizuraAudio,
   buildJizuraProject,
   COVERING_LAYOUTS,
   COVERING_TRANSITIONS,
+  customFromStyle,
+  isDarkText,
   keepLightTextSchemes,
   lyricMotionSeed,
   nearestAspect,
   normalizeEnergy,
   type JizuraPlan,
+  type JizuraStyleDef,
 } from './jizura-adapter';
+
+// 明るさ: 白系 = 1、それ以外 = 0 の簡易版 (JIZURA の J.lum の代わり)
+const lum = (c: string): number => (/^#(f|e|d)/i.test(c) ? 1 : 0);
+
+/** noir に似た元のスタイル: 0 番 = 暗い背景 + 白文字、1 番 = 明るい背景 + 黒文字 (swap) */
+const baseStyle = (): JizuraStyleDef => ({
+  name: 'ノワール',
+  schemes: [
+    { bg: '#060607', fg: '#f5eeea', sub: '#bdb6b2', accent: '#f5a50c', accent2: '#16f4d4', ink: '#f5eeea', dim: '#2a2a2e', ghostA: '#f5a50c', ghostB: '#16f4d4' },
+    { bg: '#f2ede8', fg: '#0b0b0c', sub: '#4a4644', accent: '#e0600c', accent2: '#0fae98', ink: '#0b0b0c', ghostA: '#f5a50c', ghostB: '#16c4b4', swap: true },
+  ],
+  fonts: { display: ['gothic_black', 'dela'], serif: ['mincho_light'], body: ['gothic_med'], mono: ['mono'] },
+  texture: { grain: 0.9, paper: 0, scan: 0 },
+  ghost: 1,
+  bias: { layout: { vcols: 2 } },
+});
+
+describe('オリジナルのスタイル (L7)', () => {
+  it('customFromStyle: 元のスタイルの「重ねて読める」配色・最初の書体・質感を初期値にする', () => {
+    const c = customFromStyle('noir', baseStyle(), lum);
+    expect(c.base).toBe('noir');
+    expect(c.name).toBe('ノワール のアレンジ');
+    expect(c.colors).toEqual({ fg: '#f5eeea', sub: '#bdb6b2', accent: '#f5a50c', accent2: '#16f4d4', ghostA: '#f5a50c', ghostB: '#16f4d4' });
+    expect(c.fonts).toEqual({ display: 'gothic_black', serif: 'mincho_light', body: 'gothic_med' });
+    expect(c.texture).toEqual({ grain: 0.9, scan: 0, ghost: 1, glow: 0 });
+  });
+
+  it('buildCustomStyle: 暗い背景の配色だけ残して色を差し替え、書体・質感・名前を差し替える。演出の好みは元のまま', () => {
+    const custom = {
+      ...customFromStyle('noir', baseStyle(), lum),
+      name: 'わたしの',
+      colors: { fg: '#ffffff', sub: '#dddddd', accent: '#ff00aa', accent2: '#00ffcc', ghostA: '#ff0000', ghostB: '#0000ff' },
+      fonts: { display: 'dela', serif: 'no_such_font', body: '' },
+      texture: { grain: 0.2, scan: 0.7, ghost: 0.5, glow: 0.8 },
+    };
+    const base = baseStyle();
+    const st = buildCustomStyle(base, custom, lum, (k) => k === 'dela');
+    expect(st.name).toBe('わたしの');
+    // 明るい背景の配色 (swap) は捨てる
+    expect(st.schemes).toHaveLength(1);
+    expect(st.schemes[0]).toMatchObject({ bg: '#060607', fg: '#ffffff', sub: '#dddddd', accent: '#ff00aa', accent2: '#00ffcc', ghostA: '#ff0000', ghostB: '#0000ff', ink: '#ffffff', dim: '#2a2a2e' });
+    // 書体: 存在するものだけ差し替え、存在しない・空は元のまま
+    expect(st.fonts.display).toEqual(['dela']);
+    expect(st.fonts.serif).toEqual(['mincho_light']);
+    expect(st.fonts.body).toEqual(['gothic_med']);
+    expect(st.texture).toEqual({ grain: 0.2, paper: 0, scan: 0.7 });
+    expect(st.ghost).toBe(0.5);
+    expect(st.glow).toBe(0.8);
+    expect(st.bias).toEqual({ layout: { vcols: 2 } });
+    // 元のスタイルは書き換えない
+    expect(base.schemes).toHaveLength(2);
+    expect(base.fonts.display).toEqual(['gothic_black', 'dela']);
+  });
+
+  it('buildCustomStyle: 暗い背景の配色が 1 つも無ければ、最初の配色を黒い背景にして使う', () => {
+    const base = baseStyle();
+    base.schemes = [base.schemes[1]!];
+    const st = buildCustomStyle(base, customFromStyle('noir', baseStyle(), lum), lum, () => true);
+    expect(st.schemes).toHaveLength(1);
+    expect(st.schemes[0]).toMatchObject({ bg: '#000000', swap: false });
+  });
+
+  it('isDarkText: 重ねると読みにくい暗い文字色か', () => {
+    expect(isDarkText('#111111', lum)).toBe(true);
+    expect(isDarkText('#ffffff', lum)).toBe(false);
+  });
+});
 
 describe('keepLightTextSchemes', () => {
   // 明るさ: #fff = 1、#000 = 0 のような簡易版

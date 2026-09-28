@@ -1,6 +1,6 @@
 import type { AudioAnalysis } from '../audio/analyze';
 import { deriveSeed, makeRng } from '../random';
-import type { LyricsSettings } from '../types';
+import { CUSTOM_STYLE_KEY, type LyricsCustomStyle, type LyricsSettings } from '../types';
 import { lyricsForEngine } from './parse';
 import { applyManualEnds } from './timing';
 
@@ -21,6 +21,18 @@ import { applyManualEnds } from './timing';
 export interface JizuraScheme {
   bg: string;
   fg: string;
+}
+
+/** JIZURA のスタイルの定義 (J.STYLES の値)。使う項目だけ型を書き、残りはそのまま引き継ぐ */
+export interface JizuraStyleDef {
+  name: string;
+  desc?: string;
+  schemes: (JizuraScheme & Record<string, unknown>)[];
+  fonts: Record<string, string[]>;
+  texture?: Record<string, number>;
+  ghost?: number;
+  glow?: number;
+  [key: string]: unknown;
 }
 
 export interface JizuraPlan {
@@ -61,7 +73,8 @@ export interface JizuraApi {
   glyphs: { clear(): void };
   metrics: { clear(): void };
   STYLE_ORDER: string[];
-  STYLES: Record<string, { name: string; desc?: string }>;
+  STYLES: Record<string, JizuraStyleDef>;
+  FONTS: Record<string, { label: string; kind?: string; user?: boolean }>;
   /** 色の明るさ (0..1) */
   lum(color: string): number;
   __zunzunTimingPatched?: boolean;
@@ -261,6 +274,93 @@ export function keepLightTextSchemes(plan: JizuraPlan, lum: (color: string) => n
   return plan;
 }
 
+// ------------------------------------------------------------------ オリジナルのスタイル (L7)
+
+/**
+ * JIZURA のスタイルから、オリジナルのスタイルの初期値を作る (「このスタイルを元に作る」)。
+ * 色は、文字が明るい配色 (重ねて読める配色) の最初のものから取る。
+ */
+export function customFromStyle(baseKey: string, style: JizuraStyleDef, lum: (c: string) => number): LyricsCustomStyle {
+  const scheme = style.schemes.find((s) => lum(s.fg) >= LIGHT_TEXT_LUM) ?? style.schemes[0]!;
+  const str = (v: unknown, fallback: string): string => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : fallback);
+  const fg = str(scheme.fg, '#ffffff');
+  const accent = str(scheme.accent, '#f5a50c');
+  const accent2 = str(scheme.accent2, accent);
+  return {
+    name: `${style.name} のアレンジ`.slice(0, 40),
+    base: baseKey,
+    colors: {
+      fg,
+      sub: str(scheme.sub, fg),
+      accent,
+      accent2,
+      ghostA: str(scheme.ghostA, accent),
+      ghostB: str(scheme.ghostB, accent2),
+    },
+    fonts: { display: style.fonts.display?.[0] ?? '', serif: style.fonts.serif?.[0] ?? '', body: style.fonts.body?.[0] ?? '' },
+    texture: {
+      grain: Math.min(1, Math.max(0, style.texture?.grain ?? 0.5)),
+      scan: Math.min(1, Math.max(0, style.texture?.scan ?? 0)),
+      ghost: Math.min(1.5, Math.max(0, style.ghost ?? 1)),
+      glow: Math.min(1, Math.max(0, style.glow ?? 0)),
+    },
+  };
+}
+
+/**
+ * オリジナルのスタイルから JIZURA のスタイルの定義を作る。元のスタイルを複製し、
+ * - 配色は「暗い背景」のものだけを残して (明るい背景を自分で塗る配色は、明るい文字にすると読めない)、色を差し替える
+ * - 書体は、JIZURA にある書体のキーが指定されていれば差し替える
+ * - 質感 (粒・走査線)・色ズレの強さ・光のにじみ・名前を差し替える
+ * 演出の好み (bias) や装飾 (decor) などは元のスタイルのまま。
+ */
+export function buildCustomStyle(
+  base: JizuraStyleDef,
+  custom: LyricsCustomStyle,
+  lum: (c: string) => number,
+  fontExists: (key: string) => boolean,
+): JizuraStyleDef {
+  const st = JSON.parse(JSON.stringify(base)) as JizuraStyleDef;
+  const c = custom.colors;
+  let schemes = st.schemes.filter((s) => lum(s.bg) < 0.5 && !s.swap && !s.paper);
+  if (schemes.length === 0) schemes = [{ ...st.schemes[0]!, bg: '#000000', swap: false, paper: false }];
+  st.schemes = schemes.map((s) => {
+    const o: JizuraScheme & Record<string, unknown> = { ...s, fg: c.fg, sub: c.sub, accent: c.accent, accent2: c.accent2, ghostA: c.ghostA, ghostB: c.ghostB };
+    // ink は「アクセントと同じ色で描く部分」か「文字と同じ色で描く部分」のどちらか。元の役割を保つ
+    o.ink = s.ink === s.accent ? c.accent : c.fg;
+    if (Array.isArray(s.grad)) o.grad = [c.accent, c.accent2];
+    return o;
+  });
+  st.fonts = { ...st.fonts };
+  for (const role of ['display', 'serif', 'body'] as const) {
+    const key = custom.fonts[role];
+    if (key && fontExists(key)) st.fonts[role] = [key];
+  }
+  st.texture = { ...(st.texture ?? {}), grain: custom.texture.grain, scan: custom.texture.scan };
+  st.ghost = custom.texture.ghost;
+  st.glow = custom.texture.glow;
+  st.name = custom.name;
+  return st;
+}
+
+/** オリジナルのスタイルを JIZURA のスタイル一覧に登録する (同梱ファイルは改変しない。ランダムに選ばれる一覧には入れない) */
+export function registerCustomStyle(J: JizuraApi, custom: LyricsCustomStyle): void {
+  const base = J.STYLES[custom.base] ?? J.STYLES.noir!;
+  J.STYLES[CUSTOM_STYLE_KEY] = buildCustomStyle(base, custom, (c) => J.lum(c), (k) => !!J.FONTS[k] && !J.FONTS[k]!.user);
+}
+
+/** 書体の一覧 (選択肢の表示用): [キー, 名前]。ユーザーが読み込んだ書体は除く (このブラウザにしか無いため) */
+export function jizuraFonts(J: JizuraApi): [string, string][] {
+  return Object.entries(J.FONTS)
+    .filter(([, f]) => !f.user)
+    .map(([k, f]) => [k, f.label]);
+}
+
+/** 文字の色が暗すぎて、重ねると読みにくいか */
+export function isDarkText(color: string, lum: (c: string) => number): boolean {
+  return lum(color) < LIGHT_TEXT_LUM;
+}
+
 /** スタイルの一覧 (選択肢の表示用): [キー, 名前] */
 export function jizuraStyles(J: JizuraApi): [string, string][] {
   return J.STYLE_ORDER.filter((k) => J.STYLES[k]).map((k) => [k, J.STYLES[k]!.name]);
@@ -349,6 +449,7 @@ export class LyricMotion {
 
   static async create(lyrics: LyricsSettings, audio: JizuraAudio | null, opts: LyricMotionOptions): Promise<LyricMotion> {
     const J = await loadJizura();
+    if (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom) registerCustomStyle(J, lyrics.motion.custom);
     const seed = lyricMotionSeed(opts.projectSeed);
     const project = buildJizuraProject(lyrics, J.defaultProject(), { seed, aspect: nearestAspect(opts.width, opts.height), fps: opts.fps });
     const plan = keepLightTextSchemes(J.plan(project, audio), (c) => J.lum(c));
