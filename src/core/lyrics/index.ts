@@ -16,3 +16,6 @@ export { buildLyricsView, syncTargetsFor } from './view';
 export type { LineTimeSource, LyricsView, SyncTargets } from './view';
 export { snapAllLines } from './snap-all';
 export type { LineSnap, SnapAllOptions, SnapAllResult } from './snap-all';
+export { MIN_GAP, moveLine, moveLineEnd, moveLineStart, shiftLines, startBounds } from './edit';
+export type { EditContext, TimingSnapshot } from './edit';
+export { MAX_PX_PER_SEC, Viewport } from './viewport';

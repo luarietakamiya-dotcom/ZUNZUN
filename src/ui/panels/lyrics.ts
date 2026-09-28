@@ -1,5 +1,13 @@
+import { computePeaks, type Peaks } from '../../core/audio/peaks';
 import {
   buildLyricsView,
+  estimateOffset,
+  moveLine,
+  moveLineEnd,
+  moveLineStart,
+  shiftLines,
+  snapTime,
+  type EditContext,
   formatTime,
   History,
   lineAt,
@@ -16,6 +24,7 @@ import {
 import { MAX_LYRICS_LENGTH } from '../../core/project/validate';
 import { store } from '../../core/store';
 import { defaultLyrics, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
+import { LyricsTimeline } from './lyrics-timeline';
 
 /**
  * Lyrics タブ (L3): 歌詞の入力・読み込み、再生しながらの半自動タップ同期、行ごとの時刻の確認と手入力。
@@ -46,6 +55,22 @@ let selectedLine = 0;
 let mode: 'tap' | 'check' = 'tap';
 /** 確認モードで行を押したとき、その行の何秒前から再生するか */
 const CHECK_PREROLL = 1.0;
+/** 選んだ行のループ試聴 (タブをまたいで残す) */
+let loopOn = false;
+/** ループ試聴で、行の何秒前から流すか */
+const LOOP_PREROLL = 0.5;
+
+const peaksCache = new WeakMap<AudioBuffer, Peaks>();
+/** 波形の表示用データ (音源ごとに 1 度だけ作る) */
+function peaksFor(buffer: AudioBuffer): Peaks {
+  let p = peaksCache.get(buffer);
+  if (!p) {
+    const channels = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
+    p = computePeaks(channels, buffer.sampleRate, 200);
+    peaksCache.set(buffer, p);
+  }
+  return p;
+}
 
 const SOURCE_LABELS: Record<LyricsSource, string> = {
   text: 'テキスト (JIZURA の記法)',
@@ -212,6 +237,50 @@ export function renderLyricsPanel(): HTMLElement {
   );
   root.appendChild(playCard);
 
+  // ------------------------------------------------------------ タイムライン (L4)
+  const timeline = new LyricsTimeline({
+    onSelect: (i) => selectLine(i, mode === 'check'),
+    onSeek: (t) => {
+      if (store.audio.isLoaded) store.audio.seek(t);
+    },
+    onDragCommit: (kind, i, value) =>
+      applyEdit((c, t) => (kind === 'start' ? moveLineStart(c, t, i, value) : kind === 'end' ? moveLineEnd(c, t, i, value) : moveLine(c, t, i, value))),
+    snap: (t, noSnap) => snapTime(t, snapTargets(), currentLyrics().timing.snapWindowMs / 1000, !noSnap).t,
+  });
+  const loopBtn = button('選択した行をループ試聴', () => toggleLoop(), 'tab-button lyrics-toggle');
+  const offsetInput = el('input', { className: 'lyrics-offset-input' });
+  offsetInput.type = 'number';
+  offsetInput.step = '10';
+  offsetInput.value = '100';
+  const shiftSelBtn = button('選択した行をずらす', () => shiftBy('selected'));
+  const shiftAllBtn = button('全体をずらす', () => shiftBy('all'));
+  const estimateBtn = button('全体のずれを推定', () => doEstimate());
+  const estimateText = el('span', { className: 'param-label' });
+  let pendingOffset: { offset: number; lines: number[] } | null = null;
+  const applyEstimateBtn = button('この量ずらす', () => {
+    if (!pendingOffset) return;
+    const { offset, lines } = pendingOffset;
+    pendingOffset = null;
+    applyEdit((c, t) => shiftLines(c, t, lines, offset));
+    estimateText.textContent = `全体を ${ms(offset)} ずらしました (取り消し: Ctrl+Z)`;
+  });
+  const timelineCard = el('div', { className: 'lyrics-card' }, [
+    el('h3', { className: 'lyrics-h3', textContent: 'タイムライン (細かい調整)' }),
+    timeline.element,
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [
+      loopBtn,
+      el('span', { className: 'param-label', textContent: '← → で選んだ行を 10ms ずつ (Shift で 100ms) 動かす、↑ ↓ で行を選ぶ' }),
+    ]),
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [
+      el('span', { className: 'param-label', textContent: 'ずらす量 (ms、マイナスで早める):' }),
+      offsetInput,
+      shiftSelBtn,
+      shiftAllBtn,
+    ]),
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [estimateBtn, estimateText, applyEstimateBtn]),
+  ]);
+  root.appendChild(timelineCard);
+
   // ------------------------------------------------------------ タップ同期
   const tapCard = el('div', { className: 'lyrics-card' });
   const startFirstBtn = button('1 行目からタップ', () => startTap(0), 'lyrics-big-button');
@@ -313,6 +382,23 @@ export function renderLyricsPanel(): HTMLElement {
     if (selectedLine >= lineCount) selectedLine = Math.max(0, lineCount - 1);
     renderRows();
     refreshControls();
+    const analysis = store.audio.analysis;
+    const buffer = store.audio.audioBuffer;
+    const targets = snapTargets();
+    timeline.setData({
+      duration: store.audio.isLoaded ? store.audio.duration : 0,
+      lines: view.parsed.lines,
+      starts: view.times.starts,
+      ends: view.times.ends,
+      source: view.startSource,
+      peaks: buffer ? peaksFor(buffer) : null,
+      vocal: analysis?.vocalLikeness ?? null,
+      vocalRate: analysis?.frameRate ?? 0,
+      onsets: targets.onsets,
+      beats: targets.beats,
+      selected: selectedLine,
+      loop: loopRegion(),
+    });
     shownLine = -2; // 次のフレームでプレビューを描き直す
   }
 
@@ -336,6 +422,11 @@ export function renderLyricsPanel(): HTMLElement {
         ? '再生中に Space で「次の行」の歌い出しを記録します。止まっているときの Space は再生、Esc で一時停止。'
         : '歌詞が歌と合っているかを見るモードです (記録はしません)。Space で再生/一時停止、一覧の行を押すとその 1 秒前から再生します。';
     tapBackBtn.disabled = !tap?.canBack;
+    const hasTimeline = loaded && hasLines;
+    loopBtn.disabled = !hasTimeline;
+    loopBtn.setAttribute('aria-pressed', String(loopOn));
+    for (const b of [shiftSelBtn, shiftAllBtn, estimateBtn]) b.disabled = !hasTimeline || tap != null;
+    applyEstimateBtn.hidden = pendingOffset == null;
     const manualCount = Object.keys(history.current.lineTimes).length;
     snapBtn.disabled = !loaded || tap != null || manualCount === 0;
     unsnapBtn.disabled = tap != null || !snapIsCurrent();
@@ -399,6 +490,7 @@ export function renderLyricsPanel(): HTMLElement {
       );
       tr.addEventListener('click', () => {
         selectedLine = i;
+        timeline.reveal(view.times.starts[i]!);
         if (store.audio.isLoaded) {
           if (mode === 'check') {
             store.audio.seek(Math.max(0, view.times.starts[i]! - CHECK_PREROLL));
@@ -588,6 +680,85 @@ export function renderLyricsPanel(): HTMLElement {
     if (applyHistory(history.redo())) refresh();
   }
 
+  // ------------------------------------------------------------ タイムライン編集
+  function editContext(): EditContext {
+    return { starts: view.times.starts, ends: view.times.ends, synced: view.startSource.map((src) => src !== 'estimate') };
+  }
+
+  /** core/lyrics/edit.ts の規則で書き換えて、取り消しの履歴に積む */
+  function applyEdit(fn: (c: EditContext, t: TimingSnapshot) => TimingSnapshot): void {
+    if (tap) return;
+    syncHistoryWithStore();
+    const cur = history.current;
+    const next = fn(editContext(), cur);
+    if (next === cur) return;
+    commitTiming(next);
+    refresh();
+  }
+
+  function selectLine(i: number, playFromBefore: boolean): void {
+    if (i < 0 || i >= view.parsed.lines.length) return;
+    selectedLine = i;
+    highlightRows(shownLine);
+    refreshControls();
+    timeline.reveal(view.times.starts[i]!);
+    if (store.audio.isLoaded && playFromBefore) {
+      store.audio.seek(Math.max(0, view.times.starts[i]! - CHECK_PREROLL));
+      store.audio.play();
+    }
+  }
+
+  function loopRegion(): { start: number; end: number } | null {
+    if (!loopOn || selectedLine >= view.parsed.lines.length) return null;
+    return { start: Math.max(0, view.times.starts[selectedLine]! - LOOP_PREROLL), end: view.times.ends[selectedLine]! };
+  }
+
+  function toggleLoop(): void {
+    loopOn = !loopOn;
+    const region = loopRegion();
+    if (region && store.audio.isLoaded) {
+      store.audio.seek(region.start);
+      store.audio.play();
+    }
+    refresh();
+  }
+
+  /** 全体をずらす対象: 時刻の決まっている行。1 行も無ければ全行 */
+  function syncedLineIndices(): number[] {
+    const idx = view.startSource.flatMap((src, i) => (src !== 'estimate' ? [i] : []));
+    return idx.length > 0 ? idx : view.parsed.lines.map((_, i) => i);
+  }
+
+  function shiftBy(which: 'selected' | 'all'): void {
+    const dt = parseFloat(offsetInput.value) / 1000;
+    if (!Number.isFinite(dt) || dt === 0) return;
+    if (which === 'selected') applyEdit((c, t) => moveLine(c, t, selectedLine, dt));
+    else applyEdit((c, t) => shiftLines(c, t, syncedLineIndices(), dt));
+  }
+
+  function doEstimate(): void {
+    pendingOffset = null;
+    const idx = view.startSource.flatMap((src, i) => (src !== 'estimate' ? [i] : []));
+    if (idx.length < 3) {
+      estimateText.textContent = '時刻の決まっている行 (タップ済み・LRC) が 3 行以上必要です';
+      refreshControls();
+      return;
+    }
+    const est = estimateOffset(
+      idx.map((i) => view.times.starts[i]!),
+      snapTargets().onsets,
+    );
+    if (!est) {
+      estimateText.textContent = '歌い出し候補が見つからないため推定できません';
+    } else if (Math.abs(est.offset) < 0.02) {
+      estimateText.textContent = `全体のずれはほぼありません (歌い出し候補と合う行: ${Math.round(est.zeroMatched * 100)}%)`;
+    } else {
+      pendingOffset = { offset: est.offset, lines: idx };
+      estimateText.textContent = `全体を ${ms(est.offset)} ずらすと、歌い出し候補と合う行が ${Math.round(est.zeroMatched * 100)}% → ${Math.round(est.matched * 100)}% になります`;
+    }
+    refreshControls();
+  }
+
   function setMode(next: 'tap' | 'check'): void {
     if (mode === next) return;
     if (tap) stopTap();
@@ -639,6 +810,17 @@ export function renderLyricsPanel(): HTMLElement {
       store.audio.pause();
       return;
     }
+    if (!mod && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && view.parsed.lines.length > 0) {
+      e.preventDefault();
+      const d = (e.shiftKey ? 0.1 : 0.01) * (e.key === 'ArrowLeft' ? -1 : 1);
+      applyEdit((c, t) => moveLine(c, t, selectedLine, d));
+      return;
+    }
+    if (!mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && view.parsed.lines.length > 0) {
+      e.preventDefault();
+      selectLine(Math.min(view.parsed.lines.length - 1, Math.max(0, selectedLine + (e.key === 'ArrowUp' ? -1 : 1))), mode === 'check');
+      return;
+    }
     const key = e.key.toLowerCase();
     if (mod && key === 'z' && !e.shiftKey) {
       e.preventDefault();
@@ -655,6 +837,7 @@ export function renderLyricsPanel(): HTMLElement {
     if (!root.isConnected) {
       document.removeEventListener('keydown', onKey);
       window.clearTimeout(textTimer);
+      timeline.dispose();
       tap = null;
       return;
     }
@@ -666,6 +849,11 @@ export function renderLyricsPanel(): HTMLElement {
       timeLabel.textContent = label;
     }
     const playing = store.audio.isPlaying;
+    // ループ試聴: 選んだ行の終わりまで来たら、行の少し前へ戻す
+    const region = loopRegion();
+    if (region && playing && t >= region.end) store.audio.seek(region.start);
+    timeline.setSelection(selectedLine, region);
+    timeline.draw(t, playing);
     const playText = playing ? '一時停止' : '再生';
     if (playBtn.textContent !== playText) playBtn.textContent = playText;
 

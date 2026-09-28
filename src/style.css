@@ -367,3 +367,18 @@ body {
 .lyrics-big-button:hover:not(:disabled) { background: rgba(124, 155, 255, 0.15); }
 .lyrics-big-button:disabled { opacity: 0.4; cursor: default; }
 .lyrics-card[hidden] { display: none; }
+
+/* タイムライン (L4) */
+.lyrics-timeline-box { display: flex; flex-direction: column; gap: 6px; }
+.lyrics-timeline { width: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; touch-action: none; }
+.lyrics-timeline-canvas { display: block; width: 100%; }
+.lyrics-tool-button { border: 1px solid var(--border); min-width: 34px; }
+.lyrics-toggle[aria-pressed="true"] { color: #0b0c0f; background: var(--accent); border-color: var(--accent); }
+.lyrics-offset-input {
+  width: 6em;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+}
