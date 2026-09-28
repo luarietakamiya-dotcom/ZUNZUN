@@ -21,7 +21,8 @@ import { defaultLyrics, type LyricsSettings, type LyricsSource, type LyricsTimin
  * Lyrics タブ (L3): 歌詞の入力・読み込み、再生しながらの半自動タップ同期、行ごとの時刻の確認と手入力。
  * 歌詞モーション (JIZURA) はまだ無いので、プレビューは「今の行」を文字で大きく出すだけ。
  * 操作は docs/ARCHITECTURE.md「歌詞同期の方針」のとおり:
- * - タップ: Space/Enter で今の行の頭を叩く。Backspace で 1 つ戻る、Esc で中断。Shift を押しながら叩くと吸着しない
+ * - タップ: 再生中に Space/Enter を押すと、その場でタップが始まり「次の行」の頭として記録する (ボタンから始めてもよい)。
+ *   止まっているときの Space は再生、Esc はタップをやめて一時停止。Backspace で 1 つ戻る、Esc で中断。Shift を押しながら叩くと吸着しない
  *   (Alt+Space は Windows でウィンドウのメニューが開くので使わない)
  * - 叩いた時刻は「いまスピーカーから聞こえている位置」(出力の遅れを差し引いた位置) で記録する
  * - 叩いた時刻は ±窓内の歌い出し候補 → ビートへ吸着する (core/lyrics/snap.ts)
@@ -133,7 +134,7 @@ export function renderLyricsPanel(): HTMLElement {
     el('h2', { textContent: 'Lyrics' }),
     el('p', {
       textContent:
-        '歌詞を入力するか LRC/SRT を読み込み、曲を再生しながら各行の歌い出しで Space/Enter を叩いて時刻を合わせます。' +
+        '歌詞を入力するか LRC/SRT を読み込み、曲を再生しながら各行の歌い出しで Space を叩いて時刻を合わせます (再生中の Space = 記録、止まっているときの Space = 再生、Esc = 一時停止)。' +
         '叩いた時刻は、近くの「歌い出し候補」(歌声の帯域が強くなった瞬間) かビートに自動で吸着します。歌詞モーションの見た目は後の段階で追加します。',
     }),
   );
@@ -407,14 +408,36 @@ export function renderLyricsPanel(): HTMLElement {
   });
 
   // ------------------------------------------------------------ タップ
+  /** 再生位置はそのままで、line 行目から叩くタップを始める。 */
+  function beginTapAt(line: number): TapSession {
+    syncHistoryWithStore();
+    const session = new TapSession(view.parsed.lines.length, line);
+    tap = session;
+    lastSnap.textContent = '';
+    refreshControls();
+    tapButton.focus();
+    return session;
+  }
+
+  /**
+   * 再生中にいきなり叩いたときに記録する行: すでに過ぎた同期済みの行のうち最後のものの次 (イントロなら 1 行目)。
+   * プレビューの「次の行」と同じ規則なので、画面に「次: …」と出ている行が記録される。
+   */
+  function nextLineToTap(t: number): number {
+    let last = -1;
+    syncedTimes.starts.forEach((s, i) => {
+      if (s <= t) last = Math.max(last, i);
+    });
+    return Math.min(last + 1, view.parsed.lines.length - 1);
+  }
+
+  /** ボタンから始めるタップ: その行の少し前から再生し直す。 */
   function startTap(from: number): void {
     if (!store.audio.isLoaded || view.parsed.lines.length === 0) return;
-    syncHistoryWithStore();
-    tap = new TapSession(view.parsed.lines.length, from);
-    lastSnap.textContent = '';
+    const session = beginTapAt(from);
     // 再生を始める位置は同期済みの時刻だけから決める (未同期の行の仮の時刻は当てにならない)。
     // 叩く行がまだ未同期なら、その前で最後に同期済みの行の頭から流す (無ければ曲の頭から)
-    const line = tap.line;
+    const line = session.line;
     let startAt = 0;
     if (view.startSource[line] !== 'estimate') {
       startAt = tapStartTime(view.times.starts.map((t, k) => (view.startSource[k] === 'estimate' ? -Infinity : t)), line);
@@ -428,8 +451,6 @@ export function renderLyricsPanel(): HTMLElement {
     }
     store.audio.seek(startAt);
     store.audio.play();
-    refreshControls();
-    tapButton.focus();
   }
 
   function stopTap(): void {
@@ -489,21 +510,37 @@ export function renderLyricsPanel(): HTMLElement {
       return;
     }
     const mod = e.ctrlKey || e.metaKey;
+    if (isEditable(e.target)) return;
+    // Space はどのボタンにフォーカスがあってもタップ/再生に使う (「再生」ボタンを押したあと Space を押すと、
+    // ブラウザの標準動作でそのボタンがもう一度押されて一時停止になっていた)。Enter はボタンの上ではボタンを押す
+    const isTapKey = !mod && (e.key === ' ' || (e.key === 'Enter' && (!(e.target instanceof HTMLButtonElement) || e.target === tapButton)));
+    if (isTapKey) {
+      e.preventDefault();
+      if (e.repeat || !store.audio.isLoaded) return;
+      if (tap) doTap(e.shiftKey);
+      else if (store.audio.isPlaying && view.parsed.lines.length > 0) {
+        // 再生中に叩いたら、その場でタップを始めて「次に叩く行」の頭として記録する
+        beginTapAt(nextLineToTap(store.audio.heardTime));
+        doTap(e.shiftKey);
+      } else store.audio.play();
+      return;
+    }
     if (tap) {
-      if (isEditable(e.target)) return;
-      if ((e.key === ' ' || e.key === 'Enter') && !mod) {
-        e.preventDefault();
-        if (!e.repeat) doTap(e.shiftKey);
-      } else if (e.key === 'Backspace') {
+      if (e.key === 'Backspace') {
         e.preventDefault();
         doBack();
       } else if (e.key === 'Escape') {
         e.preventDefault();
         stopTap();
+        store.audio.pause();
       }
       return;
     }
-    if (isEditable(e.target)) return;
+    if (e.key === 'Escape' && store.audio.isPlaying) {
+      e.preventDefault();
+      store.audio.pause();
+      return;
+    }
     const key = e.key.toLowerCase();
     if (mod && key === 'z' && !e.shiftKey) {
       e.preventDefault();
@@ -511,10 +548,6 @@ export function renderLyricsPanel(): HTMLElement {
     } else if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) {
       e.preventDefault();
       redo();
-    } else if (e.key === ' ' && !mod && store.audio.isLoaded && !(e.target instanceof HTMLButtonElement)) {
-      e.preventDefault();
-      if (store.audio.isPlaying) store.audio.pause();
-      else store.audio.play();
     }
   };
   document.addEventListener('keydown', onKey);
