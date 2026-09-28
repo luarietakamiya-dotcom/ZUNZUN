@@ -2,9 +2,12 @@ import { AudioEngine } from './audio';
 import { sha256Hex } from './hash';
 import {
   defaultCommonParams,
+  defaultLyrics,
   defaultProject,
   type CommonParams,
   type ExportSettings,
+  type LyricsSettings,
+  type LyricsTiming,
   type OverlayLayer,
   type ProjectFile,
 } from './types';
@@ -32,6 +35,7 @@ class Store {
   private _overlays: OverlayLayer[] = [];
   private readonly overlayFiles = new Map<string, File>();
   private _exportSettings: ExportSettings = defaultProject().export;
+  private _lyrics: LyricsSettings | null = null;
   private readonly listeners = new Set<Listener>();
 
   /** Export タブの書き出し設定 (サイズ/fps/画質)。Project JSON の export に保存される。 */
@@ -163,6 +167,24 @@ class Store {
     this.emit();
   }
 
+  /** 歌詞と同期タイミング。歌詞を使わない (まだ入力していない) 間は null。Project JSON の lyrics に保存される。 */
+  get lyrics(): LyricsSettings | null {
+    return this._lyrics;
+  }
+
+  /** 歌詞を丸ごと差し替える (null で歌詞なしに戻す)。Lyrics タブの入力・タップ・タイムライン編集はここを通す。 */
+  setLyrics(next: LyricsSettings | null): void {
+    this._lyrics = next;
+    this.emit();
+  }
+
+  /** 歌詞のタイミングの一部だけを書き換える。歌詞がまだ無ければ既定値から作る。 */
+  updateLyricsTiming(patch: Partial<LyricsTiming>): void {
+    const base = this._lyrics ?? defaultLyrics();
+    this._lyrics = { ...base, timing: { ...base.timing, ...patch } };
+    this.emit();
+  }
+
   /**
    * Project JSON を読み込んだときに、seed/preset/共通パラメータ/オーバーレイ設定をまとめて反映する。
    * 音源本体・オーバーレイ画像本体はプロジェクトに含まれないため、ここでは触らない
@@ -176,6 +198,7 @@ class Store {
     this._overlays = project.overlays;
     this.overlayFiles.clear();
     this._exportSettings = { ...project.export };
+    this._lyrics = project.lyrics;
     this.emit();
   }
 

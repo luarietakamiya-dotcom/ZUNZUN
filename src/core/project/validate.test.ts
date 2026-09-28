@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { defaultCommonParams, defaultProject } from '../types';
-import { ProjectParseError, sanitizeProject } from './validate';
+import { defaultCommonParams, defaultLyrics, defaultProject } from '../types';
+import { MAX_LYRICS_LENGTH, ProjectParseError, sanitizeProject } from './validate';
 
 function validRaw(): unknown {
   const p = defaultProject();
@@ -109,5 +109,49 @@ describe('sanitizeProject', () => {
     const raw = validRaw() as Record<string, unknown>;
     raw.seed = 20260927;
     expect(sanitizeProject(raw).seed).toBe(20260927);
+  });
+
+  it('lyrics: 無い・壊れている場合は null (歌詞を使わないプロジェクト)', () => {
+    const raw = validRaw() as Record<string, unknown>;
+    expect(sanitizeProject(raw).lyrics).toBeNull();
+    raw.lyrics = 'text';
+    expect(sanitizeProject(raw).lyrics).toBeNull();
+  });
+
+  it('lyrics: 行番号でないキー・数値でない時刻・未知のキーは捨て、範囲外は clamp する', () => {
+    const raw = validRaw() as Record<string, unknown>;
+    raw.lyrics = {
+      engine: 'other',
+      source: 'exe',
+      text: 'a\nb',
+      timing: {
+        lineTimes: { '0': 1.5, '01': 2, x: 3, '-1': 4, '1': 'NaN', '2': -5, '99999': 1 },
+        lineEnds: { '0': 1e9 },
+        snap: 'yes',
+        snapWindowMs: 5000,
+        evil: '<script>',
+      },
+      motion: { style: 'noir' },
+      extra: 1,
+    };
+    const lyrics = sanitizeProject(raw).lyrics!;
+    expect(lyrics.engine).toBe('jizura');
+    expect(lyrics.source).toBe('text');
+    expect(lyrics.text).toBe('a\nb');
+    expect(lyrics.timing.lineTimes).toEqual({ '0': 1.5, '1': 2, '2': 0 });
+    expect(lyrics.timing.lineEnds).toEqual({ '0': 86400 });
+    expect(lyrics.timing.snap).toBe(true);
+    expect(lyrics.timing.snapWindowMs).toBe(1000);
+    expect(lyrics.motion).toEqual({});
+    expect(Object.keys(lyrics)).toEqual(['engine', 'source', 'text', 'timing', 'motion']);
+  });
+
+  it('lyrics: 長すぎる歌詞は上限で切る', () => {
+    const raw = validRaw() as Record<string, unknown>;
+    raw.lyrics = { source: 'lrc', text: 'x'.repeat(MAX_LYRICS_LENGTH + 10) };
+    const lyrics = sanitizeProject(raw).lyrics!;
+    expect(lyrics.source).toBe('lrc');
+    expect(lyrics.text).toHaveLength(MAX_LYRICS_LENGTH);
+    expect(lyrics.timing).toEqual(defaultLyrics().timing);
   });
 });

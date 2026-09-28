@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { defaultCommonParams, defaultProject, type OverlayLayer } from '../types';
+import { defaultCommonParams, defaultLyrics, defaultProject, type OverlayLayer } from '../types';
 import { buildProjectFile, type ProjectSourceState } from './serialize';
+import { sanitizeProject } from './validate';
 
 function overlay(overrides: Partial<OverlayLayer> = {}): OverlayLayer {
   return { id: 'ov1', ref: 'logo.png', sha256: 'abc', x: 0.5, y: 0.5, scale: 0.3, rotation: 0, opacity: 1, z: 0, glow: 0, float: 0, beat: 0, ...overrides };
@@ -13,6 +14,7 @@ function state(overrides: Partial<ProjectSourceState> = {}): ProjectSourceState 
     params: defaultCommonParams(),
     audio: { isLoaded: false, fileName: '', sha256: '', duration: 0, sampleRate: 0, bpm: 0 },
     overlays: [],
+    lyrics: null,
     exportSettings: defaultProject().export,
     ...overrides,
   };
@@ -72,5 +74,19 @@ describe('buildProjectFile', () => {
     const project = buildProjectFile(state({ exportSettings }));
     expect(project.export).toEqual(exportSettings);
     expect(project.export).not.toBe(exportSettings);
+  });
+
+  it('歌詞が無ければ null、あれば複製して保存し、保存 → 読み込みで同じ内容に戻る', () => {
+    expect(buildProjectFile(state()).lyrics).toBeNull();
+    const lyrics = {
+      ...defaultLyrics(),
+      source: 'lrc' as const,
+      text: '[00:01.00]a\n[00:05.00]b',
+      timing: { lineTimes: { '0': 1.2 }, lineEnds: { '1': 7 }, snap: false, snapWindowMs: 80 },
+    };
+    const project = buildProjectFile(state({ lyrics }));
+    expect(project.lyrics).toEqual(lyrics);
+    expect(project.lyrics!.timing.lineTimes).not.toBe(lyrics.timing.lineTimes);
+    expect(sanitizeProject(JSON.parse(JSON.stringify(project)))).toEqual(project);
   });
 });

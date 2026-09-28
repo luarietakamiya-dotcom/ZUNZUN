@@ -62,7 +62,7 @@ interface VisualizerPreset {
 | UI | Vanilla TS（小さなstoreとDOMヘルパー） | 初期UIは6パネルと単純なので、フレームワークは不要です |
 | 書き出し | WebCodecs + **Mediabunny**（MPL-2.0） | MP4(H.264/AAC)とWebM(VP9/Opus)を1つのライブラリで扱えます |
 | テスト | Vitest（ロジック）+ Playwright（同梱Chromiumで描画スモーク） | |
-| フォント | OFLフォントをローカル同梱 | JIZURAは実行時にGoogle Fontsへ接続します。ZUNZUNは外部通信をしない方針なので、この部分は変更します |
+| フォント | **Google Fonts から実行時に読み込む（2026-09-28 にユーザー決定で変更）** | 当初は「OFLフォントをローカル同梱」でしたが、日本語フォントは 1 書体で数 MB あり、JIZURA の 23 書体を同梱すると数十 MB になるため変更しました。**外部通信を許すのはフォントの取得だけ**です（JIZURA の実装どおり、歌詞モーションが実際に使う書体だけを fonts.googleapis.com / fonts.gstatic.com から読み込みます）。音源・画像・歌詞などのユーザーデータは送信しません。ユーザーが自分のフォントファイルを読み込む機能（JIZURA の `J.loadFontFile`）も使えます |
 
 **FFmpegとWebCodecsの比較**：WebCodecsはGPUエンコードが使えて高速で、追加ダウンロードもありません。MP4/WebMはこちらを主軸にします。ffmpeg.wasmは約30MBと大きく、処理も遅く、x264を含むビルドはGPLになるため採用しません。AE向けの透過素材はPNG連番を基本にします。ProRes 4444が必要になった場合は、書き出したPNG連番を手元のネイティブFFmpegで変換する手順をドキュメント化して対応します。透過WebM（VP9 alpha）はブラウザのサポート状況を実装時に確認し、使えれば追加します。
 

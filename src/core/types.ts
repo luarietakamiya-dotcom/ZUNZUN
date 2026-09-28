@@ -126,10 +126,48 @@ export interface ProjectFile {
     params: Record<string, unknown>;
   };
   overlays: OverlayLayer[];
+  /** 歌詞と、その同期タイミング・歌詞モーションの設定。歌詞を使わないプロジェクトは null */
+  lyrics: LyricsSettings | null;
   colors: Record<string, string>;
   fonts: Record<string, string>;
   export: ExportSettings;
 }
+
+/** 歌詞の入力形式。'text' = 貼り付けたテキスト (JIZURA の記法: `/` で区切り、`*強調*`、`[間奏]` など) */
+export type LyricsSource = 'text' | 'lrc' | 'srt';
+
+/**
+ * 歌詞の行ごとのタイミング。キーは行番号 (0 始まり、core/lyrics/parse.ts の parseLyrics が返す lines の添字) の文字列。
+ * 形式は JIZURA の `timing.lineTimes` と互換で、LRC/SRT のタグより優先する (docs/ARCHITECTURE.md「歌詞同期の方針」)。
+ */
+export interface LyricsTiming {
+  /** 行の開始 (秒)。手で決めた (タップ・ドラッグ・入力した) ものだけを持つ */
+  lineTimes: Record<string, number>;
+  /** 行の終了 (秒、任意)。無い行は次の行の開始で終わる */
+  lineEnds: Record<string, number>;
+  /** タップ・ドラッグしたときに、歌い出し候補 → ビートへ吸着させるか */
+  snap: boolean;
+  /** 吸着する範囲 (±ミリ秒) */
+  snapWindowMs: number;
+}
+
+export interface LyricsSettings {
+  engine: 'jizura';
+  source: LyricsSource;
+  /** 入力された歌詞そのもの (LRC/SRT のときはタグ付きの原文) */
+  text: string;
+  timing: LyricsTiming;
+  /** 歌詞モーション (JIZURA) の設定。L5 で扱う項目を決めるまでは空 (読み込み時も未知のキーとして捨てる) */
+  motion: Record<string, never>;
+}
+
+export const defaultLyrics = (): LyricsSettings => ({
+  engine: 'jizura',
+  source: 'text',
+  text: '',
+  timing: { lineTimes: {}, lineEnds: {}, snap: true, snapWindowMs: 150 },
+  motion: {},
+});
 
 export interface OverlayLayer {
   id: string;
@@ -168,6 +206,7 @@ export const defaultProject = (): ProjectFile => ({
     params: {},
   },
   overlays: [],
+  lyrics: null,
   colors: {},
   fonts: {},
   export: {

@@ -1,6 +1,6 @@
 # 引き継ぎメモ（Cloud Session → ローカル Claude Code）
 
-最終更新: 2026-09-28（ローカル Claude Code で Step 10 を実装した時点）。
+最終更新: 2026-09-28（MVP 完了後、歌詞機能の L1 を実装した時点）。
 これまでの作業は Claude Code の Cloud Session で行い、`npm install` が必要な確認だけをユーザーがローカル PC（Windows / PowerShell）で実行していた。
 ローカルの Claude Code なら `npm` も `git` も直接使えるので、以後は同じ場所で実装と検証を完結できる。
 
@@ -20,11 +20,29 @@
 | Step 9 | プリセット **Milky Way** | 完了・ユーザー確認済み | `0ee8a0d` |
 | Step 10 | プリセット **Live Stage** | 完了・ユーザー確認済み | `071f22b` |
 
-最後に確認できたテスト結果: 11 ファイル / 93 テストすべて成功（ローカル Windows、three.js r180、mediabunny 1.60.0）。
+最後に確認できたテスト結果: 13 ファイル / 117 テストすべて成功（ローカル Windows、three.js r180、mediabunny 1.60.0）。
 
-## 次にやること
+## 次にやること: 歌詞モーション + 半自動タップ同期（MVP 後・Phase 4 として計画を承認済み）
 
-1. **MVP の機能はそろった。** 次に何をやるかは、下の「未解決の設計課題」と「MVP 後」をユーザーと相談して決める。
+ユーザーの決定（2026-09-28）:
+- **フォントだけは外部通信を許可**（Google Fonts から、歌詞モーションが使う書体だけを読み込む）。`docs/ARCHITECTURE.md` の技術選定表を更新済み。音源・画像・歌詞などは送信しない。
+- **JIZURA は最新のコミット `8da975f` に固定して同梱する**（L5 で GitHub からダウンロードすることも了承済み）。なお Phase 1 で調べた `bae339e` は今の履歴と分岐している（履歴が書き換えられた模様）。VERSION はどちらも 0.9.0。
+- **順番は同期が先**（L1 → L6）。1 段階ごとに build / lint / test・コミットし、ユーザーの確認を待つ。
+
+| 段階 | 内容 | 状態 |
+|---|---|---|
+| L1 | 歌詞データの土台: `core/lyrics/parse.ts`（テキスト/LRC/SRT、JIZURA `J.parseLyrics` の移植）、`timing.ts`（`J.computeTiming` の移植 + `lineEnds`）、Project JSON の `lyrics`（検証つき、version 1 のまま）、store | 実装済み・**ユーザー確認待ち** |
+| L2 | 同期の計算（純粋関数）: 歌い出し候補（歌声らしさの立ち上がり）、吸着（候補 → ビート → そのまま、±150ms、Alt で無効）、タップの状態（叩く/戻る/中断/取り消し/やり直し）、LRC/SRT の全体オフセット推定（相互相関） | 次 |
+| L3 | Lyrics タブ①: 入力・読み込み・行一覧、再生しながら Space/Enter で行頭を叩く（Backspace で戻る、Esc で中断）、吸着の設定、今の行の強調（文字だけのプレビュー） | |
+| L4 | タイムライン編集（canvas）: 波形・歌声らしさ・ビート線・行ブロック、ドラッグ（吸着、Alt で無効）、矢印 10ms / Shift で 100ms、選択行・全体のオフセット、取り消し/やり直し、選択行のループ試聴、LRC のオフセット提案 | |
+| L5 | JIZURA の同梱（`vendor/jizura/`、エディタ UI と書き出しを除いたエンジン、LICENSE・元コミット明記、遅延読み込み）とアダプタ（seed 固定のため `Math.random` を一時的に差し替え、`J.computeTiming` を包んで `lineEnds` を反映）。E2E（同じ seed → 同じ画像）。ビジュアライザーの E2E もここで作る | |
+| L6 | Host の描画順に歌詞の層を追加（プリセット → PostFX → 歌詞 → オーバーレイ）、プレビュー（縮小・簡易描画）と書き出し（全解像度）、モーション設定の最小 UI、見た目の確認と 3 秒の MP4 | |
+
+L1 の要点:
+- **行番号の数え方は JIZURA と完全に同じにする**（`lineTimes` のキーが行番号なので、ずれると別の行に時刻が付く）。移植時に、実物の `J.parseLyrics` / `J.computeTiming` を Node で動かして、同じ入力で同じ結果になることを確認した（一回限りの確認。L5 で同梱したあとは Vitest の比較テストにする）。
+- SRT は JIZURA が扱わないので、LRC に変換してから渡す（`srtToLrc`、字幕内の改行は手動区切り `/`）。字幕の終了時刻は `parseLyricsSource(...).srtEnds` で取れる（`lineEnds` の初期値用）。
+- `lineEnds` は ZUNZUN の拡張。終了は次の行の開始より後ろに伸ばさず、開始 + 0.35 秒より短くしない。
+- Project JSON の `lyrics.motion` は L5 で項目を決めるまで空（読み込み時もすべて捨てる）。
 
 ### Live Stage の要点（Step 10）
 

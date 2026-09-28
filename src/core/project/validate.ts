@@ -1,4 +1,13 @@
-import { defaultCommonParams, defaultProject, type CommonParams, type ExportSettings, type OverlayLayer, type ProjectFile } from '../types';
+import {
+  defaultCommonParams,
+  defaultLyrics,
+  defaultProject,
+  type CommonParams,
+  type ExportSettings,
+  type LyricsSettings,
+  type OverlayLayer,
+  type ProjectFile,
+} from '../types';
 
 /**
  * 外部由来 (ファイル読み込み) の JSON は信頼しない前提で検証する。
@@ -132,6 +141,43 @@ function sanitizeOverlays(raw: unknown): OverlayLayer[] {
   return out;
 }
 
+/** 歌詞テキストの上限 (文字数)。普通の歌詞は数千文字なので、壊れた/悪意あるファイルで固まらない程度に余裕を持たせる */
+export const MAX_LYRICS_LENGTH = 200_000;
+/** 行番号の上限。lineTimes のキーがこれを超えるものは捨てる */
+const MAX_LYRIC_LINES = 10_000;
+/** 時刻の上限 (秒)。24 時間 */
+const MAX_LYRIC_TIME = 86_400;
+const LINE_KEY_PATTERN = /^\d{1,5}$/;
+
+function sanitizeLineTimeMap(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!isPlainObject(raw)) return out;
+  for (const [k, v] of Object.entries(raw)) {
+    if (!LINE_KEY_PATTERN.test(k) || +k >= MAX_LYRIC_LINES || !isFiniteNumber(v)) continue;
+    out[String(+k)] = clamp(v, 0, MAX_LYRIC_TIME);
+  }
+  return out;
+}
+
+function sanitizeLyrics(raw: unknown): LyricsSettings | null {
+  if (!isPlainObject(raw)) return null;
+  const base = defaultLyrics();
+  const timingRaw = isPlainObject(raw.timing) ? raw.timing : {};
+  return {
+    engine: 'jizura',
+    source: raw.source === 'text' || raw.source === 'lrc' || raw.source === 'srt' ? raw.source : base.source,
+    text: typeof raw.text === 'string' ? raw.text.slice(0, MAX_LYRICS_LENGTH) : base.text,
+    timing: {
+      lineTimes: sanitizeLineTimeMap(timingRaw.lineTimes),
+      lineEnds: sanitizeLineTimeMap(timingRaw.lineEnds),
+      snap: typeof timingRaw.snap === 'boolean' ? timingRaw.snap : base.timing.snap,
+      snapWindowMs: isFiniteNumber(timingRaw.snapWindowMs) ? Math.round(clamp(timingRaw.snapWindowMs, 0, 1000)) : base.timing.snapWindowMs,
+    },
+    // 歌詞モーションの設定項目は L5 (JIZURA の同梱) で決める。それまでは未知のキーとしてすべて捨てる
+    motion: {},
+  };
+}
+
 function sanitizeColors(raw: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   if (!isPlainObject(raw)) return out;
@@ -184,6 +230,7 @@ export function sanitizeProject(raw: unknown): ProjectFile {
       params: isPlainObject(visualizerRaw.params) ? { ...visualizerRaw.params } : {},
     },
     overlays: sanitizeOverlays(raw.overlays),
+    lyrics: sanitizeLyrics(raw.lyrics),
     colors: sanitizeColors(raw.colors),
     fonts: sanitizeFonts(raw.fonts),
     export: sanitizeExport(raw.export, base.export),
