@@ -21,7 +21,9 @@ import { defaultLyrics, type LyricsSettings, type LyricsSource, type LyricsTimin
  * Lyrics タブ (L3): 歌詞の入力・読み込み、再生しながらの半自動タップ同期、行ごとの時刻の確認と手入力。
  * 歌詞モーション (JIZURA) はまだ無いので、プレビューは「今の行」を文字で大きく出すだけ。
  * 操作は docs/ARCHITECTURE.md「歌詞同期の方針」のとおり:
- * - タップ: Space/Enter で今の行の頭を叩く。Backspace で 1 つ戻る、Esc で中断。Alt を押しながら叩くと吸着しない
+ * - タップ: Space/Enter で今の行の頭を叩く。Backspace で 1 つ戻る、Esc で中断。Shift を押しながら叩くと吸着しない
+ *   (Alt+Space は Windows でウィンドウのメニューが開くので使わない)
+ * - 叩いた時刻は「いまスピーカーから聞こえている位置」(出力の遅れを差し引いた位置) で記録する
  * - 叩いた時刻は ±窓内の歌い出し候補 → ビートへ吸着する (core/lyrics/snap.ts)
  * - Ctrl/Cmd+Z で取り消し、Ctrl/Cmd+Y (または Shift+Z) でやり直し
  *
@@ -189,7 +191,7 @@ export function renderLyricsPanel(): HTMLElement {
   tapButton.type = 'button';
   // キーボードで押したときの click (detail = 0) は keydown 側で処理済みなので、マウスで押したときだけ叩く
   tapButton.addEventListener('click', (e) => {
-    if (e.detail > 0) doTap(e.altKey);
+    if (e.detail > 0) doTap(e.shiftKey);
   });
   const tapBackBtn = button('1 つ戻る (Backspace)', () => doBack());
   const lastSnap = el('div', { className: 'param-label' });
@@ -212,7 +214,7 @@ export function renderLyricsPanel(): HTMLElement {
     el('div', { className: 'row-gap lyrics-row-wrap' }, [startFirstBtn, startSelBtn]),
     tapActive,
     el('div', { className: 'row-gap lyrics-row-wrap' }, [
-      el('label', { className: 'row-gap param-label' }, [snapCheck, '歌い出し候補・ビートに吸着する (Alt を押しながら叩くと吸着しない)']),
+      el('label', { className: 'row-gap param-label' }, [snapCheck, '歌い出し候補・ビートに吸着する (Shift を押しながら叩くと吸着しない)']),
     ]),
     el('label', { className: 'param-row lyrics-window' }, [windowLabel, windowRange]),
   );
@@ -409,12 +411,15 @@ export function renderLyricsPanel(): HTMLElement {
   function doTap(alt: boolean): void {
     if (!tap || !tap.isActive) return;
     const lyrics = currentLyrics();
-    const raw = store.audio.currentTime;
+    const raw = store.audio.heardTime;
     const snapped = snapTime(raw, snapTargets(), lyrics.timing.snapWindowMs / 1000, lyrics.timing.snap && !alt);
     const cur = history.current;
     const lineTimes = tap.tap(cur.lineTimes, snapped.t);
     commitTiming({ lineTimes, lineEnds: cur.lineEnds });
-    lastSnap.textContent = `${formatTime(snapped.t)} — ${describeSnap(snapped, raw)}`;
+    const latency = Math.round(store.audio.outputLatency * 1000);
+    lastSnap.textContent =
+      `${tap.line} 行目: 叩いた位置 ${formatTime(raw)} → ${formatTime(snapped.t)} — ${describeSnap(snapped, raw)}` +
+      (latency > 0 ? ` (出力の遅れ 約${latency}ms を差し引き済み)` : '');
     refresh();
     if (!tap.isActive) {
       tap = null;
@@ -458,7 +463,7 @@ export function renderLyricsPanel(): HTMLElement {
       if (isEditable(e.target)) return;
       if ((e.key === ' ' || e.key === 'Enter') && !mod) {
         e.preventDefault();
-        if (!e.repeat) doTap(e.altKey);
+        if (!e.repeat) doTap(e.shiftKey);
       } else if (e.key === 'Backspace') {
         e.preventDefault();
         doBack();
@@ -492,7 +497,8 @@ export function renderLyricsPanel(): HTMLElement {
       tap = null;
       return;
     }
-    const t = store.audio.isLoaded ? store.audio.currentTime : 0;
+    // 表示も「聞こえている位置」に合わせる (出力の遅れのぶん先に進んで見えないように)
+    const t = store.audio.isLoaded ? store.audio.heardTime : 0;
     const label = store.audio.isLoaded ? `${formatTime(t)} / ${formatTime(store.audio.duration)}` : formatTime(t);
     if (label !== shownTime) {
       shownTime = label;

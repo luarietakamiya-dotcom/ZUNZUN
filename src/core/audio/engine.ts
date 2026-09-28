@@ -91,6 +91,19 @@ export class AudioEngine {
     return this._player ? this._player.currentTime() : this._lastT;
   }
 
+  /**
+   * いまスピーカーから聞こえている位置 (秒)。出力の遅れのぶん currentTime より少し前になる。
+   * 歌詞のタップ同期と、Lyrics タブの「今の行」の表示に使う (AudioPlayer.heardTime 参照)。
+   */
+  get heardTime(): number {
+    return this._player ? this._player.heardTime() : this._lastT;
+  }
+
+  /** 出力の遅れの見積もり (秒)。再生を一度も始めていなければ 0 */
+  get outputLatency(): number {
+    return this._player?.outputLatency() ?? 0;
+  }
+
   pause(): void {
     this._player?.pause();
   }

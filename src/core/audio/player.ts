@@ -31,6 +31,35 @@ export class AudioPlayer {
     return Math.min(this.buffer.duration, this.startedAtMedia + elapsed);
   }
 
+  /**
+   * いまスピーカーから「聞こえている」位置 (秒)。currentTime() は AudioContext が処理中の位置で、実際に耳に届くのは
+   * 出力の遅れ (普通のスピーカーで数十 ms、Bluetooth では 150〜250ms ほど) のぶん後になる。
+   * 歌詞のタップのように「聞こえた瞬間」に合わせたい操作ではこちらを使う。
+   * AudioContext.getOutputTimestamp() (出力装置が今鳴らしているサンプルの時刻) が使えればそれで、
+   * 使えなければ outputLatency / baseLatency を差し引いて求める。
+   */
+  heardTime(): number {
+    if (!this.playing || !this.ctx) return this.startedAtMedia;
+    const ctx = this.ctx;
+    let heardCtxTime = ctx.currentTime - this.outputLatency();
+    if (typeof ctx.getOutputTimestamp === 'function') {
+      const ts = ctx.getOutputTimestamp();
+      if (ts.contextTime != null && ts.performanceTime != null && ts.contextTime > 0) {
+        heardCtxTime = ts.contextTime + (performance.now() - ts.performanceTime) / 1000;
+      }
+    }
+    const pos = this.startedAtMedia + (heardCtxTime - this.startedAtCtx);
+    return Math.max(0, Math.min(this.buffer.duration, Math.min(pos, this.currentTime())));
+  }
+
+  /** 出力の遅れの見積もり (秒)。表示・フォールバック用 */
+  outputLatency(): number {
+    if (!this.ctx) return 0;
+    const out = Number.isFinite(this.ctx.outputLatency) ? this.ctx.outputLatency : 0;
+    const base = Number.isFinite(this.ctx.baseLatency) ? this.ctx.baseLatency : 0;
+    return Math.max(0, out + base);
+  }
+
   play(fromSeconds?: number): void {
     const at = fromSeconds ?? this.currentTime();
     this.stopSource();
