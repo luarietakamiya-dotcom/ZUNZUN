@@ -76,19 +76,29 @@ export function computeLineTimes(
       if (beat && !(L.interlude && L.secs != null && L.secs > 0)) d = Math.max(2, Math.round(d / beat)) * beat;
       e = s + d;
     }
-    // ZUNZUN の拡張: 手で決めた終了。次の行より後ろには伸ばさない (JIZURA のカット割りは行が重ならない前提)。
-    // 最後の行は次の行が無いので、見積もりより長くても手で決めた終了をそのまま使う
-    const manEnd = lookup(timing.lineEnds, i);
-    if (manEnd != null) {
-      const wanted = Math.max(s + MIN_LINE_DURATION, manEnd);
-      e = i < starts.length - 1 ? Math.min(e, wanted) : wanted;
-    }
     return e;
   });
+  applyManualEnds(starts, ends, timing.lineEnds);
 
   let duration = (ends.length ? ends[ends.length - 1]! : 3) + (opts.tail ?? 0.9);
   if (opts.audioDuration) duration = Math.max(opts.audioDuration, ends.length ? ends[ends.length - 1]! + 0.2 : 1);
   return { starts, ends, duration };
+}
+
+/**
+ * ZUNZUN の拡張: 手で決めた行の終了 (lineEnds) を ends に反映する (ends を書き換える)。
+ * 次の行より後ろには伸ばさない (JIZURA のカット割りは行が重ならない前提)。最後の行は次の行が無いので、
+ * 見積もりより長くても手で決めた終了をそのまま使う。開始 + MIN_LINE_DURATION より短くはしない。
+ * computeLineTimes と、JIZURA の J.computeTiming を包むアダプタ (jizura-adapter.ts) の両方がこれを使うので、
+ * Lyrics タブのタイムラインと歌詞モーションで行の終わりが食い違わない。
+ */
+export function applyManualEnds(starts: readonly number[], ends: number[], lineEnds: Record<string, number> | undefined): void {
+  for (let i = 0; i < ends.length; i++) {
+    const manEnd = lookup(lineEnds, i);
+    if (manEnd == null) continue;
+    const wanted = Math.max(starts[i]! + MIN_LINE_DURATION, manEnd);
+    ends[i] = i < ends.length - 1 ? Math.min(ends[i]!, wanted) : wanted;
+  }
 }
 
 /**

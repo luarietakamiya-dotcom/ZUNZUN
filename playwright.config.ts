@@ -14,5 +14,14 @@ export default defineConfig({
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // GPU の無い環境 (ヘッドレス) でも WebGL で描けるように SwiftShader を使う (tests/e2e/visual.spec.ts)
+        launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] },
+      },
+    },
+  ],
 });

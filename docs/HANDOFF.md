@@ -1,6 +1,6 @@
 # 引き継ぎメモ（Cloud Session → ローカル Claude Code）
 
-最終更新: 2026-09-28（MVP 完了後、歌詞機能の L4 を実装した時点）。
+最終更新: 2026-09-28（MVP 完了後、歌詞機能の L5 を実装した時点）。
 これまでの作業は Claude Code の Cloud Session で行い、`npm install` が必要な確認だけをユーザーがローカル PC（Windows / PowerShell）で実行していた。
 ローカルの Claude Code なら `npm` も `git` も直接使えるので、以後は同じ場所で実装と検証を完結できる。
 
@@ -20,7 +20,7 @@
 | Step 9 | プリセット **Milky Way** | 完了・ユーザー確認済み | `0ee8a0d` |
 | Step 10 | プリセット **Live Stage** | 完了・ユーザー確認済み | `071f22b` |
 
-最後に確認できたテスト結果: 24 ファイル / 178 テストすべて成功（ローカル Windows、three.js r180、mediabunny 1.60.0）。
+最後に確認できたテスト結果: 26 ファイル / 185 テスト + E2E 5 件すべて成功（ローカル Windows、three.js r180、mediabunny 1.60.0）。
 
 ## 次にやること: 歌詞モーション + 半自動タップ同期（MVP 後・Phase 4 として計画を承認済み）
 
@@ -34,9 +34,9 @@
 | L1 | 歌詞データの土台: `core/lyrics/parse.ts`（テキスト/LRC/SRT、JIZURA `J.parseLyrics` の移植）、`timing.ts`（`J.computeTiming` の移植 + `lineEnds`）、Project JSON の `lyrics`（検証つき、version 1 のまま）、store | 完了（`4983784`） |
 | L2 | 同期の計算（純粋関数）: 歌い出し候補（歌声らしさの立ち上がり）、吸着（候補 → ビート → そのまま、±150ms、Alt で無効）、タップの状態（叩く/戻る/中断/取り消し/やり直し）、LRC/SRT の全体オフセット推定（相互相関） | 完了（`b9f9f70`） |
 | L3 | Lyrics タブ①: 入力・読み込み・行一覧、再生しながら Space/Enter で行頭を叩く（Backspace で戻る、Esc で中断）、吸着の設定、今の行の強調（文字だけのプレビュー） | 完了（ユーザー確認済み。`981dc83`〜`fb84935`） |
-| L4 | タイムライン編集（canvas）: 波形・歌声らしさ・ビート線・行ブロック、ドラッグ（吸着、Alt で無効）、矢印 10ms / Shift で 100ms、選択行・全体のオフセット、取り消し/やり直し、選択行のループ試聴、LRC のオフセット提案 | 実装済み・**ユーザー確認待ち** |
-| L5（次） | JIZURA の同梱（`vendor/jizura/`、エディタ UI と書き出しを除いたエンジン、LICENSE・元コミット明記、遅延読み込み）とアダプタ（seed 固定のため `Math.random` を一時的に差し替え、`J.computeTiming` を包んで `lineEnds` を反映）。E2E（同じ seed → 同じ画像）。ビジュアライザーの E2E もここで作る | |
-| L6 | Host の描画順に歌詞の層を追加（プリセット → PostFX → 歌詞 → オーバーレイ）、プレビュー（縮小・簡易描画）と書き出し（全解像度）、モーション設定の最小 UI、見た目の確認と 3 秒の MP4 | |
+| L4 | タイムライン編集（canvas）: 波形・歌声らしさ・ビート線・行ブロック、ドラッグ（吸着、Alt で無効）、矢印 10ms / Shift で 100ms、選択行・全体のオフセット、取り消し/やり直し、選択行のループ試聴、LRC のオフセット提案 | 完了（ユーザー確認済み。`3583c1f`） |
+| L5 | JIZURA の同梱（`vendor/jizura/`、エディタ UI と書き出しを除いたエンジン、LICENSE・元コミット明記、遅延読み込み）とアダプタ（seed 固定のため `Math.random` を一時的に差し替え、`J.computeTiming` を包んで `lineEnds` を反映）。E2E（同じ seed → 同じ画像）。ビジュアライザーの E2E もここで作る | 実装済み・**ユーザー確認待ち**（画面にはまだ出ない。L6 でつなぐ） |
+| L6（次） | Host の描画順に歌詞の層を追加（プリセット → PostFX → 歌詞 → オーバーレイ）、プレビュー（縮小・簡易描画）と書き出し（全解像度）、モーション設定の最小 UI、見た目の確認と 3 秒の MP4 | |
 
 L1 の要点:
 - **行番号の数え方は JIZURA と完全に同じにする**（`lineTimes` のキーが行番号なので、ずれると別の行に時刻が付く）。移植時に、実物の `J.parseLyrics` / `J.computeTiming` を Node で動かして、同じ入力で同じ結果になることを確認した（一回限りの確認。L5 で同梱したあとは Vitest の比較テストにする）。
@@ -65,6 +65,16 @@ L3 の要点（`src/ui/panels/lyrics.ts` ほか）:
 - **`AudioEngine.play()` を直した**: 以前は `_lastT`（Visualizer タブの描画でしか更新されない）から再生していたので、他のタブで一時停止 → 再生すると古い位置に戻っていた。今は AudioPlayer が覚えている位置から再生する。`currentTime` ゲッターも追加。
 - 確認のしかた: 開発サーバーを開き、ページ内の JS で合成音源（120 BPM のキック + 決めた時刻から鳴る 800Hz の「声」）を作って `store.audio.load()` に渡し、「1 行目からタップ」を実際にクリックしてから、JS でタイマーを使って決めた時刻に Space の keydown を送った。**アプリ内ブラウザのペインが隠れていると requestAnimationFrame が動かない**ので、テスト用の打鍵はタイマーで行う（アプリ側の表示の更新も止まるが、タップ処理はキーイベントで動くので影響しない）。
 - 確認できたこと: 候補・ビートへの吸着・吸着なし・Alt、途中の行からのタップ、Backspace、Esc、取り消し/やり直し、直接入力、×、SRT の読み込み、保存 → 読み込みの往復。**確認できていないこと: 実際の曲での候補の出方と使い心地**（ユーザー確認待ち）。
+
+L5 の要点:
+- `vendor/jizura/jizura-engine.js`: JIZURA の `src/*.js` をファイル名順に連結（`build.py` と同じ）。`11_export.js`（書き出し、mp4-muxer に依存）と `12_ui.js`（エディタ画面）は除いた（どちらもエンジン側から参照されないことを確認）。**本文は無改変**（`@VERSION@` → `0.9.0` のみ）。生成は `node scripts/vendor-jizura.mjs <JIZURA のフォルダ> <SHA>`（ネットワークに接続しない）。出典・ライセンスは `vendor/jizura/README.md`・`LICENSE`、`THIRD_PARTY_NOTICES.md`。
+- `src/core/lyrics/jizura-adapter.ts`:
+  - `loadJizura()`: 動的 import（約 2MB、歌詞モーションを使うときだけ読み込む）。読み込み時に `J.computeTiming` を包み、`applyManualEnds`（`timing.ts` と共通）で lineEnds を反映する。
+  - `buildJizuraProject` / `buildJizuraAudio`（音量は JIZURA と同じく 95 パーセンタイルで正規化）/ `nearestAspect`（書き出しサイズに最も近い JIZURA の比率）/ `lyricMotionSeed`（`deriveSeed(project.seed, 'lyrics')`）。
+  - `LyricMotion.create(lyrics, audio, { projectSeed, width, height, fps })` → `render(ctx, t, { fast })`（透過・canvas の幅に合わせて拡大縮小）。Renderer は seed 付きの `Math.random` で作り、紙の質感もその場で作ってキャッシュさせる。
+  - **書体の準備を待ってから返す**: `J.ensureFonts` のあとでも、描き始めてから読み込まれる書体があった（Google Fonts は文字の範囲ごとに分けて配信している）。E2E で 1 回目だけ `Noto Serif JP 700` が読み込み中で別の書体になり、2 回目以降と画像が違った。捨てる用の Renderer で全カットを小さく下描きして読み込みを始めさせ、読み込み中の書体が無くなるまで待ち（上限 10 秒）、`J.glyphs` / `J.metrics` のキャッシュを消してから、本番の Renderer を作る。
+- テスト: `jizura-compat.test.ts` は**同梱した本物の JIZURA を jsdom で読み込み**、`parseLyrics`（行番号の数え方）と `computeTiming`（lineEnds の反映を含む）が移植版と完全に一致することを確かめる（jsdom に canvas が無いので、このテストの中だけ `getContext` を空にしている）。`tests/e2e/visual.spec.ts` は Visualizer 3 プリセット（真っ黒でない・同じ seed なら同じ画像・違えば違う画像）と歌詞モーション（透過・同じ seed なら同じ画像・手で決めた開始と終了がカット割りに使われる）。Playwright は SwiftShader で WebGL を動かす（`playwright.config.ts`）。`npm run test:e2e` は 5 件で約 25 秒。
+- ESLint: `scripts/**/*.mjs` に Node のグローバル（process / console / URL）を足した。
 
 L4 の要点:
 - `src/ui/panels/lyrics-timeline.ts`: canvas 1 枚のタイムライン（目盛り・波形・歌声らしさの線・歌い出し候補の目盛り・ビート線・行のブロック・再生位置・ループ区間）。Lyrics タブの再生欄のすぐ下。ドラッグ中は見た目だけ動かし、離したときに `onDragCommit` でパネルへ渡す（パネルが `core/lyrics/edit.ts` の規則で書き換えて履歴に積む）。
