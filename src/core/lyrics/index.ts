@@ -14,3 +14,5 @@ export type { OffsetEstimate, OffsetOptions } from './offset';
 export { formatTime, parseTimeInput } from './time-format';
 export { buildLyricsView, syncTargetsFor } from './view';
 export type { LineTimeSource, LyricsView, SyncTargets } from './view';
+export { snapAllLines } from './snap-all';
+export type { LineSnap, SnapAllOptions, SnapAllResult } from './snap-all';

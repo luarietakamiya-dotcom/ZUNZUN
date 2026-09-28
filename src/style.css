@@ -244,8 +244,32 @@ body {
   text-align: center;
 }
 
-.lyrics-now-line { font-size: 26px; font-weight: 700; min-height: 1.4em; }
-.lyrics-next-line { font-size: 13px; color: var(--fg-dim); margin-top: 8px; min-height: 1.4em; }
+/* 前の行 (小さく薄く) → 今の行 → 次の行 (いちばん大きく = これから叩く行) */
+.lyrics-prev-line { font-size: 13px; color: var(--fg-dim); opacity: 0.7; min-height: 1.4em; }
+.lyrics-now-line { font-size: 17px; color: var(--fg-dim); margin-top: 6px; min-height: 1.4em; }
+.lyrics-next-line { font-size: 30px; font-weight: 700; color: var(--fg); margin-top: 10px; min-height: 1.4em; }
+.lyrics-next-line[data-label]:not([data-label=""])::before {
+  content: attr(data-label);
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+.lyrics-help { margin: 0; font-size: 12px; }
+.lyrics-snap-button {
+  background: var(--accent);
+  color: #0b0c0f;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lyrics-snap-button:disabled { opacity: 0.4; cursor: default; }
+.lyrics-snap-report { color: var(--fg); }
+.lyrics-src-snapped { color: #7fe0a0; border-color: #7fe0a0; }
 
 .lyrics-tap-active { display: flex; flex-direction: column; gap: 8px; }
 .lyrics-tap-active[hidden] { display: none; }

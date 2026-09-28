@@ -5,13 +5,13 @@ import {
   lineAt,
   parseLyricsSource,
   parseTimeInput,
-  snapTime,
+  snapAllLines,
   syncTargetsFor,
   tapStartTime,
   TapSession,
   type LyricsView,
-  type SnapResult,
-  type SnapTargets,
+  type SnapAllResult,
+  type SyncTargets,
 } from '../../core/lyrics';
 import { MAX_LYRICS_LENGTH } from '../../core/project/validate';
 import { store } from '../../core/store';
@@ -22,10 +22,11 @@ import { defaultLyrics, type LyricsSettings, type LyricsSource, type LyricsTimin
  * 歌詞モーション (JIZURA) はまだ無いので、プレビューは「今の行」を文字で大きく出すだけ。
  * 操作は docs/ARCHITECTURE.md「歌詞同期の方針」のとおり:
  * - タップ: 再生中に Space/Enter を押すと、その場でタップが始まり「次の行」の頭として記録する (ボタンから始めてもよい)。
- *   止まっているときの Space は再生、Esc はタップをやめて一時停止。Backspace で 1 つ戻る、Esc で中断。Shift を押しながら叩くと吸着しない
- *   (Alt+Space は Windows でウィンドウのメニューが開くので使わない)
- * - 叩いた時刻は「いまスピーカーから聞こえている位置」(出力の遅れを差し引いた位置) で記録する
- * - 叩いた時刻は ±窓内の歌い出し候補 → ビートへ吸着する (core/lyrics/snap.ts)
+ *   止まっているときの Space は再生、Esc はタップをやめて一時停止。Backspace で 1 つ戻る
+ * - 叩いた時刻は「いまスピーカーから聞こえている位置」(出力の遅れを差し引いた位置) で、吸着させずにそのまま記録する
+ * - 叩き終えたら「吸着」ボタンで、手で決めた行をまとめて歌い出し候補 → ビートへ吸着させる (core/lyrics/snap-all.ts)。
+ *   叩くタイミングのくせを見積もって補正するので、1 行ずつ吸着するより精密。「吸着前に戻す」で 1 回で戻せる
+ *   (最初は叩くたびに吸着していたが、ユーザーの希望で「最後にまとめて」に変えた)
  * - Ctrl/Cmd+Z で取り消し、Ctrl/Cmd+Y (または Shift+Z) でやり直し
  *
  * タブを切り替えるとパネルは丸ごと作り直される (unmount フックなし) ので、取り消しの履歴と選択中の行は
@@ -118,12 +119,18 @@ function button(label: string, onClick: () => void, className = 'tab-button'): H
   return b;
 }
 
-function describeSnap(s: SnapResult, raw: number): string {
-  const d = s.t - raw;
-  const delta = `${d >= 0 ? '+' : '−'}${Math.abs(d * 1000).toFixed(0)}ms`;
-  if (s.kind === 'candidate') return `歌い出し候補に吸着 (${delta})`;
-  if (s.kind === 'beat') return `ビートに吸着 (${delta})`;
-  return '吸着なし (叩いた時刻のまま)';
+/** 直前の「吸着」の結果。「吸着前に戻す」と、一覧の由来の表示に使う (タブをまたいで残す) */
+let lastSnapAll: { result: SnapAllResult; after: TimingSnapshot } | null = null;
+
+const ms = (sec: number): string => `${sec >= 0 ? '+' : '−'}${Math.abs(sec * 1000).toFixed(0)}ms`;
+
+function describeSnapAll(r: SnapAllResult): string {
+  const count = (k: string): number => r.lines.filter((l) => l.kind === k).length;
+  const habit =
+    Math.abs(r.bias) < 0.005
+      ? '叩くタイミングのくせ: ほぼ無し'
+      : `叩くタイミングのくせ: 平均 ${Math.abs(r.bias * 1000).toFixed(0)}ms ${r.bias < 0 ? '遅め' : '早め'} → 補正`;
+  return `${r.lines.length} 行を吸着しました (歌い出し候補 ${count('candidate')} / ビート ${count('beat')} / 近くに無くそのまま ${count('none')})。${habit}`;
 }
 
 export function renderLyricsPanel(): HTMLElement {
@@ -135,7 +142,7 @@ export function renderLyricsPanel(): HTMLElement {
     el('p', {
       textContent:
         '歌詞を入力するか LRC/SRT を読み込み、曲を再生しながら各行の歌い出しで Space を叩いて時刻を合わせます (再生中の Space = 記録、止まっているときの Space = 再生、Esc = 一時停止)。' +
-        '叩いた時刻は、近くの「歌い出し候補」(歌声の帯域が強くなった瞬間) かビートに自動で吸着します。歌詞モーションの見た目は後の段階で追加します。',
+        '叩き終えたら「吸着」ボタンで、近くの「歌い出し候補」(歌声の帯域が強くなった瞬間) かビートにまとめて寄せます。歌詞モーションの見た目は後の段階で追加します。',
     }),
   );
 
@@ -178,12 +185,14 @@ export function renderLyricsPanel(): HTMLElement {
   const backBtn = button('−3秒', () => store.audio.seek(Math.max(0, store.audio.currentTime - 3)));
   const fwdBtn = button('+3秒', () => store.audio.seek(Math.min(store.audio.duration, store.audio.currentTime + 3)));
   const timeLabel = el('span', { className: 'lyrics-time', textContent: '0:00.00' });
+  // 前の行 (小さく)・今の行・次の行 (いちばん大きく = これから叩く行)
+  const prevLine = el('div', { className: 'lyrics-prev-line' });
   const nowLine = el('div', { className: 'lyrics-now-line' });
   const nextLine = el('div', { className: 'lyrics-next-line' });
   playCard.append(
     audioStatus,
     el('div', { className: 'row-gap lyrics-row-wrap' }, [playBtn, backBtn, fwdBtn, timeLabel]),
-    el('div', { className: 'lyrics-now' }, [nowLine, nextLine]),
+    el('div', { className: 'lyrics-now' }, [prevLine, nowLine, nextLine]),
   );
   root.appendChild(playCard);
 
@@ -197,13 +206,14 @@ export function renderLyricsPanel(): HTMLElement {
   tapButton.type = 'button';
   // キーボードで押したときの click (detail = 0) は keydown 側で処理済みなので、マウスで押したときだけ叩く
   tapButton.addEventListener('click', (e) => {
-    if (e.detail > 0) doTap(e.shiftKey);
+    if (e.detail > 0) doTap();
   });
   const tapBackBtn = button('1 つ戻る (Backspace)', () => doBack());
   const lastSnap = el('div', { className: 'param-label' });
-  const snapCheck = el('input');
-  snapCheck.type = 'checkbox';
-  snapCheck.addEventListener('change', () => store.updateLyricsTiming({ snap: snapCheck.checked }));
+  const snapBtn = button('吸着', () => doSnapAll(), 'lyrics-snap-button');
+  snapBtn.title = '手で決めた (タップ・入力した) 行を、まとめて歌い出し候補かビートに寄せます';
+  const unsnapBtn = button('吸着前に戻す', () => undoSnapAll());
+  const snapReport = el('div', { className: 'param-label lyrics-snap-report' });
   const windowRange = el('input');
   windowRange.type = 'range';
   windowRange.min = '0';
@@ -212,16 +222,22 @@ export function renderLyricsPanel(): HTMLElement {
   const windowLabel = el('span', { className: 'param-label' });
   windowRange.addEventListener('input', () => {
     store.updateLyricsTiming({ snapWindowMs: parseInt(windowRange.value, 10) });
-    windowLabel.textContent = `吸着する範囲: ±${windowRange.value}ms`;
+    windowLabel.textContent = `吸着で探す範囲: ±${windowRange.value}ms`;
   });
   const tapActive = el('div', { className: 'lyrics-tap-active' }, [tapInfo, el('div', { className: 'row-gap lyrics-row-wrap' }, [tapButton, tapBackBtn, stopBtn]), lastSnap]);
   tapCard.append(
     el('h3', { className: 'lyrics-h3', textContent: 'タップ同期' }),
     el('div', { className: 'row-gap lyrics-row-wrap' }, [startFirstBtn, startSelBtn]),
     tapActive,
-    el('div', { className: 'row-gap lyrics-row-wrap' }, [
-      el('label', { className: 'row-gap param-label' }, [snapCheck, '歌い出し候補・ビートに吸着する (Shift を押しながら叩くと吸着しない)']),
-    ]),
+    el('h3', { className: 'lyrics-h3', textContent: '吸着 (叩き終えたら)' }),
+    el('p', {
+      className: 'lyrics-help',
+      textContent:
+        '叩いた時刻はそのまま記録されます。叩き終えたら「吸着」で、手で決めた行をまとめて近くの歌い出し候補 (無ければビート) に寄せます。' +
+        '叩くタイミングのくせ (全体に遅め/早め) も見積もって補正します。うまくいかなければ「吸着前に戻す」で戻せます。',
+    }),
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [snapBtn, unsnapBtn]),
+    snapReport,
     el('label', { className: 'param-row lyrics-window' }, [windowLabel, windowRange]),
   );
   root.appendChild(tapCard);
@@ -260,7 +276,10 @@ export function renderLyricsPanel(): HTMLElement {
   let shownTime = '';
   let rows: HTMLTableRowElement[] = [];
 
-  const snapTargets = (): SnapTargets => (store.audio.analysis ? syncTargetsFor(store.audio.analysis) : { candidates: [], beats: [] });
+  const snapTargets = (): SyncTargets =>
+    store.audio.analysis ? syncTargetsFor(store.audio.analysis) : { onsets: [], candidates: [], beats: [] };
+  /** 直前の吸着の結果が、今の状態のまま (その後に手を加えていない) か */
+  const snapIsCurrent = (): boolean => lastSnapAll != null && history.current === lastSnapAll.after;
 
   function refresh(): void {
     syncHistoryWithStore();
@@ -272,9 +291,8 @@ export function renderLyricsPanel(): HTMLElement {
     };
     if (sourceSelect.value !== lyrics.source) sourceSelect.value = lyrics.source;
     if (document.activeElement !== textarea && textarea.value !== lyrics.text) textarea.value = lyrics.text;
-    snapCheck.checked = lyrics.timing.snap;
     windowRange.value = String(lyrics.timing.snapWindowMs);
-    windowLabel.textContent = `吸着する範囲: ±${lyrics.timing.snapWindowMs}ms`;
+    windowLabel.textContent = `吸着で探す範囲: ±${lyrics.timing.snapWindowMs}ms`;
     const lineCount = view.parsed.lines.length;
     if (selectedLine >= lineCount) selectedLine = Math.max(0, lineCount - 1);
     renderRows();
@@ -294,6 +312,9 @@ export function renderLyricsPanel(): HTMLElement {
     startSelBtn.textContent = `選択した行 (${selectedLine + 1} 行目) からタップ`;
     tapActive.hidden = tap == null;
     tapBackBtn.disabled = !tap?.canBack;
+    const manualCount = Object.keys(history.current.lineTimes).length;
+    snapBtn.disabled = !loaded || tap != null || manualCount === 0;
+    unsnapBtn.disabled = tap != null || !snapIsCurrent();
     undoBtn.disabled = !history.canUndo || tap != null;
     redoBtn.disabled = !history.canRedo || tap != null;
     emptyNote.hidden = hasLines;
@@ -347,7 +368,7 @@ export function renderLyricsPanel(): HTMLElement {
       tr.append(
         el('td', { className: 'lyrics-num', textContent: String(i + 1) }),
         el('td', {}, [startInput]),
-        el('td', {}, [el('span', { className: `lyrics-src lyrics-src-${src}`, textContent: startSourceLabel(src, currentLyrics().source) })]),
+        el('td', {}, [sourceBadge(i, src)]),
         el('td', { className: 'lyrics-end', textContent: unsynced && !view.endManual[i] ? '—' : formatTime(view.times.ends[i]!) + (view.endManual[i] ? ' (手動)' : '') }),
         el('td', { className: 'lyrics-text', textContent: line.interlude ? `〔間奏${line.secs ? ` ${line.secs}秒` : ''}〕` : line.text }),
         el('td', {}, [clearBtn]),
@@ -362,6 +383,20 @@ export function renderLyricsPanel(): HTMLElement {
       return tr;
     });
     highlightRows(shownLine);
+  }
+
+  /** 由来のバッジ。直前の「吸着」で動いた行 (その後に手を加えていない間) は「吸着」と、動いた量を出す */
+  function sourceBadge(i: number, src: LyricsView['startSource'][number]): HTMLElement {
+    const snapped = snapIsCurrent() ? lastSnapAll!.result.lines.find((l) => l.line === i) : undefined;
+    if (snapped && snapped.kind !== 'none') {
+      const badge = el('span', {
+        className: 'lyrics-src lyrics-src-snapped',
+        textContent: `${snapped.kind === 'candidate' ? '吸着' : 'ビート'} ${ms(snapped.to - snapped.from)}`,
+      });
+      badge.title = `叩いた位置 ${formatTime(snapped.from)} → ${formatTime(snapped.to)}`;
+      return badge;
+    }
+    return el('span', { className: `lyrics-src lyrics-src-${src}`, textContent: startSourceLabel(src, currentLyrics().source) });
   }
 
   function highlightRows(current: number): void {
@@ -459,24 +494,45 @@ export function renderLyricsPanel(): HTMLElement {
     refreshControls();
   }
 
-  function doTap(alt: boolean): void {
+  /** 今の行の開始として、聞こえている位置をそのまま記録する (吸着は叩き終えてから「吸着」ボタンでまとめて)。 */
+  function doTap(): void {
     if (!tap || !tap.isActive) return;
-    const lyrics = currentLyrics();
     const raw = store.audio.heardTime;
-    const snapped = snapTime(raw, snapTargets(), lyrics.timing.snapWindowMs / 1000, lyrics.timing.snap && !alt);
     const cur = history.current;
-    const lineTimes = tap.tap(cur.lineTimes, snapped.t);
+    const lineTimes = tap.tap(cur.lineTimes, Math.round(raw * 10000) / 10000);
     commitTiming({ lineTimes, lineEnds: cur.lineEnds });
     const latency = Math.round(store.audio.outputLatency * 1000);
     lastSnap.textContent =
-      `${tap.line} 行目: 叩いた位置 ${formatTime(raw)} → ${formatTime(snapped.t)} — ${describeSnap(snapped, raw)}` +
-      (latency > 0 ? ` (出力の遅れ 約${latency}ms を差し引き済み)` : '');
+      `${tap.line} 行目を ${formatTime(raw)} で記録` + (latency > 0 ? ` (出力の遅れ 約${latency}ms を差し引き済み)` : '');
     refresh();
     if (!tap.isActive) {
       tap = null;
       lastSnap.textContent += ' / すべての行を叩き終えました';
       refreshControls();
     }
+  }
+
+  function doSnapAll(): void {
+    if (tap || !store.audio.isLoaded) return;
+    syncHistoryWithStore();
+    const cur = history.current;
+    const targets = snapTargets();
+    const result = snapAllLines(cur.lineTimes, targets.onsets, targets.beats, {
+      windowSec: currentLyrics().timing.snapWindowMs / 1000,
+    });
+    const after: TimingSnapshot = { lineTimes: result.lineTimes, lineEnds: cur.lineEnds };
+    commitTiming(after);
+    lastSnapAll = { result, after };
+    snapReport.textContent = describeSnapAll(result);
+    refresh();
+  }
+
+  /** 直前の吸着を取り消す (吸着したあとに手を加えていないときだけ)。取り消しの履歴で 1 つ戻すのと同じ */
+  function undoSnapAll(): void {
+    if (!snapIsCurrent()) return;
+    lastSnapAll = null;
+    snapReport.textContent = '吸着前に戻しました。';
+    if (applyHistory(history.undo())) refresh();
   }
 
   function doBack(): void {
@@ -517,11 +573,11 @@ export function renderLyricsPanel(): HTMLElement {
     if (isTapKey) {
       e.preventDefault();
       if (e.repeat || !store.audio.isLoaded) return;
-      if (tap) doTap(e.shiftKey);
+      if (tap) doTap();
       else if (store.audio.isPlaying && view.parsed.lines.length > 0) {
         // 再生中に叩いたら、その場でタップを始めて「次に叩く行」の頭として記録する
         beginTapAt(nextLineToTap(store.audio.heardTime));
-        doTap(e.shiftKey);
+        doTap();
       } else store.audio.play();
       return;
     }
@@ -591,8 +647,12 @@ export function renderLyricsPanel(): HTMLElement {
         });
         next = last + 1;
       }
+      // 前の行: 今の行の 1 つ前。行の外なら、最後に過ぎた行
+      const prev = cur >= 0 ? cur - 1 : next - 1;
+      prevLine.textContent = prev >= 0 ? showText(prev) : '';
       if (next >= lines.length) next = -1;
-      nextLine.textContent = next >= 0 ? `次: ${showText(next)}` : '';
+      nextLine.textContent = next >= 0 ? showText(next) : '';
+      nextLine.dataset.label = next >= 0 ? `次 (${next + 1} 行目)` : '';
       // ページ全体ではなく、一覧の枠の中だけをスクロールして今の行を見せる
       const row = cur >= 0 && store.audio.isPlaying ? rows[cur] : undefined;
       if (row) {
