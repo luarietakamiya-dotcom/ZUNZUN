@@ -17,16 +17,14 @@
 | Step 6 | Overlay Manager（PNG/WebP/JPG） | 完了 | `6702adf` `a30c3b5` |
 | Step 7 | MP4 書き出し（WebCodecs + Mediabunny） | 完了・実機で音ズレ 1 フレーム以内を確認 | `c4af441` |
 | Step 8 | プリセット **Solar Gate** | 完了・ユーザー確認済み | `e85632b` |
-| Step 9 | プリセット **Milky Way** | ローカルで build / lint / test 成功。見た目のユーザー確認待ち | `0ee8a0d` |
-| Step 10 | プリセット **Live Stage** | 実装・ヘッドレス描画で確認済み（ローカルコミット、未 push）。**ユーザーの見た目確認待ち** | 下記 |
+| Step 9 | プリセット **Milky Way** | 完了・ユーザー確認済み | `0ee8a0d` |
+| Step 10 | プリセット **Live Stage** | 完了・ユーザー確認済み | `071f22b` |
 
 最後に確認できたテスト結果: 11 ファイル / 93 テストすべて成功（ローカル Windows、three.js r180、mediabunny 1.60.0）。
 
 ## 次にやること
 
-1. **Milky Way と Live Stage の見た目の確認**（ユーザー）: `npm run dev` → Visualizer タブで曲を流す。ヘッドレス描画のスクリーンショットは `shots.local/`（git 管理外）。
-2. 問題なければ push（毎回ユーザーに確認）。`package-lock.json` が未追跡のまま。コミットするかユーザーに確認する。
-3. これで MVP の機能はそろう。その先は下の「未解決の設計課題」と「MVP 後」をユーザーと相談する。
+1. **MVP の機能はそろった。** 次に何をやるかは、下の「未解決の設計課題」と「MVP 後」をユーザーと相談して決める。
 
 ### Live Stage の要点（Step 10）
 
