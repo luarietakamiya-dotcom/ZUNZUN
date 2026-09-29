@@ -133,7 +133,7 @@ describe('演出パック (本物の JIZURA)', () => {
     expect(project.fx).toMatchObject({ glitch: 0, flash: false });
   });
 
-  it('図案: レイアウトはオリジナルだけ (JIZURA のレイアウトは使わない)。6 つとも使われ、装飾・背景の図形・光る効果は出てこない', () => {
+  it('図案: レイアウトはオリジナルだけ (JIZURA のレイアウトは使わない)。ほとんどが使われ、装飾・背景の図形・光る効果は出てこない', () => {
     registerMotionPacks(J);
     const { used, cuts } = planOf(lyricsOf(DESIGN_STYLE_KEY));
     const lyricCuts = cuts.filter((c) => c.line >= 0);
@@ -142,7 +142,11 @@ describe('演出パック (本物の JIZURA)', () => {
       expect(c.decor ?? []).toEqual([]);
       expect([undefined, 'none']).toContain((c as Cut & { bg?: string }).bg);
     }
-    expect(new Set(lyricCuts.map((c) => c.layout))).toEqual(new Set(['zzPeekWindow', 'zzGridFill', 'zzRepeatStack', 'zzPoster', 'zzBandRun', 'zzCrossType']));
+    // 10 行 40 カットほどなので、12 個のうちほとんどが使われる (全部は保証しない)
+    const all = ['zzPeekWindow', 'zzGridFill', 'zzRepeatStack', 'zzPoster', 'zzBandRun', 'zzCrossType', 'zzGiantChar', 'zzCutPieces', 'zzCirclePunch', 'zzSplitInvert', 'zzTimeline', 'zzTelop'];
+    const usedLayouts = new Set(lyricCuts.map((c) => c.layout));
+    for (const k of usedLayouts) expect(all).toContain(k);
+    expect(usedLayouts.size).toBeGreaterThanOrEqual(9);
     for (const bad of ['strobe', 'invert', 'whiteFrame', 'negativeRing', 'bloomFlash', 'flashCross', 'flashBox']) expect(used).not.toContain(`"${bad}"`);
   });
 

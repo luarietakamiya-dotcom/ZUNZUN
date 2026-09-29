@@ -1,4 +1,6 @@
-import type { MotionPack, PackBox, PackEffect, PackEnv, PackJ } from './types';
+import { designEffects2 } from './design-2';
+import { clean, DESIGN_SET, type DrawItem, fontsOf, glyphs, isMain, type LayoutEnv, pad, type Rng, shown, timecode, union } from './design-kit';
+import type { MotionPack, PackBox, PackEffect, PackJ } from './types';
 import { allowOnlyTagged, beatOf, disable, easeIn, easeOut } from './util';
 
 /**
@@ -14,58 +16,12 @@ import { allowOnlyTagged, beatOf, disable, easeIn, easeOut } from './util';
  */
 
 export const DESIGN_STYLE_KEY = 'zz-design';
-export const DESIGN_SET = 'zzDesign';
+export { DESIGN_SET };
 const PACK = 'zunzun-design';
-
-interface Rng {
-  pick<T>(a: T[]): T;
-  range(a: number, b: number): number;
-  chance(p: number): boolean;
-  int(a: number, b: number): number;
-}
-
-interface DrawItem extends Record<string, unknown> {
-  text: string;
-  font: string;
-  size: number;
-  x: number;
-  y: number;
-}
-
-export interface LayoutEnv extends PackEnv {
-  ctx: CanvasRenderingContext2D;
-  ltb?: number;
-  cut: PackEnv['cut'] & { params: Record<string, unknown>; text: string; lineText?: string; line: number; start: number };
-  st: { fonts: Record<string, string[] | undefined> };
-  draw(item: DrawItem): PackBox | null;
-  rect(x: number, y: number, w: number, h: number, c: string, a?: number, ghost?: boolean): void;
-  rrect(x: number, y: number, w: number, h: number, r: number, fill: string | null, a?: number, ghost?: boolean, stroke?: string, lw?: number): void;
-  poly(pts: [number, number][], c: string, a?: number, ghost?: boolean): void;
-}
-
-const fontsOf = (st: LayoutEnv['st'], roles: string[]): string[] =>
-  roles.flatMap((r) => st.fonts[r] ?? []).filter(Boolean).concat(['gothic_bold']).slice(0, 4);
-
-/** カットの文字 (空白をまとめ、前後の空白を除く) */
-const clean = (s: string): string => s.replace(/\s+/g, ' ').trim();
-/** 空白を除いた文字の数 */
-const glyphs = (s: string): number => [...s.replace(/\s/g, '')].length;
-
-/** 飾りの出方: 登場の始めに tin 秒で現れ、退場で消える (0..1) */
-function shown(env: LayoutEnv, J: PackJ, tin = 0.3, delay = 0): number {
-  return easeOut(J.clamp((env.lt - delay) / tin)) * (1 - easeIn(J.clamp(env.pOut)));
-}
-
-const union = (a: PackBox | null, b: PackBox | null): PackBox | null =>
-  !a ? b : !b ? a : { x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) };
-
-const pad = (n: number, k: number): string => String(Math.max(0, Math.floor(n))).padStart(k, '0');
-/** 秒 → 00:12.40 */
-const timecode = (t: number): string => `${pad(t / 60, 2)}:${pad(t % 60, 2)}.${pad((t % 1) * 100, 2)}`;
 
 export function designEffects(J: PackJ): PackEffect[] {
   const set = DESIGN_SET;
-  const main = (env: LayoutEnv): boolean => env.pass === 'main';
+  const main = isMain;
   return [
     // ------------------------------------------------------------ 1. のぞき窓
     {
@@ -373,10 +329,15 @@ export function designEffects(J: PackJ): PackEffect[] {
           const { W, H, sc } = env;
           const P = env.cut.params as { font: string; fm: string; xk: number; yk: number };
           const u = H / 1080;
-          const text = J.splitLines(clean(env.cut.text), 8) as string;
-          const opt = { vertical: true, track: 0.04, lead: 1.2 };
+          const raw = clean(env.cut.text);
+          // 英字が多い行は、縦に積むと読みにくいので、横書きのまま 90° 回して縦に立てる
+          const latin = (raw.match(/[A-Za-z]/g)?.length ?? 0) > glyphs(raw) * 0.5;
+          const text = latin ? raw : (J.splitLines(raw, 8) as string);
+          const opt = latin ? { rot: -90, track: 0.04 } : { vertical: true, track: 0.04, lead: 1.2 };
           const cols = text.split('\n').length;
-          const size = Math.min(J.fitSize(text, P.font, Math.min(W * 0.3 * cols, W * 0.6), H * 0.8, opt), H * 0.3);
+          const size = latin
+            ? Math.min(J.fitSize(text, P.font, H * 0.8, W * 0.22, { track: 0.04 }), H * 0.3)
+            : Math.min(J.fitSize(text, P.font, Math.min(W * 0.3 * cols, W * 0.6), H * 0.8, opt), H * 0.3);
           const x = W * P.xk;
           const yb = H * P.yk;
           if (main(env)) {
@@ -404,6 +365,7 @@ export function designEffects(J: PackJ): PackEffect[] {
         },
       },
     },
+    ...designEffects2(J),
   ];
 }
 
@@ -428,12 +390,15 @@ export const designPack: MotionPack = {
     const bias = (st.bias ?? {}) as Record<string, Record<string, number>>;
     st.bias = {
       ...bias,
-      layout: { zzPeekWindow: 1, zzGridFill: 1, zzRepeatStack: 1, zzPoster: 1.2, zzBandRun: 1, zzCrossType: 1 },
+      layout: {
+        zzPeekWindow: 1, zzGridFill: 1, zzRepeatStack: 1, zzPoster: 1.2, zzBandRun: 1, zzCrossType: 1,
+        zzGiantChar: 1, zzCutPieces: 1, zzCirclePunch: 1, zzSplitInvert: 1, zzTimeline: 1, zzTelop: 1.2,
+      },
       fx: {},
     };
     st.decor = {};
     st.name = '図案 (ZUNZUN)';
-    st.desc = '画面の組み方をオリジナルで。のぞき窓・升目・反復・ポスター・走る帯・縦と横';
+    st.desc = '画面の組み方をオリジナルで。のぞき窓・升目・反復・ポスター・走る帯・縦と横・大きな一文字・切り取り線・円の打ち抜き・二分割・タイムライン・テロップ';
     return st;
   },
   effects: designEffects,

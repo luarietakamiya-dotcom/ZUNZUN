@@ -7,8 +7,8 @@ import { expect, test, type Page } from '@playwright/test';
  *   つなぎのために覚えた直前のコマが違うので、既存のスタイルでも一致しない)。
  * - 決定論の直し (jizura-adapter の installGlyphIdPatch) の見張り: ノワールを 3 回作って描き、最初の 1 回から全部一致する。
  *   直す前は、文字の破片の形が作るたびに変わり、232 コマ中 9 コマが違った
- * - 「衝撃」は、一度描いて温めてから 2 回を比べる (ページを開いて最初の 1 回だけ 1 コマ違うことがある。
- *   JIZURA の内側の作業用 canvas が途中で大きくなるときの初期化が原因と思われ、アダプタからは消せない。docs/HANDOFF.md)
+ * - 温めずに、ページを開いて最初に作ったものから比べる。JIZURA の作業用 canvas に前の絵の跡が残り、ぼかしに混ざって
+ *   最初の 1 回だけ違う絵になっていたのを、作るたびに作業用 canvas を消す直し (jizura-adapter の resetLayerCanvas) で直した。その見張り
  * - 余白 (動画に寄り添う): 画面の中央 (横 50%・縦 40%) をほぼ空け、画面全体もほとんど覆わない
  */
 
@@ -21,9 +21,9 @@ test.use({ launchOptions: { args: [], ...(process.env.PW_CHROMIUM ? { executable
 
 const LINES = ['夜明けの色を/覚えてる', 'ほどけた声が/遠くで鳴った', '静かな/部屋に', '月の光が/落ちてくる', 'ねえ/まだ/間に合うかな', '消えないように'];
 
-async function measure(page: Page, style: string, warmUp: boolean): Promise<{ same: boolean; drawn: number; centerMax: number; centerMean: number; allMax: number }> {
+async function measure(page: Page, style: string): Promise<{ same: boolean; drawn: number; centerMax: number; centerMean: number; allMax: number }> {
   return page.evaluate(
-    async ({ style, LINES, warmUp }) => {
+    async ({ style, LINES }) => {
       const A = await import('/src/core/lyrics/jizura-adapter.ts');
       const { defaultLyrics } = await import('/src/core/types.ts');
       const lyrics = {
@@ -48,10 +48,6 @@ async function measure(page: Page, style: string, warmUp: boolean): Promise<{ sa
       const times: number[] = [];
       for (let t = 0.6; t < 16; t += 0.1) times.push(t);
       // 書き出しと同じく、それぞれを最初から順に描く
-      if (warmUp) {
-        const m0 = await make();
-        for (const t of times) frame(m0, t);
-      }
       const m2 = await make();
       const second = times.map((t) => frame(m2, t).slice());
       const m1 = await make();
@@ -85,22 +81,21 @@ async function measure(page: Page, style: string, warmUp: boolean): Promise<{ sa
       }
       return { same, drawn, centerMax, centerMean: centerSum / n, allMax };
     },
-    { style, LINES, warmUp },
+    { style, LINES },
   );
 }
 
 test('決定論: ノワールを作って描くのを 3 回くり返すと、最初の 1 回から全部同じ画像になる (文字の破片の番号の直し)', async ({ page }) => {
   await page.goto('/');
   // measure は 2 回作って比べるので、それを 2 回 (= 3 回以上作る) 行う
-  expect((await measure(page, 'noir', false)).same).toBe(true);
-  expect((await measure(page, 'noir', false)).same).toBe(true);
+  expect((await measure(page, 'noir')).same).toBe(true);
+  expect((await measure(page, 'noir')).same).toBe(true);
 });
 
 for (const style of ['zz-calm', 'zz-intense', 'zz-rock', 'zz-pop', 'zz-design', 'zz-cinema']) {
   test(`演出パック ${style}: 同じ seed なら同じ画像で、何かが描かれている`, async ({ page }) => {
     await page.goto('/');
-    // 温め直しは「衝撃」だけ (ページを開いて最初の 1 回だけ 1 コマ違うことがあるため)
-    const r = await measure(page, style, style === 'zz-intense');
+    const r = await measure(page, style);
     expect(r.same).toBe(true);
     expect(r.drawn).toBeGreaterThan(1000);
     if (style === 'zz-cinema') {

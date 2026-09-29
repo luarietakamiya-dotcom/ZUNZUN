@@ -88,6 +88,8 @@ export interface JizuraApi {
   FONTS: Record<string, { label: string; kind?: string; user?: boolean }>;
   /** 色の明るさ (0..1) */
   lum(color: string): number;
+  /** 文字を 1 つ描く (ぼかし・影があると、内側の作業用 canvas に描いてから重ねる) */
+  drawItem(env: Record<string, unknown>, item: Record<string, unknown>): unknown;
   __zunzunTimingPatched?: boolean;
   register: PackApi['register'];
   __zunzunOddMeter?: boolean;
@@ -152,6 +154,37 @@ export function installGlyphIdPatch(J: JizuraApi): void {
     return g;
   };
   J.glyphs.__zunzunIds = true;
+}
+
+/**
+ * 決定論のための下ごしらえ: JIZURA はぼかし・影のある文字を、内側の作業用 canvas (layerCv。ページ全体で 1 つ、
+ * 大きくなるだけで小さくならない) に描いてから重ねる。描く前に消すのは「その文字の分の範囲」だけなので、
+ * その外に**前に描いた文字の跡が残り、ぼかしで重ねるときにわずかに混ざる**。そのため、直前に何を描いていたかで
+ * 絵が変わり、ページを開いて最初に作った歌詞モーションだけ数コマ違った (衝撃・図案で確認。2026-09-30)。
+ * 歌詞モーションを作るたびに、作業用 canvas を十分な大きさまで広げたうえで**全体を透明に消しておく**
+ * (透明な大きな文字を 1 つ、ぼかし付きで捨て用の canvas に描く = JIZURA が作業用 canvas のその範囲を消す)。
+ * これで、どの歌詞モーションも同じ状態から描き始める (書き出しは作ってから最初から順に描くので、毎回同じ絵になる)。
+ */
+let warmCanvas: HTMLCanvasElement | null = null;
+export function resetLayerCanvas(J: JizuraApi, width: number, height: number): void {
+  if (typeof document === 'undefined' || typeof J.drawItem !== 'function') return;
+  // 作業用 canvas は「出力の面積の 1.6 倍まで」の文字にだけ使われる。1 辺は出力の長い辺の 1.3 倍あればほぼ足りる
+  const L = Math.max(2, Math.ceil(Math.max(width, height) * 1.3));
+  if (!warmCanvas || warmCanvas.width < L) {
+    warmCanvas = document.createElement('canvas');
+    warmCanvas.width = L;
+    warmCanvas.height = L;
+  }
+  const ctx = warmCanvas.getContext('2d');
+  if (!ctx) return;
+  const n = warmCanvas.width;
+  const env = { ctx, pass: 'main', scale: 1, allowFilter: true, W: n, H: n };
+  try {
+    // 文字の枠 (大きさの約 1.22 倍) が canvas の 1 辺を少し超える大きさ。色は透明なので何も描かれない
+    J.drawItem(env, { text: '■', font: 'gothic_bold', size: n * 0.84, x: n / 2, y: n / 2, blur: 2, color: 'rgba(0,0,0,0)' });
+  } catch {
+    // 下ごしらえなので、失敗しても描画は続けられる
+  }
 }
 
 // ------------------------------------------------------------------ 入力の変換 (純粋関数)
@@ -569,6 +602,7 @@ export class LyricMotion {
       r.paper(plan.W, plan.H); // 紙の質感はここで作ってキャッシュさせる (描画中に Math.random を呼ばせない)
       return r;
     });
+    resetLayerCanvas(J, opts.width, opts.height);
     return new LyricMotion(plan, renderer);
   }
 
