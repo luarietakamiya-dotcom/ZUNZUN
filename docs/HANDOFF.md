@@ -1,6 +1,6 @@
-# 引き継ぎメモ（Cloud Session → ローカル Claude Code）
+# 引き継ぎメモ（ローカル Claude Code ⇄ Cloud Session）
 
-最終更新: 2026-09-28（MVP 完了後、変拍子対応の R1 を実装した時点）。
+最終更新: 2026-09-29（変拍子対応の R1 を実装し、Cloud Session へ移す時点）。
 これまでの作業は Claude Code の Cloud Session で行い、`npm install` が必要な確認だけをユーザーがローカル PC（Windows / PowerShell）で実行していた。
 ローカルの Claude Code なら `npm` も `git` も直接使えるので、以後は同じ場所で実装と検証を完結できる。
 
@@ -22,7 +22,14 @@
 
 最後に確認できたテスト結果: 28 ファイル / 215 テスト + E2E 7 件すべて成功（ローカル Windows、three.js r180、mediabunny 1.60.0）。
 
-## 次にやること: 歌詞モーション + 半自動タップ同期（MVP 後・Phase 4 として計画を承認済み）
+## いま次にやること（2026-09-29 時点）
+
+**R2（変拍子の画面）**: Lyrics タブに「リズム（変拍子）」欄を作る。変拍子モードのオン/オフ、再生しながら Space で小節の頭をタップ（`BarTapSession`、吸着は `barSnapTargetsFor`、Backspace で戻る）、「残りを同じ長さで埋める」（`fillToEnd`）・「間を埋める」（`fillGaps`）、区間ごとの拍子の指定（例: この小節から `2+2+3`）、タイムラインに小節線（太線）と拍のまとまり（細線）。そのあと R3（JIZURA とつなぐ）→ R4（変拍子パック）。詳細は下の表と `docs/ARCHITECTURE.md`「変拍子（リズム）の方針」。
+
+- 2026-09-29 にローカルの Claude Code から **Cloud Session へ移した**（ユーザーが PC を閉じても進められるように）。クラウドではアプリ内ブラウザが使えないので、見た目の確認は Playwright（`npm run test:e2e`、SwiftShader）か、ヘッドレス Chromium で canvas を画像にして行う。実際の曲（ユーザーの「Black Rose」など）はクラウドに無いので、実際の曲での確認はユーザーに頼む。
+- ユーザーとのやり取りは**必ず日本語**（途中で英語になって 2 回注意された）。
+
+## 歌詞モーション + 半自動タップ同期 + 変拍子（MVP 後・Phase 4 として計画を承認済み）
 
 ユーザーの決定（2026-09-28）:
 - **フォントだけは外部通信を許可**（Google Fonts から、歌詞モーションが使う書体だけを読み込む）。`docs/ARCHITECTURE.md` の技術選定表を更新済み。音源・画像・歌詞などは送信しない。
