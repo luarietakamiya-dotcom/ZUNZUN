@@ -1,6 +1,6 @@
 # 引き継ぎメモ（ローカル Claude Code ⇄ Cloud Session）
 
-最終更新: 2026-09-29（Cloud Session で背景の一枚絵を足した時点。次は背景の動画）。
+最終更新: 2026-09-29（Cloud Session で背景の動画を足した時点。背景は ①一枚絵 ②動画 まで揃った）。
 これまでの作業は Claude Code の Cloud Session で行い、`npm install` が必要な確認だけをユーザーがローカル PC（Windows / PowerShell）で実行していた。
 ローカルの Claude Code なら `npm` も `git` も直接使えるので、以後は同じ場所で実装と検証を完結できる。
 
@@ -107,7 +107,12 @@ R3 の要点（`src/core/lyrics/jizura-adapter.ts`）:
 - 確認できたこと: 本物の JIZURA（jsdom）で、7/8 の拍を渡すと plan のビートがそれになり、行の中のカットの切れ目が拍の上に乗る（`jizura-compat.test.ts`）。ヘッドレス Chromium で実際に描き、切れ目が 3.75（小節の頭）→ 4.25 → 4.75（まとまり）→ 5.5 …になること、同じ設定なら同じ絵、オフとは違う絵になること。**実際の曲での見た目は未確認**。
 
 背景（ユーザー要望・計画承認 2026-09-29。方針は `docs/ARCHITECTURE.md`「背景（一枚絵・動画）の方針」）:
-- **① 一枚絵: 実装済み・ユーザー確認待ち。次は ② 動画**（ユーザーは「背景として動画を流す」を選んだ。時刻を決めて差し込む動画は今回はやらない）。
+- **① 一枚絵・② 動画: 実装済み・ユーザー確認待ち**（ユーザーは「背景として動画を流す」を選んだ。時刻を決めて差し込む動画は今回はやらない）。
+- ② 動画（`src/core/render/background-video.ts`）: 動画の音は使わない。曲の時刻 → 動画の時刻は `videoTimeAt`（くり返す = 余り、止める = 終わりの 1ms 手前）。
+  - プレビュー `PreviewVideo`: `<video muted>` + `VideoTexture`。`Host.render` の最初に `background.update(frame.t)` で合わせる: t が進んでいれば再生（0.15 秒よりずれたら位置を合わせ直す。くり返しの境目は一周ぶんを考えて差を測る）、止まっていれば一時停止して位置を合わせる。**コマの位置は厳密ではない**。
+  - 書き出し `ExactVideo`: Mediabunny（`Input` + `CanvasSink`、長い辺 2560px まで）。`renderMp4` が `beginExact(全フレームの時刻)` → 各フレームの前に `advanceExact()`（`canvasesAtTimestamps` で順に取り出して CanvasTexture に写す）。同じ動画・同じ設定なら同じ映像。`canDecode` できなければ分かる文言で失敗する（H.264 の MP4 か WebM）。パッケージの追加なし。
+  - store: 背景のファイルは 2GB まで（`MAX_BACKGROUND_BYTES`。sha256 をファイル全体から計算するため）。画面: 画像・動画のどちらも選べる、動画は小さなプレーヤーで表示、「曲より短いときはくり返す」、ぼかしは画像だけ（動画を毎フレームぼかすのは重いので付けていない）。
+  - 確認できたこと: E2E `tests/e2e/background-video.spec.ts`（フレームごとに色を変えた 2 秒・10fps の VP9 の WebM をページ内で作り、画面の真ん中の色でフレームを読む。書き出し用: 0.05 / 0.55 / 1.25 / 1.95 / 2.35 / 3.05 秒 → フレーム 0 / 5 / 12 / 19 / 3 / 10（くり返し）・19 / 19（止める）、2 回同じ。プレビュー用: 止まっている時刻に ±1 フレームで合う）。ヘッドレス Chromium で Visualizer タブで曲を再生すると動画が進むこと。**H.264 の動画と、実際の書き出し（H.264 の MP4）はこの環境で作れないので未確認**。プレビューのずれの大きさ（撮影の遅れと区別できなかった）も未確認。
 - `src/core/render/background.ts` `BackgroundCompositor`: 画面いっぱいの板 1 枚（`backgroundUvScale` で cover / contain、contain の余りは黒）。**ビジュアライザーを画面へ描いたあと、その上から背景を重ねる**（`Host.render` の PostFX のあと・歌詞の前に `composeOver`）。スクリーン = `src + dst×(1−src)`、加算 = `src + dst`、そのまま上に = 背景 × (1 − 濃さ) を足す。濃さ < 1 は先に黒を重ねてビジュアライザーを薄くする。背景の画像は値をそのまま出す（色の変換なし）。ぼかしは読み込み時に canvas の filter で 1 回（端が暗くならないよう少し大きく描く、長い辺 4096px まで縮める）。
   - **ハマったこと**: 最初はビジュアライザーを画面外（EffectComposer の readBuffer）に描いてから背景の上に重ねたが、黒い背景でも背景なしと最大 144 違った。UnrealBloomPass は画面へ写すとき「元の絵だけ MeshBasicMaterial でリニア → sRGB に変換し、Bloom の光は変換せず足す」ため。スクリーン・加算は可換なので「ビジュアライザーを画面へ → 上から背景」に変えて一致させた（PostFX は無変更）。
 - 設定は `BackgroundSettings`（Project JSON 最上位 `background`、version 1 のまま、読み込み時に検証）。store に `background` / `backgroundFile`（メモリだけ）/ `setBackgroundFile`（同じ sha256 なら設定を引き継ぐ）/ `updateBackground` / `removeBackground`。Overlay タブの先頭に「背景 (一枚絵)」欄（`background-card.ts`、サムネイル・収め方・重ね方・暗さ・ぼかし・濃さ）。Visualizer タブと書き出し（`Mp4ExportJob.background`）が読み込む。ファイルが未選択なら背景なしで、Export タブに注意を出す。

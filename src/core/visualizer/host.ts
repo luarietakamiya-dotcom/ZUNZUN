@@ -127,6 +127,7 @@ export class VisualizerHost {
 
   /** 現在のプリセット → (背景を重ねる) → 歌詞モーション → オーバーレイ の順に、毎フレーム更新して描画する。 */
   render(frame: AudioFrame, params: CommonParams & Record<string, unknown>): void {
+    this.background.update(frame.t);
     if (this.current) {
       const { preset } = this.current;
       preset.update(frame, params);

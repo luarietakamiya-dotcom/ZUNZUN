@@ -39,7 +39,7 @@ export interface Mp4ExportJob {
   analysis: AudioAnalysis | null;
   /** 小節と拍子 (変拍子モードがオンのときだけ歌詞モーションに使う。省略 = 使わない) */
   rhythm?: RhythmSettings | null;
-  /** 背景の一枚絵 (設定と元のファイル)。省略 = 背景なし */
+  /** 背景の一枚絵・動画 (設定と元のファイル)。省略 = 背景なし */
   background?: { config: BackgroundSettings; file: File } | null;
   fileName: string;
 }
@@ -104,7 +104,8 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
     host.resize(width, height);
     await host.setPreset(job.preset, job.seed, job.params);
     await host.overlay.loadFrom(job.overlays);
-    await host.background.load(job.background?.config ?? null, job.background?.file ?? null);
+    // 背景の動画は、書き出す各フレームの時刻ちょうどの絵を取り出す (exact)
+    await host.background.load(job.background?.config ?? null, job.background?.file ?? null, { exact: true });
     // 歌詞モーション: 書き出し開始時の設定で作る (プレビューと同じ seed・時刻・設定なので同じ絵になる。書き出しは軽い描画を使わない)
     const lyricReq = { lyrics: job.lyrics, analysis: job.analysis, projectSeed: job.seed, width, height, fps };
     if (wantsMotion(lyricReq)) {
@@ -137,6 +138,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
 
     const total = totalFrameCount(job.timeline.duration, fps);
     const frameDuration = 1 / fps;
+    host.background.beginExact(Array.from({ length: total }, (_, i) => frameTimestamp(i, fps)));
     onProgress(0, total);
 
     for (let i = 0; i < total; i++) {
@@ -145,6 +147,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
       await addAudioUntil(t + AUDIO_LEAD_SEC);
 
       const frame = job.timeline.at(t, Math.max(0, t - frameDuration));
+      await host.background.advanceExact();
       host.render(frame, job.params);
       await videoSource.add(t, frameDuration);
 

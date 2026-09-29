@@ -17,6 +17,9 @@ import {
 
 type Listener = () => void;
 
+/** 背景のファイルの大きさの上限 (sha256 をファイル全体から計算するため) */
+export const MAX_BACKGROUND_BYTES = 2 * 2 ** 30;
+
 /**
  * アプリ全体で 1 つだけ持つ、ごく小さな状態置き場。
  * AudioEngine のインスタンス、seed、Visualizer の選択中プリセット/共通パラメータ、
@@ -71,6 +74,8 @@ class Store {
    * 既定の設定で始める (種類が変わったとき以外は、見た目の調整値は引き継ぐ)。
    */
   async setBackgroundFile(file: File, kind: BackgroundSettings['kind']): Promise<void> {
+    // sha256 はファイル全体を読んで計算するので、大きすぎるものは断る (動画は数百 MB でも数秒かかり、メモリも一時的に使う)
+    if (file.size > MAX_BACKGROUND_BYTES) throw new Error(`ファイルが大きすぎます (${(file.size / 2 ** 30).toFixed(1)}GB)。2GB までにしてください`);
     const sha256 = await sha256Hex(await file.arrayBuffer());
     const cur = this._background;
     if (cur && cur.sha256 === sha256) this._background = { ...cur, ref: file.name, kind };

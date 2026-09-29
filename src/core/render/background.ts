@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { BackgroundSettings } from '../types';
+import { ExactVideo, PreviewVideo } from './background-video';
 
 /**
  * 背景の一枚絵 (のちに動画) と、ビジュアライザーとの合成 (docs/ARCHITECTURE.md「背景」)。
@@ -114,6 +115,8 @@ export class BackgroundCompositor {
   private readonly bgMesh: THREE.Mesh;
   private readonly fadeMesh: THREE.Mesh;
   private texture: THREE.Texture | null = null;
+  /** 背景が動画のとき (プレビュー用か書き出し用のどちらか)。テクスチャは動画の持ち物 */
+  private video: PreviewVideo | ExactVideo | null = null;
   private srcAspect = 1;
   private dstAspect = 1;
   private settings: BackgroundSettings | null = null;
@@ -151,12 +154,31 @@ export class BackgroundCompositor {
     return this.texture != null && this.settings != null;
   }
 
-  /** 設定とファイルから背景を読み込む (どちらかが無ければ背景なし)。動画は第 2 段階で対応する */
-  async load(settings: BackgroundSettings | null, file: Blob | null): Promise<void> {
+  /**
+   * 設定とファイルから背景を読み込む (どちらかが無ければ背景なし)。
+   * 動画は、exact = false (プレビュー) ならブラウザの動画を曲の位置に合わせて流し、exact = true (書き出し) なら
+   * beginExact / advanceExact で各フレームの時刻ちょうどの絵を取り出す
+   */
+  async load(settings: BackgroundSettings | null, file: Blob | null, opts: { exact?: boolean } = {}): Promise<void> {
     const my = ++this.generation;
-    if (!settings || !file || settings.kind !== 'image') {
+    if (!settings || !file) {
       this.setTexture(null, 1);
       this.settings = null;
+      return;
+    }
+    if (settings.kind === 'video') {
+      const video = opts.exact ? await ExactVideo.open(file, settings.loop) : await PreviewVideo.open(file, settings.loop);
+      if (my !== this.generation) {
+        video.dispose();
+        return;
+      }
+      this.settings = settings;
+      this.setTexture(null, 1);
+      this.video = video;
+      this.texture = video.texture;
+      this.srcAspect = video.aspect;
+      this.bgMaterial.uniforms.map!.value = video.texture;
+      this.apply();
       return;
     }
     const { texture, aspect } = await loadBackgroundImage(file, settings.blur);
@@ -167,6 +189,21 @@ export class BackgroundCompositor {
     this.settings = settings;
     this.setTexture(texture, aspect);
     this.apply();
+  }
+
+  /** 毎フレーム、描く前に呼ぶ (プレビューの動画を曲の時刻 t に合わせる。画像・書き出しでは何もしない) */
+  update(t: number): void {
+    if (this.video instanceof PreviewVideo) this.video.sync(t);
+  }
+
+  /** 書き出しの前に、書き出す全フレームの曲の時刻を渡す (背景が書き出し用の動画のときだけ意味がある) */
+  beginExact(songTimes: readonly number[]): void {
+    if (this.video instanceof ExactVideo) this.video.begin(songTimes);
+  }
+
+  /** 書き出しで、各フレームを描く前に呼ぶ (次のフレームの動画の絵を用意する) */
+  async advanceExact(): Promise<void> {
+    if (this.video instanceof ExactVideo) await this.video.next();
   }
 
   resize(width: number, height: number): void {
@@ -189,8 +226,7 @@ export class BackgroundCompositor {
 
   dispose(): void {
     this.generation++;
-    this.texture?.dispose();
-    this.texture = null;
+    this.setTexture(null, 1);
     this.bgMaterial.dispose();
     this.fadeMaterial.dispose();
     this.geometry.dispose();
@@ -198,7 +234,11 @@ export class BackgroundCompositor {
   }
 
   private setTexture(texture: THREE.Texture | null, aspect: number): void {
-    this.texture?.dispose();
+    // 動画のテクスチャは動画ごと片づける
+    if (this.video) {
+      this.video.dispose();
+      this.video = null;
+    } else this.texture?.dispose();
     this.texture = texture;
     this.srcAspect = aspect;
     this.bgMaterial.uniforms.map!.value = texture;
