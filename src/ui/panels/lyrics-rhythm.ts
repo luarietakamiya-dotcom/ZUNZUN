@@ -115,7 +115,8 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
   enabled.type = 'checkbox';
   enabled.addEventListener('change', () => commit({ ...current(), enabled: enabled.checked }));
   const enabledLabel = h('label', 'row-gap param-label');
-  enabledLabel.append(enabled, '変拍子モード (オンにすると、歌詞モーションは自動検出のビートの代わりに、ここで決めた小節と拍子の拍に合わせて動きます)');
+  enabledLabel.append(enabled, '変拍子モード (オンにすると、歌詞モーションは自動検出のビートの代わりに、ここで決めた小節と拍子の拍に合わせて動きます。' +
+      '歌詞モーションのスタイルを「変拍子 (ZUNZUN)」にすると、小節の頭とまとまりに合わせた演出も加わります)');
 
   // ------------------------------------------------------------ 小節の頭のタップ
   const status = h('div', 'param-label');

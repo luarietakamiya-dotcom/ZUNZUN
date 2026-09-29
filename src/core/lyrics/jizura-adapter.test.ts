@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { defaultLyrics } from '../types';
+import { CUSTOM_STYLE_KEY, defaultLyrics } from '../types';
+import { ODD_METER_SET, ODD_METER_STYLE_KEY } from './oddmeter-pack';
 import {
   attachRhythm,
   buildCustomStyle,
@@ -15,6 +16,7 @@ import {
   nearestAspect,
   normalizeEnergy,
   planRhythmAt,
+  usesOddMeterPack,
   type JizuraPlan,
   type JizuraStyleDef,
 } from './jizura-adapter';
@@ -213,3 +215,29 @@ describe('buildJizuraProject', () => {
     expect(lyricMotionSeed(20260927)).not.toBe(lyricMotionSeed(20260928));
   });
 });
+
+describe('変拍子パック (R4) を使う条件と、JIZURA に渡すプロジェクト', () => {
+  const grid = motionRhythmGrid({ enabled: true, bars: [1, 2.75, 4.5], meters: [{ bar: 0, pattern: '2+2+3' }] });
+  const motion = (o: Partial<ReturnType<typeof defaultLyrics>['motion']>) => ({ ...defaultLyrics().motion, ...o });
+
+  it('変拍子モードがオン (小節がある) で、変拍子用スタイルか、それを元にしたマイスタイルのときだけ', () => {
+    expect(usesOddMeterPack(motion({ style: ODD_METER_STYLE_KEY }), grid)).toBe(true);
+    expect(usesOddMeterPack(motion({ style: ODD_METER_STYLE_KEY }), null)).toBe(false);
+    expect(usesOddMeterPack(motion({ style: 'noir' }), grid)).toBe(false);
+    const custom = { name: 'x', base: ODD_METER_STYLE_KEY } as NonNullable<ReturnType<typeof defaultLyrics>['motion']['custom']>;
+    expect(usesOddMeterPack(motion({ style: CUSTOM_STYLE_KEY, custom }), grid)).toBe(true);
+    expect(usesOddMeterPack(motion({ style: CUSTOM_STYLE_KEY, custom: { ...custom, base: 'noir' } }), grid)).toBe(false);
+  });
+
+  it('使うときは部品セットをオンにし、「4 拍でひと回り」の演出を無効にする。使わないときは何も足さない', () => {
+    const defaults = { timing: {}, enabled: { hold: { windGust: true, still: true } } };
+    const on = buildJizuraProject(defaultLyrics(), defaults, { seed: 1, aspect: '16:9', fps: 30, oddMeter: true });
+    expect(on[ODD_METER_SET]).toBe(true);
+    const hold = (on.enabled as Record<string, Record<string, boolean>>).hold!;
+    expect(hold).toMatchObject({ windGust: false, pluckString: false, still: true });
+    const off = buildJizuraProject(defaultLyrics(), defaults, { seed: 1, aspect: '16:9', fps: 30 });
+    expect(off[ODD_METER_SET]).toBeUndefined();
+    expect((off.enabled as Record<string, Record<string, boolean>>).hold).toEqual({ windGust: true, still: true });
+  });
+});
+

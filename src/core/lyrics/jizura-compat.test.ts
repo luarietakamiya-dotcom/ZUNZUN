@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { defaultLyrics } from '../types';
-import { attachRhythm, buildJizuraProject, installTimingPatch, motionRhythmGrid, planRhythmAt, type JizuraApi } from './jizura-adapter';
+import { attachRhythm, buildJizuraProject, installTimingPatch, motionRhythmGrid, planRhythmAt, usesOddMeterPack, type JizuraApi } from './jizura-adapter';
+import { ODD_METER_STYLE_KEY, registerOddMeterPack, type PackApi } from './oddmeter-pack';
 import { parseLyrics } from './parse';
 import { computeLineTimes } from './timing';
 
@@ -92,4 +93,47 @@ describe('JIZURA との一致 (同梱した本物と比べる)', () => {
     expect(planRhythmAt(plan, 6.6)!.pulse.group).toBe(2);
     expect(planRhythmAt(plan, 1)).toBeNull();
   });
+
+  it('変拍子パック (R4): 登録しても既存のスタイルのカット割りは 1 つも変わらず、変拍子用スタイル + 変拍子モードのときだけ使われる', () => {
+    const rhythm = motionRhythmGrid({ enabled: true, bars: [2, 3.75, 5.5, 7.25, 9, 10.75, 12.5, 14.25], meters: [{ bar: 0, pattern: '2+2+3' }] })!;
+    const text = Array.from({ length: 8 }, (_, i) => `${i + 1}行目の/歌詞を/ここで/区切る`).join('\n');
+    const lineTimes = Object.fromEntries(Array.from({ length: 8 }, (_, i) => [String(i), 2 + i * 1.75]));
+    const lyricsOf = (style: string) => ({
+      ...defaultLyrics(),
+      text,
+      motion: { ...defaultLyrics().motion, style, density: 0.8, decor: 1, motion: 1 },
+      timing: { ...defaultLyrics().timing, lineTimes },
+    });
+    const audio = { duration: 18, beats: rhythm.beats, energy: new Float32Array(18 * 60), energyRate: 60 };
+    const planOf = (style: string, withRhythm: boolean) => {
+      const lyrics = lyricsOf(style);
+      const grid = withRhythm ? rhythm : null;
+      const project = buildJizuraProject(lyrics, J.defaultProject(), { seed: 11, aspect: '16:9', fps: 30, oddMeter: usesOddMeterPack(lyrics.motion, grid) });
+      return JSON.stringify(J.plan(project, audio));
+    };
+    expect((J as unknown as PackApi).__zunzunOddMeter).toBeFalsy();
+    const before = ['noir', 'crimson'].map((s) => planOf(s, true));
+    registerOddMeterPack(J as unknown as PackApi);
+    expect(['noir', 'crimson'].map((s) => planOf(s, true))).toEqual(before);
+
+    type Cut = { hold?: string; cam?: string; decor?: { id: string }[] };
+    const used = (json: string) => {
+      const cuts = JSON.parse(json).cuts as Cut[];
+      return {
+        hold: cuts.filter((c) => c.hold === 'zzGroupPulse').length,
+        cam: cuts.filter((c) => c.cam === 'zzBarPunch').length,
+        decor: cuts.filter((c) => c.decor?.some((d) => d.id === 'zzMeterBar')).length,
+        fourBeat: cuts.filter((c) => c.hold === 'windGust' || c.hold === 'pluckString').length,
+        cuts: cuts.length,
+      };
+    };
+    const odd = used(planOf(ODD_METER_STYLE_KEY, true));
+    expect(odd.hold).toBeGreaterThan(0);
+    expect(odd.cam).toBeGreaterThan(0);
+    expect(odd.decor).toBeGreaterThan(0);
+    expect(odd.fourBeat).toBe(0);
+    // 変拍子用スタイルでも、変拍子モードがオフなら使わない
+    expect(used(planOf(ODD_METER_STYLE_KEY, false))).toMatchObject({ hold: 0, cam: 0, decor: 0 });
+  });
 });
+

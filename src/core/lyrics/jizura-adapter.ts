@@ -2,6 +2,7 @@ import type { AudioAnalysis } from '../audio/analyze';
 import { deriveSeed, makeRng } from '../random';
 import { buildRhythmGrid, rhythmPositionAt, type RhythmGrid, type RhythmPosition } from '../rhythm';
 import { CUSTOM_STYLE_KEY, type LyricsCustomStyle, type LyricsSettings, type RhythmSettings } from '../types';
+import { FOUR_BEAT_EFFECTS, ODD_METER_SET, ODD_METER_STYLE_KEY, registerOddMeterPack, type PackApi } from './oddmeter-pack';
 import { lyricsForEngine } from './parse';
 import { applyManualEnds } from './timing';
 
@@ -17,6 +18,8 @@ import { applyManualEnds } from './timing';
  * - 変拍子 (R3): 変拍子モードのときは、自動検出のビートの代わりに小節の頭と拍子から作った拍 (まとまりの頭) を beats として渡す。
  *   JIZURA が beats を使うのは、行の頭の吸着・拍ごとの色ズレの脈動・演出が読む env.beat (何拍目・拍の長さ) なので、
  *   どれも不規則な拍に従う。あわせて plan.zzRhythm に小節とまとまりの並びを添える (R4 の独自の演出が読む)
+ * - 変拍子パック (R4): 読み込み時に J.register で独自の演出と変拍子用スタイルを足す (oddmeter-pack.ts)。
+ *   変拍子モードがオンで、変拍子用スタイル (またはそれを元にしたマイスタイル) のときだけ選ばれるようにする
  * - フォント: J.ensureFonts で Google Fonts から読み込む (ユーザーの決定で、外部通信はフォントの取得だけ許している)
  */
 
@@ -84,6 +87,8 @@ export interface JizuraApi {
   /** 色の明るさ (0..1) */
   lum(color: string): number;
   __zunzunTimingPatched?: boolean;
+  register: PackApi['register'];
+  __zunzunOddMeter?: boolean;
 }
 
 // ------------------------------------------------------------------ 読み込み
@@ -96,6 +101,7 @@ export function loadJizura(): Promise<JizuraApi> {
     const J = (globalThis as unknown as { J?: JizuraApi }).J;
     if (!J || typeof J.plan !== 'function') throw new Error('JIZURA のエンジンを読み込めませんでした');
     installTimingPatch(J);
+    registerOddMeterPack(J as unknown as PackApi);
     return J;
   });
   return loading;
@@ -192,6 +198,17 @@ export interface JizuraProjectOptions {
   seed: number;
   aspect: string;
   fps: number;
+  /**
+   * 変拍子パックを使うか (変拍子モードがオン、かつ変拍子用スタイルのとき)。オンなら部品セット ODD_METER_SET をオンにし、
+   * 「4 拍でひと回り」の演出 (FOUR_BEAT_EFFECTS) を無効にする
+   */
+  oddMeter?: boolean;
+}
+
+/** 変拍子パックを使う組み合わせか: 小節と拍子があり (変拍子モードがオン)、変拍子用スタイルか、それを元にしたマイスタイル */
+export function usesOddMeterPack(motion: LyricsSettings['motion'], rhythm: RhythmGrid | null | undefined): boolean {
+  if (!rhythm) return false;
+  return motion.style === ODD_METER_STYLE_KEY || (motion.style === CUSTOM_STYLE_KEY && motion.custom?.base === ODD_METER_STYLE_KEY);
 }
 
 /** project.seed から、歌詞モーション用の seed を派生させる (プリセットごとの seed と同じ作り方) */
@@ -214,9 +231,17 @@ export function buildJizuraProject(
   for (const k of COVERING_TRANSITIONS) trans[k] = false;
   const layout = { ...(enabled.layout ?? {}) };
   for (const k of COVERING_LAYOUTS) layout[k] = false;
+  const groups: Record<string, Record<string, boolean>> = { ...enabled, trans, layout };
+  if (opts.oddMeter) {
+    for (const [g, keys] of Object.entries(FOUR_BEAT_EFFECTS)) {
+      groups[g] = { ...(groups[g] ?? {}) };
+      for (const k of keys) groups[g][k] = false;
+    }
+  }
   return {
     ...defaults,
-    enabled: { ...enabled, trans, layout },
+    ...(opts.oddMeter ? { [ODD_METER_SET]: true } : {}),
+    enabled: groups,
     lyrics: lyricsForEngine(lyrics.text, lyrics.source),
     title: '',
     artist: '',
@@ -386,7 +411,9 @@ export function isDarkText(color: string, lum: (c: string) => number): boolean {
 
 /** スタイルの一覧 (選択肢の表示用): [キー, 名前] */
 export function jizuraStyles(J: JizuraApi): [string, string][] {
-  return J.STYLE_ORDER.filter((k) => J.STYLES[k]).map((k) => [k, J.STYLES[k]!.name]);
+  // 変拍子用スタイル (R4) は JIZURA のランダムなスタイル選びに入れないため STYLE_ORDER には無い。一覧の先頭に出す
+  const odd: [string, string][] = J.STYLES[ODD_METER_STYLE_KEY] ? [[ODD_METER_STYLE_KEY, J.STYLES[ODD_METER_STYLE_KEY]!.name]] : [];
+  return [...odd, ...J.STYLE_ORDER.filter((k) => J.STYLES[k] && k !== ODD_METER_STYLE_KEY).map((k): [string, string] => [k, J.STYLES[k]!.name])];
 }
 
 // ------------------------------------------------------------------ 描画
@@ -493,7 +520,12 @@ export class LyricMotion {
     const J = await loadJizura();
     if (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom) registerCustomStyle(J, lyrics.motion.custom);
     const seed = lyricMotionSeed(opts.projectSeed);
-    const project = buildJizuraProject(lyrics, J.defaultProject(), { seed, aspect: nearestAspect(opts.width, opts.height), fps: opts.fps });
+    const project = buildJizuraProject(lyrics, J.defaultProject(), {
+      seed,
+      aspect: nearestAspect(opts.width, opts.height),
+      fps: opts.fps,
+      oddMeter: usesOddMeterPack(lyrics.motion, opts.rhythm),
+    });
     const plan = attachRhythm(keepLightTextSchemes(J.plan(project, audio), (c) => J.lum(c)), opts.rhythm ?? null);
     await prepareFonts(J, plan, lyricsForEngine(lyrics.text, lyrics.source) + HUD_CHARS);
     // 本番の Renderer は書体の準備が終わってから作る (内部のキャッシュに仮の書体の文字を残さない)
