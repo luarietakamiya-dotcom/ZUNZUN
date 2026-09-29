@@ -1,6 +1,6 @@
 # 引き継ぎメモ（ローカル Claude Code ⇄ Cloud Session）
 
-最終更新: 2026-09-29（Cloud Session で背景の動画を足した時点。背景は ①一枚絵 ②動画 まで揃った）。
+最終更新: 2026-09-29（背景の一枚絵・動画をユーザーがローカルで確認した時点）。
 これまでの作業は Claude Code の Cloud Session で行い、`npm install` が必要な確認だけをユーザーがローカル PC（Windows / PowerShell）で実行していた。
 ローカルの Claude Code なら `npm` も `git` も直接使えるので、以後は同じ場所で実装と検証を完結できる。
 
@@ -107,7 +107,7 @@ R3 の要点（`src/core/lyrics/jizura-adapter.ts`）:
 - 確認できたこと: 本物の JIZURA（jsdom）で、7/8 の拍を渡すと plan のビートがそれになり、行の中のカットの切れ目が拍の上に乗る（`jizura-compat.test.ts`）。ヘッドレス Chromium で実際に描き、切れ目が 3.75（小節の頭）→ 4.25 → 4.75（まとまり）→ 5.5 …になること、同じ設定なら同じ絵、オフとは違う絵になること。**実際の曲での見た目は未確認**。
 
 背景（ユーザー要望・計画承認 2026-09-29。方針は `docs/ARCHITECTURE.md`「背景（一枚絵・動画）の方針」）:
-- **① 一枚絵・② 動画: 実装済み・ユーザー確認待ち**（ユーザーは「背景として動画を流す」を選んだ。時刻を決めて差し込む動画は今回はやらない）。
+- **① 一枚絵・② 動画: 完了（2026-09-29 ユーザーがローカル Windows で確認: H.264 の MP4 を背景にしたプレビュー、プレビューのずれは気にならない、写真・動画の背景入りの MP4 の書き出し。「全部いいかんじ」）**（ユーザーは「背景として動画を流す」を選んだ。時刻を決めて差し込む動画は今回はやらない）。
 - ② 動画（`src/core/render/background-video.ts`）: 動画の音は使わない。曲の時刻 → 動画の時刻は `videoTimeAt`（くり返す = 余り、止める = 終わりの 1ms 手前）。
   - プレビュー `PreviewVideo`: `<video muted>` + `VideoTexture`。`Host.render` の最初に `background.update(frame.t)` で合わせる: t が進んでいれば再生（0.15 秒よりずれたら位置を合わせ直す。くり返しの境目は一周ぶんを考えて差を測る）、止まっていれば一時停止して位置を合わせる。**コマの位置は厳密ではない**。
   - 書き出し `ExactVideo`: Mediabunny（`Input` + `CanvasSink`、長い辺 2560px まで）。`renderMp4` が `beginExact(全フレームの時刻)` → 各フレームの前に `advanceExact()`（`canvasesAtTimestamps` で順に取り出して CanvasTexture に写す）。同じ動画・同じ設定なら同じ映像。`canDecode` できなければ分かる文言で失敗する（H.264 の MP4 か WebM）。パッケージの追加なし。
