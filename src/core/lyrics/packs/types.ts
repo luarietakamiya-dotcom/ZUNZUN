@@ -28,6 +28,10 @@ export interface PackJ {
   splitLines(text: string, maxPer: number): string[] | string;
   /** 枠 (maxW × maxH) に収まる文字の大きさ */
   fitSize(text: string[] | string, font: string, maxW: number, maxH: number, opt?: Record<string, unknown>): number;
+  /** 文字の大きさを測る。lay は 1 文字ずつの位置 (文字の中心、item の x/y から見た座標) */
+  measure(item: Record<string, unknown>): { w: number; h: number; lay: { ch: string; x: number; y: number; w: number; h: number }[] };
+  /** 度 → ラジアン */
+  DEG: number;
 }
 
 /** 背景から読み取った色 (core/render/palette.ts の BgPalette と同じ形) */

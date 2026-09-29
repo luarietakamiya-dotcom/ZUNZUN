@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 /**
  * オリジナルの歌詞モーション (演出パック、src/core/lyrics/packs/) の E2E。本物の JIZURA で描く。
- * - 5 つのスタイルとも、同じ seed なら同じ画像になり、何かが描かれている。
+ * - 6 つのスタイルとも、同じ seed なら同じ画像になり、何かが描かれている。
  *   比べるときは書き出しと同じく「作る → 最初から順に描く」を 1 つずつ行う (交互に描いたり時刻を行き来すると、
  *   つなぎのために覚えた直前のコマが違うので、既存のスタイルでも一致しない)。
  * - 決定論の直し (jizura-adapter の installGlyphIdPatch) の見張り: ノワールを 3 回作って描き、最初の 1 回から全部一致する。
@@ -96,7 +96,7 @@ test('決定論: ノワールを作って描くのを 3 回くり返すと、最
   expect((await measure(page, 'noir', false)).same).toBe(true);
 });
 
-for (const style of ['zz-calm', 'zz-intense', 'zz-rock', 'zz-pop', 'zz-cinema']) {
+for (const style of ['zz-calm', 'zz-intense', 'zz-rock', 'zz-pop', 'zz-design', 'zz-cinema']) {
   test(`演出パック ${style}: 同じ seed なら同じ画像で、何かが描かれている`, async ({ page }) => {
     await page.goto('/');
     // 温め直しは「衝撃」だけ (ページを開いて最初の 1 回だけ 1 コマ違うことがあるため)

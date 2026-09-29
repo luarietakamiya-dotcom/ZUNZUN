@@ -3,6 +3,7 @@ import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsSettings } from '../../type
 import { buildJizuraProject, installTimingPatch, type JizuraApi } from '../jizura-adapter';
 import { CALM_STYLE_KEY } from './calm';
 import { CINEMA_STYLE_KEY } from './cinema';
+import { DESIGN_STYLE_KEY } from './design';
 import { INTENSE_STYLE_KEY } from './intense';
 import { POP_STYLE_KEY } from './pop';
 import { ROCK_STYLE_KEY } from './rock';
@@ -130,6 +131,26 @@ describe('演出パック (本物の JIZURA)', () => {
     }
     for (const bad of ['strobe', 'invert', 'whiteFrame', 'negativeRing', 'bloomFlash', 'flashCross', 'flashBox', 'hrJumpScare', 'overexpose', 'overexposeOut']) expect(used).not.toContain(`"${bad}"`);
     expect(project.fx).toMatchObject({ glitch: 0, flash: false });
+  });
+
+  it('図案: レイアウトはオリジナルだけ (JIZURA のレイアウトは使わない)。6 つとも使われ、装飾・背景の図形・光る効果は出てこない', () => {
+    registerMotionPacks(J);
+    const { used, cuts } = planOf(lyricsOf(DESIGN_STYLE_KEY));
+    const lyricCuts = cuts.filter((c) => c.line >= 0);
+    for (const c of lyricCuts) {
+      expect(c.layout?.startsWith('zz'), `layout ${c.layout}`).toBe(true);
+      expect(c.decor ?? []).toEqual([]);
+      expect([undefined, 'none']).toContain((c as Cut & { bg?: string }).bg);
+    }
+    expect(new Set(lyricCuts.map((c) => c.layout))).toEqual(new Set(['zzPeekWindow', 'zzGridFill', 'zzRepeatStack', 'zzPoster', 'zzBandRun', 'zzCrossType']));
+    for (const bad of ['strobe', 'invert', 'whiteFrame', 'negativeRing', 'bloomFlash', 'flashCross', 'flashBox']) expect(used).not.toContain(`"${bad}"`);
+  });
+
+  it('図案: どれにも収まらない長い塊でも、JIZURA のレイアウトに頼らない (ポスター組はどんな長さでも組める)', () => {
+    registerMotionPacks(J);
+    const long = { ...lyricsOf(DESIGN_STYLE_KEY), text: Array.from({ length: 4 }, () => 'とても長い歌詞の行がひとつのかたまりのまま続いていくときにも組めること').join('\n') };
+    const { cuts } = planOf(long);
+    for (const c of cuts.filter((k) => k.line >= 0)) expect(c.layout?.startsWith('zz'), `layout ${c.layout}`).toBe(true);
   });
 
   it('余白: レイアウト・表示中の動きはオリジナルだけ。装飾・画面効果・場面転換・背景の図形は使わない。背景の色で配色が変わる', () => {
