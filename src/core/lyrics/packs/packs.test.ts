@@ -4,6 +4,7 @@ import { buildJizuraProject, installTimingPatch, type JizuraApi } from '../jizur
 import { CALM_STYLE_KEY } from './calm';
 import { CINEMA_STYLE_KEY } from './cinema';
 import { INTENSE_STYLE_KEY } from './intense';
+import { POP_STYLE_KEY } from './pop';
 import { ROCK_STYLE_KEY } from './rock';
 import { flashAllowed, MAX_FLASH_HZ } from './util';
 import { applyMotionPack, packForMotion, PACKS, registerMotionPacks } from './index';
@@ -110,6 +111,25 @@ describe('演出パック (本物の JIZURA)', () => {
       for (const d of c.decor ?? []) expect(ok('decor', d.id), `decor ${d.id}`).toBe(true);
     }
     for (const bad of ['strobe', 'invert', 'whiteFrame', 'flashCross', 'heartsStars', 'petals']) expect(used).not.toContain(`"${bad}"`);
+  });
+
+  it('弾む: オリジナルの演出が使われ、pop の印のない JIZURA の演出は使われない。光る・反転する・白く飛ばす・怖い演出は出てこない', () => {
+    registerMotionPacks(J);
+    const { used, cuts, project } = planOf(lyricsOf(POP_STYLE_KEY));
+    const lyricCuts = cuts.filter((c) => c.line >= 0);
+    const ours = (k?: string) => !!k && k.startsWith('zz');
+    expect(lyricCuts.filter((c) => ours(c.enter)).length).toBeGreaterThan(0);
+    expect(lyricCuts.filter((c) => ours(c.exit)).length).toBeGreaterThan(0);
+    expect(lyricCuts.filter((c) => ours(c.hold)).length).toBeGreaterThan(0);
+    expect(lyricCuts.filter((c) => ours(c.cam)).length).toBeGreaterThan(0);
+    expect(lyricCuts.filter((c) => !!c.decor?.some((d) => ours(d.id))).length).toBeGreaterThan(0);
+    const ok = (g: string, k?: string) => !k || k === 'cut' || ours(k) || !!J.registry(g)[k]?.tags?.includes('pop');
+    for (const c of lyricCuts) {
+      for (const g of ['enter', 'exit', 'hold', 'cam', 'layout'] as const) expect(ok(g, c[g]), `${g} ${c[g]}`).toBe(true);
+      for (const d of c.decor ?? []) expect(ok('decor', d.id), `decor ${d.id}`).toBe(true);
+    }
+    for (const bad of ['strobe', 'invert', 'whiteFrame', 'negativeRing', 'bloomFlash', 'flashCross', 'flashBox', 'hrJumpScare', 'overexpose', 'overexposeOut']) expect(used).not.toContain(`"${bad}"`);
+    expect(project.fx).toMatchObject({ glitch: 0, flash: false });
   });
 
   it('余白: レイアウト・表示中の動きはオリジナルだけ。装飾・画面効果・場面転換・背景の図形は使わない。背景の色で配色が変わる', () => {
