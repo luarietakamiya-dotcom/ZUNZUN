@@ -31,7 +31,23 @@ export interface AudioAnalysis {
   bpm: number;
   /** 秒単位のビート時刻 */
   beats: number[];
+  /**
+   * 細かい時刻の音量 (出だしの時刻の合わせ直し用。core/lyrics/candidates.ts の refineOnsetTimes)。
+   * 上の特徴量は約 46ms の窓の真ん中を時刻にしているため、鋭い出だしほど早い時刻に出る (キックで約 30ms)。
+   * rate 回/秒の区間ごとの RMS (区間 i は i / rate 秒から)。energy = 音全体、vocal = 300Hz〜3kHz。
+   * analyzeSamples は必ず入れる (テスト用の手作りの解析結果には無いことがある)
+   */
+  fine?: FineEnvelope;
 }
+
+export interface FineEnvelope {
+  rate: number;
+  energy: Float32Array;
+  vocal: Float32Array;
+}
+
+/** 細かい時刻の音量の区間の数 (回/秒)。5ms */
+export const FINE_RATE = 200;
 
 const BASS_HZ: [number, number] = [20, 250];
 const MID_HZ: [number, number] = [250, 2000];
@@ -135,6 +151,51 @@ export interface AnalyzeOptions {
   fftSize?: number;
 }
 
+/** 2 次の IIR フィルタ (RBJ の式)。kind = 'hp' (ハイパス) / 'lp' (ローパス)、Q = 1/√2 */
+function biquad(x: Float32Array, sampleRate: number, hz: number, kind: 'hp' | 'lp'): Float32Array {
+  const w0 = (2 * Math.PI * Math.min(hz, sampleRate * 0.45)) / sampleRate;
+  const cos = Math.cos(w0);
+  const alpha = Math.sin(w0) / (2 * Math.SQRT1_2);
+  const a0 = 1 + alpha;
+  const b0 = (kind === 'hp' ? (1 + cos) / 2 : (1 - cos) / 2) / a0;
+  const b1 = (kind === 'hp' ? -(1 + cos) : 1 - cos) / a0;
+  const b2 = b0;
+  const a1 = (-2 * cos) / a0;
+  const a2 = (1 - alpha) / a0;
+  const y = new Float32Array(x.length);
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < x.length; i++) {
+    const v = Number.isFinite(x[i]!) ? x[i]! : 0;
+    const o = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+    x2 = x1; x1 = v; y2 = y1; y1 = o;
+    y[i] = o;
+  }
+  return y;
+}
+
+function blockRms(x: Float32Array, hop: number, count: number): Float32Array {
+  const out = new Float32Array(count);
+  for (let b = 0; b < count; b++) {
+    let sum = 0;
+    const start = b * hop;
+    const end = Math.min(x.length, start + hop);
+    for (let i = start; i < end; i++) {
+      const v = x[i]!;
+      if (Number.isFinite(v)) sum += v * v;
+    }
+    out[b] = Math.sqrt(sum / Math.max(1, end - start));
+  }
+  return out;
+}
+
+/** 細かい時刻の音量 (FINE_RATE 回/秒の RMS)。音全体と、歌声の帯域 (300Hz〜3kHz を 2 次のフィルタで取り出す) */
+export function fineEnvelope(mono: Float32Array, sampleRate: number, rate = FINE_RATE): FineEnvelope {
+  const hop = Math.max(1, Math.round(sampleRate / rate));
+  const count = Math.ceil(mono.length / hop);
+  const band = biquad(biquad(mono, sampleRate, VOCAL_HZ[0], 'hp'), sampleRate, VOCAL_HZ[1], 'lp');
+  return { rate: sampleRate / hop, energy: blockRms(mono, hop, count), vocal: blockRms(band, hop, count) };
+}
+
 /**
  * モノラル PCM (Float32Array, -1..1) から AudioAnalysis を計算する。ブラウザ非依存の純粋関数で、
  * AudioContext を必要としないため単体テストで合成信号を直接渡せる。
@@ -234,10 +295,11 @@ export function analyzeSamples(mono: Float32Array, sampleRate: number, opts: Ana
   const fluxSum = fluxRaw.reduce((s, v) => s + v, 0);
   const hasOnsetSignal = fluxSum > 1e-6 * frameCount;
   const { bpm, beats } = hasOnsetSignal ? estimateTempo(flux, frameRate, duration) : { bpm: 0, beats: [] };
+  const fine = fineEnvelope(mono, sampleRate);
 
   return {
     frameRate, duration, sampleRate, times,
     bass, mid, high, rms, peak, spectralEnergy, flux, vocalLikeness, bands,
-    bpm, beats,
+    bpm, beats, fine,
   };
 }

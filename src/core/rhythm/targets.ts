@@ -1,5 +1,5 @@
 import type { AudioAnalysis } from '../audio/analyze';
-import { findOnsetCandidates } from '../lyrics/candidates';
+import { findOnsetCandidates, refineOnsetTimes } from '../lyrics/candidates';
 import type { SnapTargets } from '../lyrics/snap';
 
 /**
@@ -13,7 +13,12 @@ export function barSnapTargetsFor(analysis: AudioAnalysis): SnapTargets {
   let t = cache.get(analysis);
   if (!t) {
     t = {
-      candidates: findOnsetCandidates(analysis.flux, analysis.frameRate, { window: 0.08 }).map((c) => c.t),
+      // 時刻は、細かい時刻の音全体の音量で合わせ直す (解析の窓のせいで打楽器の出だしは約 30ms 早めに出るため)
+      candidates: refineOnsetTimes(
+        findOnsetCandidates(analysis.flux, analysis.frameRate, { window: 0.08 }),
+        analysis.fine?.energy,
+        analysis.fine?.rate ?? 0,
+      ).map((c) => c.t),
       beats: analysis.beats.slice().sort((a, b) => a - b),
     };
     cache.set(analysis, t);

@@ -1,6 +1,6 @@
 import type { AudioAnalysis } from '../audio/analyze';
 import type { LyricsSettings } from '../types';
-import { findOnsetCandidates, type OnsetCandidate } from './candidates';
+import { findOnsetCandidates, refineOnsetTimes, type OnsetCandidate } from './candidates';
 import { parseLyricsSource, type ParsedLyrics } from './parse';
 import type { SnapTargets } from './snap';
 import { computeLineTimes, type LineTimes } from './timing';
@@ -49,7 +49,9 @@ const targetCache = new WeakMap<AudioAnalysis, SyncTargets>();
 export function syncTargetsFor(analysis: AudioAnalysis): SyncTargets {
   let t = targetCache.get(analysis);
   if (!t) {
-    const onsets = findOnsetCandidates(analysis.vocalLikeness, analysis.frameRate);
+    // 候補の時刻は、細かい時刻の歌声の帯域の音量で合わせ直す (解析の窓のせいで早めに出るため)
+    const fine = analysis.fine;
+    const onsets = refineOnsetTimes(findOnsetCandidates(analysis.vocalLikeness, analysis.frameRate), fine?.vocal, fine?.rate ?? 0);
     t = { onsets, candidates: onsets.map((c) => c.t), beats: analysis.beats.slice().sort((a, b) => a - b) };
     targetCache.set(analysis, t);
   }

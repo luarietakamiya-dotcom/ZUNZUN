@@ -103,3 +103,62 @@ export function findOnsetCandidates(vocal: Float32Array, frameRate: number, opts
   }
   return out;
 }
+
+export interface RefineOptions {
+  /** 候補の時刻より何秒前まで探すか。解析の窓のせいで候補は早めに出るので、前は狭く */
+  before?: number;
+  /** 候補の時刻より何秒後まで探すか */
+  after?: number;
+  /** 最大の増え方のこの割合以上に増えた最初の区間を出だしとする (合成音で 0.5 / 0.3 / 0.2 を比べ、雑音の中のゆっくりした声でも遅れない 0.2 にした) */
+  threshold?: number;
+  /** 音量をならす幅 (前後の区間の数) */
+  smooth?: number;
+}
+
+/**
+ * 候補の時刻を、細かい時刻の音量 (AudioAnalysis.fine、5ms ごとの RMS) で合わせ直す。
+ * 解析の特徴量は約 46ms の窓の真ん中を時刻にしているため、鋭い出だしほど早い時刻に出る
+ * (合成音で測ると、キック・クリックで約 30ms、立ち上がりの速い声で約 13ms 早い。ゆっくり立ち上がる声ではほぼ 0)。
+ * 立ち上がりの速さでずれ方が違うので、一律に足すのではなく、候補の前後の音量の増え方から出だしを決める:
+ * 範囲の中で (少しならした音量が) 最大の増え方の 2 割以上増えた「最初の」区間の頭を出だしとする。鋭い出だしはその 1 区間、
+ * ゆっくり立ち上がる声は立ち上がりの始まりになる (最初は「いちばん増えた区間」にしていたが、60ms かけて大きくなる声では
+ * どの区間もほぼ同じだけ増えるため、立ち上がりの途中が選ばれて 40〜50ms 遅れた)。
+ * 探す範囲 (既定で 20ms 前〜50ms 後) の中で音量が増えていなければ、元の時刻のまま。強さは変えない。
+ * 伴奏のある曲では、同じ帯域のほかの楽器の出だしに引っ張られることがあるので、範囲は狭くしている。
+ */
+export function refineOnsetTimes<T extends { t: number }>(items: readonly T[], env: Float32Array | undefined, rate: number, opts: RefineOptions = {}): T[] {
+  if (!env || env.length < 2 || !(rate > 0)) return items.slice();
+  const before = opts.before ?? 0.02;
+  const after = opts.after ?? 0.05;
+  const frac = opts.threshold ?? 0.2;
+  const smooth = Math.max(0, Math.round(opts.smooth ?? 1));
+  // 前後 smooth 区間でならした音量 (雑音の揺れで、ゆっくりした立ち上がりの始まりを見逃さないように)
+  const lv = (i: number): number => {
+    let sum = 0;
+    let n = 0;
+    for (let k = i - smooth; k <= i + smooth; k++) {
+      if (k >= 0 && k < env.length) {
+        sum += env[k]!;
+        n++;
+      }
+    }
+    return n > 0 ? sum / n : 0;
+  };
+  const out = items.map((it) => {
+    if (!Number.isFinite(it.t)) return it;
+    const i0 = Math.max(1, Math.floor((it.t - before) * rate));
+    const i1 = Math.min(env.length - 1, Math.ceil((it.t + after) * rate));
+    const rises: number[] = [];
+    let maxRise = 0;
+    for (let i = i0; i <= i1; i++) {
+      const r = lv(i) - lv(i - 1);
+      rises.push(r);
+      if (r > maxRise) maxRise = r;
+    }
+    if (!(maxRise > 0)) return it;
+    const k = rises.findIndex((r) => r >= maxRise * frac);
+    // ならした分 (smooth 区間) だけ増え始めが前に出るので、その分を戻す
+    return k < 0 ? it : { ...it, t: Math.round(((i0 + k + smooth) / rate) * 10000) / 10000 };
+  });
+  return out.sort((a, b) => a.t - b.t);
+}
