@@ -35,6 +35,7 @@ export interface CharMod {
   a?: number;
   blur?: number;
   color?: string;
+  skew?: number;
   hide?: boolean;
 }
 
@@ -71,6 +72,10 @@ export interface PackEnv {
   sc: PackScheme;
   fx: { motion?: number; decor?: number };
   cut: { dur: number; seed?: number; inDur: number; outDur: number };
+  /** 今の拍 (plan.beats から。拍が無い曲では null)。index = 何拍目、since = 拍からの経過 (秒)、len = 拍の長さ (秒) */
+  beat?: { index: number; since: number; len: number } | null;
+  /** 今の音の大きさ (0..1、JIZURA の plan.energy。無ければ null) */
+  energy?: number | null;
   line(pts: [number, number][], color: string, lw?: number, a?: number, ghost?: boolean): void;
   circle(cx: number, cy: number, r: number, fill: string | null, stroke: string | null, lw?: number, a?: number, ghost?: boolean): void;
 }

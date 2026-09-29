@@ -2,6 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsSettings } from '../../types';
 import { buildJizuraProject, installTimingPatch, type JizuraApi } from '../jizura-adapter';
 import { CALM_STYLE_KEY } from './calm';
+import { INTENSE_STYLE_KEY } from './intense';
+import { flashAllowed, MAX_FLASH_HZ } from './util';
 import { applyMotionPack, packForMotion, PACKS, registerMotionPacks } from './index';
 import type { PackJ } from './types';
 
@@ -31,11 +33,13 @@ const lyricsOf = (style: string, custom: LyricsSettings['motion']['custom'] = nu
 });
 const audio = { duration: 34, beats: Array.from({ length: 64 }, (_, i) => i * 0.5), energy: new Float32Array(34 * 60).fill(0.3), energyRate: 60 };
 
-function planOf(lyrics: LyricsSettings): { json: string; cuts: Cut[]; project: Record<string, unknown> } {
+function planOf(lyrics: LyricsSettings): { json: string; used: string; cuts: Cut[]; project: Record<string, unknown> } {
   const project = buildJizuraProject(lyrics, J.defaultProject(), { seed: 5, aspect: '16:9', fps: 30 });
   applyMotionPack(project, lyrics.motion, J);
   const plan = J.plan(project, audio);
-  return { json: JSON.stringify(plan), cuts: plan.cuts as Cut[], project };
+  // 使われた演出を見るのはカットと出来事 (画面効果) だけ (plan.style にはスタイルの「選ばれやすさ」の表として名前が載る)
+  const used = JSON.stringify({ cuts: plan.cuts, events: (plan as { events?: unknown }).events });
+  return { json: JSON.stringify(plan), used, cuts: plan.cuts as Cut[], project };
 }
 
 type Cut = { line: number; layout?: string; enter?: string; exit?: string; hold?: string; cam?: string; decor?: { id: string }[] };
@@ -71,6 +75,30 @@ describe('演出パック (本物の JIZURA)', () => {
     expect(project.fx).toMatchObject({ glitch: 0, flash: false });
   });
 
+  it('衝撃: オリジナルの演出が使われ、pop / glitch / graphic の印のない JIZURA の演出は使われない。点滅・反転の効果は出てこない', () => {
+    registerMotionPacks(J);
+    const { used, cuts, project } = planOf(lyricsOf(INTENSE_STYLE_KEY));
+    const lyricCuts = cuts.filter((c) => c.line >= 0);
+    const ours = (k?: string) => !!k && k.startsWith('zz');
+    expect(lyricCuts.filter((c) => ours(c.enter)).length).toBeGreaterThan(0);
+    expect(lyricCuts.filter((c) => ours(c.exit)).length).toBeGreaterThan(0);
+    expect(lyricCuts.filter((c) => ours(c.cam)).length).toBeGreaterThan(0);
+    expect(lyricCuts.filter((c) => !!c.decor?.some((d) => ours(d.id))).length).toBeGreaterThan(0);
+    const ok = (g: string, k?: string) => !k || k === 'cut' || ours(k) || !!J.registry(g)[k]?.tags?.some((t) => ['pop', 'glitch', 'graphic'].includes(t));
+    for (const c of lyricCuts) {
+      for (const g of ['enter', 'exit', 'hold', 'cam', 'layout'] as const) expect(ok(g, c[g]), `${g} ${c[g]}`).toBe(true);
+      for (const d of c.decor ?? []) expect(ok('decor', d.id), `decor ${d.id}`).toBe(true);
+    }
+    for (const bad of ['strobe', 'invert', 'whiteFrame', 'bandInvert', 'mirrorFlash', 'negativeRing', 'flashCross', 'bloomFlash']) expect(used).not.toContain(`"${bad}"`);
+    expect(project.fx).toMatchObject({ flash: false });
+  });
+
+  it('静寂: 画面を光らせる効果 (calm の印があるもの) も出てこない', () => {
+    registerMotionPacks(J);
+    const { used } = planOf(lyricsOf(CALM_STYLE_KEY));
+    for (const bad of ['flashCross', 'bloomFlash', 'whiteFrame']) expect(used).not.toContain(`"${bad}"`);
+  });
+
   it('静寂を元にしたマイスタイルでもパックが効く。ほかのスタイルでは何も足さない', () => {
     const custom = { name: 'x', base: CALM_STYLE_KEY } as NonNullable<LyricsSettings['motion']['custom']>;
     expect(packForMotion({ style: CUSTOM_STYLE_KEY, custom })?.styleKey).toBe(CALM_STYLE_KEY);
@@ -90,3 +118,17 @@ describe('演出パック (本物の JIZURA)', () => {
     }
   });
 });
+
+describe('flashAllowed (光過敏への配慮: 毎秒 3 回まで)', () => {
+  it('光らせる拍の間隔が 1/3 秒より短くならない', () => {
+    for (const len of [0.1, 0.15, 0.2, 0.25, 0.3333, 0.4, 0.5, 1]) {
+      const lit = Array.from({ length: 200 }, (_, i) => i).filter((i) => flashAllowed(i, len));
+      const gaps = lit.slice(1).map((v, k) => (v - lit[k]!) * len);
+      expect(Math.min(...gaps)).toBeGreaterThanOrEqual(1 / MAX_FLASH_HZ - 1e-6);
+      // 遅い曲では毎拍光る
+      if (len >= 1 / MAX_FLASH_HZ) expect(lit.length).toBe(200);
+    }
+    expect(flashAllowed(0, 0)).toBe(false);
+  });
+});
+

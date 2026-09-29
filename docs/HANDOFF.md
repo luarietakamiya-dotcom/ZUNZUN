@@ -1,6 +1,6 @@
 # 引き継ぎメモ（ローカル Claude Code ⇄ Cloud Session）
 
-最終更新: 2026-09-29（オリジナルの歌詞モーションの 1 つ目「静寂」を足した時点）。
+最終更新: 2026-09-30（ユーザーが寝ている間に、オリジナルの歌詞モーション「衝撃」「ロック」などを進めている時点。**この間のコミットは push していない**）。
 これまでの作業は Claude Code の Cloud Session で行い、`npm install` が必要な確認だけをユーザーがローカル PC（Windows / PowerShell）で実行していた。
 ローカルの Claude Code なら `npm` も `git` も直接使えるので、以後は同じ場所で実装と検証を完結できる。
 
@@ -107,7 +107,12 @@ R3 の要点（`src/core/lyrics/jizura-adapter.ts`）:
 - 確認できたこと: 本物の JIZURA（jsdom）で、7/8 の拍を渡すと plan のビートがそれになり、行の中のカットの切れ目が拍の上に乗る（`jizura-compat.test.ts`）。ヘッドレス Chromium で実際に描き、切れ目が 3.75（小節の頭）→ 4.25 → 4.75（まとまり）→ 5.5 …になること、同じ設定なら同じ絵、オフとは違う絵になること。**実際の曲での見た目は未確認**。
 
 オリジナルの歌詞モーション（演出パック。方針は `docs/ARCHITECTURE.md`「オリジナルの歌詞モーション（演出パック）の方針」）:
-- **① しくみ + 「静寂 (ZUNZUN)」: 実装済み・ユーザー確認待ち。次は ② 激しい・ロック**（ユーザーは「あとでもっと増やす」予定）。
+- **① しくみ + 「静寂 (ZUNZUN)」、② の「衝撃 (ZUNZUN)」: 実装済み・ユーザー確認待ち。次は ② のロック**（ユーザーは「あとでもっと増やす」予定。2026-09-29 夜「寝てる間に進めててほしい」）。
+- 共通（`packs/util.ts`）: `staggered` / イージング / `centerBox` / `allowOnlyTagged`（印のある JIZURA の演出だけを残す）/ `disable` / `flashAllowed`（**光過敏への配慮: 光る演出は毎秒 3 回まで**。拍の長さから「何拍おきに光らせるか」を決める。テストあり）/ `beatOf`（`env.beat`、無ければ 0.5 秒ごとの仮の拍）。
+- **コマ打ち**: JIZURA は既定で時刻を 12 コマ/秒に区切る（`fx.koma: 12`）。短い登場（0.16 秒）が 2 コマしか無くなるので、パックでは `koma: 0`（出力のフレームごと）にしている（静寂も、ゆっくりをなめらかにするため）。
+  - なお、登場の途中のコマに文字が少ししか写らないのは、JIZURA のレイアウトが行の中の語を少しずつずらして出すため（JIZURA 自身の登場や「登場なし」に差し替えても同じだった）。見た目の確認は、1 カットを登場 → 表示中 → 退場の 4 コマで並べた一覧で行う（scratchpad の `pack-sheet.mjs`。クラウドの作業用で、リポジトリには入れていない）。
+- 衝撃（`packs/intense.ts`、EDM・速い曲）: acid を元に配色を作り直し（白い文字、シアンとマゼンタ）、太いゴシック、色ズレ 1.2。JIZURA の演出は pop / glitch / graphic の印があるものだけ。**画面を点滅・反転させる JIZURA の効果は使わない**（ストロボ・フラッシュ・反転・帯反転・ミラー・白コマ・反転リング・ブルームのフラッシュ・フラッシュ転換）。オリジナル 11 個: 登場 叩きつける `zzSlam`・シャッター `zzShutter`・奥から飛び込む `zzFlyIn`、退場 切り裂く `zzSlice`・吹き飛ぶ `zzBlast`、表示中 拍で脈打つ `zzBeatPump`・拍でずれる `zzJolt`、装飾 スピード線 `zzSpeedLines`・拍のバー `zzEqBars`・縁の閃き `zzEdgeFlash`（画面の縁だけ、弱く、毎秒 3 回まで）、カメラ キックで揺れる `zzKick`。どれも拍（`env.beat`）に合わせる。
+  - 静寂でも、calm の印がある「ブルームのフラッシュ」「フラッシュ転換」「白コマ」を無効にした（「フラッシュは使わない」の約束どおりに）。
 - しくみ（`src/core/lyrics/packs/`）: `types.ts`（`MotionPack` = `styleKey` / `set` / `buildStyle(J)` / `effects(J)` / `configure(project, J)`）、`index.ts`（`PACKS` に 1 行足すとパックが増える。`registerMotionPacks` は `loadJizura` で 1 回、演出に `set` を付けて `J.register`、スタイルを `J.STYLES` へ。`applyMotionPack` は `LyricMotion.create` で、スタイル（かマイスタイルの元）がパックのものなら `project[set] = true` と `configure`）。`jizuraStyles` はパックのスタイルを一覧の先頭に出す。変拍子パック（`oddmeter-pack.ts`）は前からの作りのまま（そのうちこの形にまとめてよい）。
 - 静寂（`packs/calm.ts`）: gold を元に配色を作り直し（象牙色の文字、月明かりの青と温かい金、暗い背景の配色だけ）、細い明朝、粒 0.25、色ズレ 0.15。`configure` で JIZURA の演出は **calm の印があるものだけ**（layout / enter / exit / hold / cam / fx / trans / treat / bg / decor）、`fx.glitch = 0`・`chroma = 0.15`・`flash = false`。オリジナル 10 個: 登場 霧から浮かぶ `zzMistRise`・にじみ出る `zzInkBloom`・一文字ずつ灯る `zzLantern`、退場 静かに昇る `zzAscend`・溶けて消える `zzMelt`（長さは `inDur`/`outDur` で 0.4〜1.6 秒とゆっくり）、表示中 ゆっくり呼吸 `zzBreath`・月光が撫でる `zzMoonSweep`、装飾 光の塵 `zzDust`・細い線 `zzHairline`、カメラ ゆるやかな漂い `zzFloat`。レイアウトは余白の多いシンプルなものを選ばれやすく（calm の印のあるレイアウトにも泡・円軌道・通知のような賑やかなものが混ざっていたので、それらは選ばれにくく）。
   - 選ばれ方（10 行 40 カットの試し）: オリジナルが登場 11・退場 10・表示中 7・カメラ 11・装飾 24 カット。登場の途中などで 'cut' になるのは、行の中のカットのつなぎを JIZURA が決めるため。

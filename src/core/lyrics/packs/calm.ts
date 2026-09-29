@@ -1,4 +1,5 @@
 import type { MotionPack, PackBox, PackEffect, PackEnv, PackItem, PackJ } from './types';
+import { allowOnlyTagged, centerBox, disable, easeInOut, easeOut, staggered } from './util';
 
 /**
  * 静寂 (ZUNZUN)。バラード・アンビエント向け: ゆっくり浮かんで、ゆっくり消える。
@@ -10,23 +11,10 @@ export const CALM_STYLE_KEY = 'zz-calm';
 export const CALM_SET = 'zzCalm';
 const PACK = 'zunzun-calm';
 
-/** 0..1 を少しずつずらした進み具合 (文字 i が spread の割合だけ遅れて始まる) */
-function staggered(p: number, i: number, n: number, spread: number): number {
-  const d = n > 1 ? (i / (n - 1)) * spread : 0;
-  return Math.min(1, Math.max(0, (p - d) / Math.max(0.01, 1 - spread)));
-}
-
-const easeOut = (x: number): number => 1 - (1 - x) ** 3;
-const easeInOut = (x: number): number => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
-
 /** ゆっくり入るための長さ (カットの長さ dur から)。静かな曲はカットが長いので、長めに使う */
 const slowIn = (dur: number): number => Math.min(1.6, Math.max(0.45, dur * 0.42));
 const slowOut = (dur: number): number => Math.min(1.3, Math.max(0.4, dur * 0.34));
-
-function center(env: PackEnv, bb: PackBox | null): PackBox {
-  if (bb && Number.isFinite(bb.x0) && bb.x1 > bb.x0 && bb.y1 > bb.y0) return bb;
-  return { x0: env.W * 0.3, x1: env.W * 0.7, y0: env.H * 0.44, y1: env.H * 0.56 };
-}
+const center = centerBox;
 
 export function calmEffects(J: PackJ): PackEffect[] {
   const set = CALM_SET;
@@ -295,20 +283,13 @@ export const calmPack: MotionPack = {
   },
   effects: calmEffects,
   configure(project, J) {
-    const enabled = (project.enabled ?? {}) as Record<string, Record<string, boolean>>;
-    for (const g of RESTRICTED_GROUPS) {
-      const reg = J.registry(g);
-      const map = { ...(enabled[g] ?? {}) };
-      for (const k of J.order(g)) {
-        const d = reg[k];
-        if (!d || d.pack === PACK) continue;
-        if (!d.tags?.includes('calm')) map[k] = false;
-      }
-      enabled[g] = map;
-    }
-    project.enabled = enabled;
+    allowOnlyTagged(project, J, PACK, ['calm'], RESTRICTED_GROUPS);
+    // calm の印があっても、画面を光らせる効果は使わない (「フラッシュは使わない」)
+    disable(project, 'fx', ['bloomFlash', 'flash', 'whiteFrame']);
+    disable(project, 'trans', ['flashCross']);
     // グリッチ・色ズレの跳ね・フラッシュを使わない (フラッシュは画面を白く光らせる演出)
     const fx = (project.fx ?? {}) as Record<string, unknown>;
-    project.fx = { ...fx, glitch: 0, chroma: 0.15, flash: false };
+    // koma 0 = 出力のフレームごとに描く (ゆっくりした動きをなめらかに。既定は 12 コマ/秒のコマ打ち)
+    project.fx = { ...fx, glitch: 0, chroma: 0.15, flash: false, koma: 0, onTwos: false };
   },
 };
