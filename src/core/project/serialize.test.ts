@@ -15,6 +15,7 @@ function state(overrides: Partial<ProjectSourceState> = {}): ProjectSourceState 
     audio: { isLoaded: false, fileName: '', sha256: '', duration: 0, sampleRate: 0, bpm: 0 },
     overlays: [],
     lyrics: null,
+    rhythm: null,
     exportSettings: defaultProject().export,
     ...overrides,
   };
@@ -74,6 +75,15 @@ describe('buildProjectFile', () => {
     const project = buildProjectFile(state({ exportSettings }));
     expect(project.export).toEqual(exportSettings);
     expect(project.export).not.toBe(exportSettings);
+  });
+
+  it('小節と拍子 (rhythm) を複製して保存し、保存 → 読み込みで同じ内容に戻る', () => {
+    expect(buildProjectFile(state()).rhythm).toBeNull();
+    const rhythm = { enabled: true, bars: [0.5, 2.25, 4], meters: [{ bar: 0, pattern: '2+2+3' }, { bar: 2, pattern: '4' }] };
+    const project = buildProjectFile(state({ rhythm }));
+    expect(project.rhythm).toEqual(rhythm);
+    expect(project.rhythm!.bars).not.toBe(rhythm.bars);
+    expect(sanitizeProject(JSON.parse(JSON.stringify(project)))).toEqual(project);
   });
 
   it('歌詞が無ければ null、あれば複製して保存し、保存 → 読み込みで同じ内容に戻る', () => {

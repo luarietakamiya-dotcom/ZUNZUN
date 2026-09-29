@@ -1,8 +1,11 @@
+import { formatGrouping, parseGrouping } from '../rhythm/grouping';
+import { normalizeBars } from '../rhythm/grid';
 import {
   defaultCommonParams,
   defaultLyrics,
   defaultLyricsMotion,
   defaultProject,
+  defaultRhythm,
   type CommonParams,
   type ExportSettings,
   type LyricsCustomStyle,
@@ -10,6 +13,7 @@ import {
   type LyricsSettings,
   type OverlayLayer,
   type ProjectFile,
+  type RhythmSettings,
 } from '../types';
 
 /**
@@ -195,6 +199,31 @@ function sanitizeLyricsMotion(raw: unknown): LyricsMotion {
   };
 }
 
+const MAX_BARS = 10_000;
+const MAX_METERS = 500;
+
+/** 小節と拍子 (変拍子モード)。壊れた小節の時刻・拍子は捨て、拍子が 1 つも無ければ既定 (4) にする */
+function sanitizeRhythm(raw: unknown): RhythmSettings | null {
+  if (!isPlainObject(raw)) return null;
+  const base = defaultRhythm();
+  const bars = Array.isArray(raw.bars) ? raw.bars.filter(isFiniteNumber).slice(0, MAX_BARS).map((t) => clamp(t, 0, MAX_LYRIC_TIME)) : [];
+  const byBar = new Map<number, string>();
+  if (Array.isArray(raw.meters)) {
+    for (const m of raw.meters.slice(0, MAX_METERS)) {
+      if (!isPlainObject(m) || !isFiniteNumber(m.bar) || typeof m.pattern !== 'string') continue;
+      const groups = parseGrouping(m.pattern);
+      if (!groups) continue;
+      byBar.set(Math.round(clamp(m.bar, 0, MAX_BARS)), formatGrouping(groups));
+    }
+  }
+  const meters = [...byBar.entries()].sort((a, b) => a[0] - b[0]).map(([bar, pattern]) => ({ bar, pattern }));
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : base.enabled,
+    bars: normalizeBars(bars),
+    meters: meters.length > 0 ? meters : base.meters,
+  };
+}
+
 const HEX6_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
 /** オリジナルのスタイル。形が崩れていれば null (元のスタイルが無いと作れないため、部分的には直さない) */
@@ -284,6 +313,7 @@ export function sanitizeProject(raw: unknown): ProjectFile {
     },
     overlays: sanitizeOverlays(raw.overlays),
     lyrics: sanitizeLyrics(raw.lyrics),
+    rhythm: sanitizeRhythm(raw.rhythm),
     colors: sanitizeColors(raw.colors),
     fonts: sanitizeFonts(raw.fonts),
     export: sanitizeExport(raw.export, base.export),

@@ -10,6 +10,7 @@ import {
   type LyricsTiming,
   type OverlayLayer,
   type ProjectFile,
+  type RhythmSettings,
 } from './types';
 
 type Listener = () => void;
@@ -36,7 +37,19 @@ class Store {
   private readonly overlayFiles = new Map<string, File>();
   private _exportSettings: ExportSettings = defaultProject().export;
   private _lyrics: LyricsSettings | null = null;
+  private _rhythm: RhythmSettings | null = null;
   private readonly listeners = new Set<Listener>();
+
+  /** 小節と拍子 (変拍子モード)。使っていない間は null。Project JSON の rhythm に保存される。 */
+  get rhythm(): RhythmSettings | null {
+    return this._rhythm;
+  }
+
+  /** 小節と拍子を丸ごと差し替える (null で使わない状態に戻す)。 */
+  setRhythm(next: RhythmSettings | null): void {
+    this._rhythm = next;
+    this.emit();
+  }
 
   /** Export タブの書き出し設定 (サイズ/fps/画質)。Project JSON の export に保存される。 */
   get exportSettings(): ExportSettings {
@@ -199,6 +212,7 @@ class Store {
     this.overlayFiles.clear();
     this._exportSettings = { ...project.export };
     this._lyrics = project.lyrics;
+    this._rhythm = project.rhythm;
     this.emit();
   }
 

@@ -128,10 +128,32 @@ export interface ProjectFile {
   overlays: OverlayLayer[];
   /** 歌詞と、その同期タイミング・歌詞モーションの設定。歌詞を使わないプロジェクトは null */
   lyrics: LyricsSettings | null;
+  /** 小節と拍子 (変拍子モード)。使わないプロジェクトは null (docs/ARCHITECTURE.md「変拍子（リズム）の方針」) */
+  rhythm: RhythmSettings | null;
   colors: Record<string, string>;
   fonts: Record<string, string>;
   export: ExportSettings;
 }
+
+/**
+ * 小節と拍子 (変拍子モード)。小節の頭はユーザーがタップで決め、拍子は区間ごとに「拍のまとまり」で書く。
+ * 例: "2+2+3" = 1 小節を 7 等分して 2・2・3 にまとめる (7/8)。"4" = 4 等分 (4/4)。"3+2" = 5 等分を 3・2 に。
+ */
+export interface RhythmSettings {
+  /** 変拍子モードを使うか (オフなら自動検出のビートを使う) */
+  enabled: boolean;
+  /** 小節の頭の時刻 (秒、昇順) */
+  bars: number[];
+  /** 拍子の区間。bar 番目の小節 (0 始まり) から pattern の拍子になる。bar の昇順 */
+  meters: RhythmMeter[];
+}
+
+export interface RhythmMeter {
+  bar: number;
+  pattern: string;
+}
+
+export const defaultRhythm = (): RhythmSettings => ({ enabled: false, bars: [], meters: [{ bar: 0, pattern: '4' }] });
 
 /** 歌詞の入力形式。'text' = 貼り付けたテキスト (JIZURA の記法: `/` で区切り、`*強調*`、`[間奏]` など) */
 export type LyricsSource = 'text' | 'lrc' | 'srt';
@@ -264,6 +286,7 @@ export const defaultProject = (): ProjectFile => ({
   },
   overlays: [],
   lyrics: null,
+  rhythm: null,
   colors: {},
   fonts: {},
   export: {

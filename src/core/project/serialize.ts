@@ -1,4 +1,12 @@
-import { defaultProject, type CommonParams, type ExportSettings, type LyricsSettings, type OverlayLayer, type ProjectFile } from '../types';
+import {
+  defaultProject,
+  type CommonParams,
+  type ExportSettings,
+  type LyricsSettings,
+  type OverlayLayer,
+  type ProjectFile,
+  type RhythmSettings,
+} from '../types';
 
 /** buildProjectFile が必要とする AudioEngine の最小の形 (実体は core/audio/engine.ts の AudioEngine)。 */
 export interface ProjectAudioSource {
@@ -19,6 +27,8 @@ export interface ProjectSourceState {
   overlays: OverlayLayer[];
   /** 歌詞を使わない場合は null */
   lyrics: LyricsSettings | null;
+  /** 小節と拍子 (変拍子モード)。使わない場合は null */
+  rhythm: RhythmSettings | null;
   exportSettings: ExportSettings;
 }
 
@@ -62,6 +72,9 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
           // オリジナルのスタイルは入れ子のオブジェクトなので、まるごと複製する (保存したあとに画面で変えても共有しない)
           motion: JSON.parse(JSON.stringify(state.lyrics.motion)) as typeof state.lyrics.motion,
         }
+      : null,
+    rhythm: state.rhythm
+      ? { enabled: state.rhythm.enabled, bars: [...state.rhythm.bars], meters: state.rhythm.meters.map((m) => ({ ...m })) }
       : null,
     colors: {},
     fonts: {},

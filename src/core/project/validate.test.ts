@@ -182,6 +182,27 @@ describe('sanitizeProject', () => {
     expect(Object.keys(m.custom!)).toEqual(['name', 'base', 'colors', 'fonts', 'texture']);
   });
 
+  it('rhythm: 無ければ null。小節の頭は昇順・範囲内、壊れた拍子は捨て、同じ小節の指定は後勝ち、無ければ 4', () => {
+    const raw = validRaw() as Record<string, unknown>;
+    expect(sanitizeProject(raw).rhythm).toBeNull();
+    raw.rhythm = {
+      enabled: true,
+      bars: [4, 'x', 2, -1, 1e9, 2.01],
+      meters: [{ bar: 3, pattern: '３＋２' }, { bar: 0, pattern: '2+2+3' }, { bar: 3, pattern: '7' }, { bar: 5, pattern: 'bad' }, 'x'],
+      evil: 1,
+    };
+    const r = sanitizeProject(raw).rhythm!;
+    expect(r.enabled).toBe(true);
+    expect(r.bars).toEqual([0, 2, 4, 86400]);
+    expect(r.meters).toEqual([
+      { bar: 0, pattern: '2+2+3' },
+      { bar: 3, pattern: '7' },
+    ]);
+    expect(Object.keys(r)).toEqual(['enabled', 'bars', 'meters']);
+    raw.rhythm = { bars: [1, 2] };
+    expect(sanitizeProject(raw).rhythm).toEqual({ enabled: false, bars: [1, 2], meters: [{ bar: 0, pattern: '4' }] });
+  });
+
   it('lyrics.motion.custom: 元のスタイルが無い・壊れているときは null', () => {
     const raw = validRaw() as Record<string, unknown>;
     raw.lyrics = { text: 'a', motion: { custom: { name: 'x', colors: {} } } };
