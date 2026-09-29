@@ -1,6 +1,6 @@
 # 引き継ぎメモ（ローカル Claude Code ⇄ Cloud Session）
 
-最終更新: 2026-09-29（共通の再生欄を足した時点）。
+最終更新: 2026-09-29（オリジナルの歌詞モーションの 1 つ目「静寂」を足した時点）。
 これまでの作業は Claude Code の Cloud Session で行い、`npm install` が必要な確認だけをユーザーがローカル PC（Windows / PowerShell）で実行していた。
 ローカルの Claude Code なら `npm` も `git` も直接使えるので、以後は同じ場所で実装と検証を完結できる。
 
@@ -105,6 +105,13 @@ R3 の要点（`src/core/lyrics/jizura-adapter.ts`）:
 - `attachRhythm(plan, grid)`: `plan.zzRhythm` に小節とまとまりの並びを添える（ZUNZUN の拡張。JIZURA 本体は読まない）。`planRhythmAt(plan, t)` で「何小節目・何番目のまとまり・進み具合」が取れる（R4 の演出用）。
 - `LyricMotionOptions.rhythm`、`MotionRequest.rhythm`、`Mp4ExportJob.rhythm` を追加。プレビュー（Visualizer / Lyrics タブ）と書き出しは `store.rhythm` を渡す（書き出しは開始時に複製）。作り直しのキーは、変拍子モードがオンのときだけ小節と拍子を含む（オフの間に叩き直しても作り直さない）。
 - 確認できたこと: 本物の JIZURA（jsdom）で、7/8 の拍を渡すと plan のビートがそれになり、行の中のカットの切れ目が拍の上に乗る（`jizura-compat.test.ts`）。ヘッドレス Chromium で実際に描き、切れ目が 3.75（小節の頭）→ 4.25 → 4.75（まとまり）→ 5.5 …になること、同じ設定なら同じ絵、オフとは違う絵になること。**実際の曲での見た目は未確認**。
+
+オリジナルの歌詞モーション（演出パック。方針は `docs/ARCHITECTURE.md`「オリジナルの歌詞モーション（演出パック）の方針」）:
+- **① しくみ + 「静寂 (ZUNZUN)」: 実装済み・ユーザー確認待ち。次は ② 激しい・ロック**（ユーザーは「あとでもっと増やす」予定）。
+- しくみ（`src/core/lyrics/packs/`）: `types.ts`（`MotionPack` = `styleKey` / `set` / `buildStyle(J)` / `effects(J)` / `configure(project, J)`）、`index.ts`（`PACKS` に 1 行足すとパックが増える。`registerMotionPacks` は `loadJizura` で 1 回、演出に `set` を付けて `J.register`、スタイルを `J.STYLES` へ。`applyMotionPack` は `LyricMotion.create` で、スタイル（かマイスタイルの元）がパックのものなら `project[set] = true` と `configure`）。`jizuraStyles` はパックのスタイルを一覧の先頭に出す。変拍子パック（`oddmeter-pack.ts`）は前からの作りのまま（そのうちこの形にまとめてよい）。
+- 静寂（`packs/calm.ts`）: gold を元に配色を作り直し（象牙色の文字、月明かりの青と温かい金、暗い背景の配色だけ）、細い明朝、粒 0.25、色ズレ 0.15。`configure` で JIZURA の演出は **calm の印があるものだけ**（layout / enter / exit / hold / cam / fx / trans / treat / bg / decor）、`fx.glitch = 0`・`chroma = 0.15`・`flash = false`。オリジナル 10 個: 登場 霧から浮かぶ `zzMistRise`・にじみ出る `zzInkBloom`・一文字ずつ灯る `zzLantern`、退場 静かに昇る `zzAscend`・溶けて消える `zzMelt`（長さは `inDur`/`outDur` で 0.4〜1.6 秒とゆっくり）、表示中 ゆっくり呼吸 `zzBreath`・月光が撫でる `zzMoonSweep`、装飾 光の塵 `zzDust`・細い線 `zzHairline`、カメラ ゆるやかな漂い `zzFloat`。レイアウトは余白の多いシンプルなものを選ばれやすく（calm の印のあるレイアウトにも泡・円軌道・通知のような賑やかなものが混ざっていたので、それらは選ばれにくく）。
+  - 選ばれ方（10 行 40 カットの試し）: オリジナルが登場 11・退場 10・表示中 7・カメラ 11・装飾 24 カット。登場の途中などで 'cut' になるのは、行の中のカットのつなぎを JIZURA が決めるため。
+- 確認できたこと: `packs/packs.test.ts`（本物の JIZURA を jsdom で: 登録の前後で noir / crimson / gold のカット割りが JSON で完全に同じ、静寂でオリジナルが使われ calm の印のない JIZURA の演出は 1 つも使われない、グリッチ 0・フラッシュなし、静寂を元にしたマイスタイルでも効く、演出がすべて部品セットに入っている）。ヘッドレス Chromium で 6 つの演出の登場・表示中・退場のコマを描いて目で確認、同じ seed なら同じ絵。**書体はこの環境では Google Fonts に届かず代わりの書体で描いたので、明朝での見た目と、実際の曲・背景と重ねた見た目は未確認**。
 
 共通の再生欄（ユーザー要望 2026-09-29、`src/ui/transport.ts`）:
 - ヘッダーの右側に、どのタブでも使える再生欄: 再生/一時停止・−5 秒/+5 秒・シークバー・時刻（聞こえている位置 = Lyrics タブと同じ）・曲名。シェルが 1 度だけ作る（ヘッダーはタブを切り替えても作り直されない）。Music タブ・Lyrics タブの再生ボタンもそのまま残している。

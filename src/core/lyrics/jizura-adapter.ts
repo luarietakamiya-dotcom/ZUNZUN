@@ -3,6 +3,8 @@ import { deriveSeed, makeRng } from '../random';
 import { buildRhythmGrid, rhythmPositionAt, type RhythmGrid, type RhythmPosition } from '../rhythm';
 import { CUSTOM_STYLE_KEY, type LyricsCustomStyle, type LyricsSettings, type RhythmSettings } from '../types';
 import { FOUR_BEAT_EFFECTS, ODD_METER_SET, ODD_METER_STYLE_KEY, registerOddMeterPack, type PackApi } from './oddmeter-pack';
+import { applyMotionPack, packStyles, registerMotionPacks } from './packs';
+import type { PackJ } from './packs/types';
 import { lyricsForEngine } from './parse';
 import { applyManualEnds } from './timing';
 
@@ -102,6 +104,8 @@ export function loadJizura(): Promise<JizuraApi> {
     if (!J || typeof J.plan !== 'function') throw new Error('JIZURA のエンジンを読み込めませんでした');
     installTimingPatch(J);
     registerOddMeterPack(J as unknown as PackApi);
+    // オリジナルの歌詞モーション (演出パック: 静寂 など)。そのスタイルのときだけ候補に入る (packs/index.ts)
+    registerMotionPacks(J as unknown as PackJ);
     return J;
   });
   return loading;
@@ -412,8 +416,11 @@ export function isDarkText(color: string, lum: (c: string) => number): boolean {
 /** スタイルの一覧 (選択肢の表示用): [キー, 名前] */
 export function jizuraStyles(J: JizuraApi): [string, string][] {
   // 変拍子用スタイル (R4) は JIZURA のランダムなスタイル選びに入れないため STYLE_ORDER には無い。一覧の先頭に出す
+  // オリジナルの歌詞モーション (演出パック) も同じく先頭に出す
   const odd: [string, string][] = J.STYLES[ODD_METER_STYLE_KEY] ? [[ODD_METER_STYLE_KEY, J.STYLES[ODD_METER_STYLE_KEY]!.name]] : [];
-  return [...odd, ...J.STYLE_ORDER.filter((k) => J.STYLES[k] && k !== ODD_METER_STYLE_KEY).map((k): [string, string] => [k, J.STYLES[k]!.name])];
+  const packs = packStyles(J);
+  const own = new Set([ODD_METER_STYLE_KEY, ...packs.map(([k]) => k)]);
+  return [...packs, ...odd, ...J.STYLE_ORDER.filter((k) => J.STYLES[k] && !own.has(k)).map((k): [string, string] => [k, J.STYLES[k]!.name])];
 }
 
 // ------------------------------------------------------------------ 描画
@@ -526,6 +533,7 @@ export class LyricMotion {
       fps: opts.fps,
       oddMeter: usesOddMeterPack(lyrics.motion, opts.rhythm),
     });
+    applyMotionPack(project, lyrics.motion, J as unknown as PackJ);
     const plan = attachRhythm(keepLightTextSchemes(J.plan(project, audio), (c) => J.lum(c)), opts.rhythm ?? null);
     await prepareFonts(J, plan, lyricsForEngine(lyrics.text, lyrics.source) + HUD_CHARS);
     // 本番の Renderer は書体の準備が終わってから作る (内部のキャッシュに仮の書体の文字を残さない)
