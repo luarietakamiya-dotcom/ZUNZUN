@@ -71,6 +71,7 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
           },
           // オリジナルのスタイルは入れ子のオブジェクトなので、まるごと複製する (保存したあとに画面で変えても共有しない)
           motion: JSON.parse(JSON.stringify(state.lyrics.motion)) as typeof state.lyrics.motion,
+          stem: state.lyrics.stem ? { ...state.lyrics.stem } : null,
         }
       : null,
     rhythm: state.rhythm

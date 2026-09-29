@@ -181,6 +181,19 @@ export interface LyricsSettings {
   timing: LyricsTiming;
   /** 歌詞モーション (JIZURA) の設定 */
   motion: LyricsMotion;
+  /** 吸着に使うボーカルだけの音源 (stem)。使わなければ null */
+  stem: LyricsStem | null;
+}
+
+/**
+ * ボーカルだけの音源 (stem)。Lyrics タブの吸着 (歌い出し候補) にだけ使い、再生・ビジュアライザー・書き出し・小節の吸着は
+ * 元の曲のまま。音源の中身は保存せず、ファイル名と sha256 だけを持つ (読み込み直したときに同じファイルか確かめる)。
+ */
+export interface LyricsStem {
+  ref: string;
+  sha256: string;
+  /** 吸着に stem を使うか (オフなら元の曲の歌い出し候補) */
+  enabled: boolean;
 }
 
 /**
@@ -246,6 +259,7 @@ export const defaultLyrics = (): LyricsSettings => ({
   text: '',
   timing: { lineTimes: {}, lineEnds: {}, snap: true, snapWindowMs: 150 },
   motion: defaultLyricsMotion(),
+  stem: null,
 });
 
 export interface OverlayLayer {

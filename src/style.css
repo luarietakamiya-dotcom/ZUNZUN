@@ -419,3 +419,8 @@ body {
 }
 .lyrics-rhythm-box.head { border-width: 2px; }
 .lyrics-rhythm-box.active { background: rgba(240, 179, 90, 0.85); color: #0b0c0f; font-weight: 700; }
+
+/* ボーカル stem (吸着用) 欄 */
+.lyrics-stem.active { border-color: rgba(127, 224, 160, 0.6); }
+.lyrics-stem-warn { color: #f0b35a; }
+.lyrics-stem-warn:empty { display: none; }

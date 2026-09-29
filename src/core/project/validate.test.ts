@@ -144,7 +144,7 @@ describe('sanitizeProject', () => {
     expect(lyrics.timing.snapWindowMs).toBe(1000);
     // 歌詞モーション: 範囲外は clamp、壊れた値は既定値、未知のキーは捨てる
     expect(lyrics.motion).toEqual({ enabled: false, style: 'crimson', motion: 1, decor: 0, density: defaultLyricsMotion().density, custom: null });
-    expect(Object.keys(lyrics)).toEqual(['engine', 'source', 'text', 'timing', 'motion']);
+    expect(Object.keys(lyrics)).toEqual(['engine', 'source', 'text', 'timing', 'motion', 'stem']);
   });
 
   it('lyrics.motion: 無い・壊れているときは既定値、スタイル名はキーの形のものだけ', () => {
@@ -180,6 +180,21 @@ describe('sanitizeProject', () => {
     expect(m.custom!.fonts).toEqual({ display: 'dela', serif: '', body: '' });
     expect(m.custom!.texture).toEqual({ grain: 1, scan: 0, ghost: 1.4, glow: 0 });
     expect(Object.keys(m.custom!)).toEqual(['name', 'base', 'colors', 'fonts', 'texture']);
+  });
+
+  it('lyrics.stem: ファイル名と sha256 (64 桁の 16 進) があるときだけ残し、enabled の既定は true', () => {
+    const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
+    const sha = 'c'.repeat(64);
+    raw.lyrics = { text: 'a', stem: { ref: 'vocal.wav', sha256: sha } };
+    expect(sanitizeProject(raw).lyrics!.stem).toEqual({ ref: 'vocal.wav', sha256: sha, enabled: true });
+    raw.lyrics = { text: 'a', stem: { ref: 'vocal.wav', sha256: sha, enabled: false } };
+    expect(sanitizeProject(raw).lyrics!.stem!.enabled).toBe(false);
+    for (const bad of [{ ref: '', sha256: sha }, { ref: 'v', sha256: 'xyz' }, { ref: 'v' }, 'v.wav']) {
+      raw.lyrics = { text: 'a', stem: bad };
+      expect(sanitizeProject(raw).lyrics!.stem).toBeNull();
+    }
+    raw.lyrics = { text: 'a' };
+    expect(sanitizeProject(raw).lyrics!.stem).toBeNull();
   });
 
   it('rhythm: 無ければ null。小節の頭は昇順・範囲内、壊れた拍子は捨て、同じ小節の指定は後勝ち、無ければ 4', () => {

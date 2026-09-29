@@ -14,7 +14,6 @@ import {
   parseLyricsSource,
   parseTimeInput,
   snapAllLines,
-  syncTargetsFor,
   tapStartTime,
   TapSession,
   type LyricsView,
@@ -26,7 +25,9 @@ import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { MAX_LYRICS_LENGTH } from '../../core/project/validate';
 import { store } from '../../core/store';
 import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsMotion, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
+import { lyricSyncTargets } from '../../core/lyrics/stem';
 import { createRhythmEditor } from './lyrics-rhythm';
+import { activeStem, createStemCard } from './lyrics-stem';
 import { createStyleEditor } from './lyrics-style-editor';
 import { LyricsTimeline } from './lyrics-timeline';
 
@@ -240,6 +241,10 @@ export function renderLyricsPanel(): HTMLElement {
     nowBox,
   );
   root.appendChild(playCard);
+
+  // ------------------------------------------------------------ ボーカル stem (吸着用)
+  const stemCard = createStemCard({ onChange: () => refresh() });
+  root.appendChild(stemCard.element);
 
   // ------------------------------------------------------------ タイムライン (L4)
   const timeline = new LyricsTimeline({
@@ -491,8 +496,8 @@ export function renderLyricsPanel(): HTMLElement {
   const rhythmEditor = createRhythmEditor({ isBusy: () => tap != null, onChange: () => refresh() });
   timelineCard.after(rhythmEditor.element);
 
-  const snapTargets = (): SyncTargets =>
-    store.audio.analysis ? syncTargetsFor(store.audio.analysis) : { onsets: [], candidates: [], beats: [] };
+  // 歌い出し候補は、ボーカル stem を使うときは stem から (ビートは元の曲から)。core/lyrics/stem.ts
+  const snapTargets = (): SyncTargets => lyricSyncTargets(store.audio.analysis, activeStem()?.analysis ?? null);
   /** 直前の吸着の結果が、今の状態のまま (その後に手を加えていない) か */
   const snapIsCurrent = (): boolean => lastSnapAll != null && history.current === lastSnapAll.after;
 
@@ -513,9 +518,12 @@ export function renderLyricsPanel(): HTMLElement {
     renderRows();
     refreshControls();
     refreshMotionControls();
-    const analysis = store.audio.analysis;
-    const buffer = store.audio.audioBuffer;
+    // ボーカル stem を使うときは、波形と歌声らしさも stem のものを出す (どこで歌っているかが見やすい)
+    const stem = activeStem();
+    const analysis = stem?.analysis ?? store.audio.analysis;
+    const buffer = stem?.audioBuffer ?? store.audio.audioBuffer;
     const targets = snapTargets();
+    stemCard.refresh();
     timeline.setData({
       duration: store.audio.isLoaded ? store.audio.duration : 0,
       lines: view.parsed.lines,
@@ -575,7 +583,7 @@ export function renderLyricsPanel(): HTMLElement {
     const loaded = store.audio.isLoaded;
     const hasLines = view.parsed.lines.length > 0;
     audioStatus.textContent = loaded
-      ? `${store.audio.fileName} — 歌い出し候補 ${snapTargets().candidates.length} 個 / ビート ${snapTargets().beats.length} 個`
+      ? `${store.audio.fileName} — 歌い出し候補 ${snapTargets().candidates.length} 個${activeStem() ? ' (ボーカル stem から)' : ''} / ビート ${snapTargets().beats.length} 個`
       : '音源が読み込まれていません。Music タブで音源を読み込むと、再生とタップ同期ができます。';
     for (const b of [playBtn, backBtn, fwdBtn]) b.disabled = !loaded;
     const barTapping = rhythmEditor.isTapping;

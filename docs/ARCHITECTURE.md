@@ -126,7 +126,7 @@ zunzun/
   "audio":{"ref":"assets/song.mp3","sha256":"…","name":"…","duration":213.4,"sampleRate":48000,"bpm":128},
   "visualizer":{"preset":"solar-gate","presetVersion":1,"common":{"intensity":0.8,"sensitivity":0.6,"bass":1,"mid":1,"high":1,"glow":0.7,"motion":0.6,"colorTheme":"gold","cameraMotion":0.4},"params":{}},
   "overlays":[{"id":"ov1","ref":"assets/logo.png","sha256":"…","x":0.5,"y":0.8,"scale":0.3,"rotation":0,"opacity":1,"z":10,"glow":0,"float":0,"beat":0.2}],
-  "lyrics":{"engine":"jizura","source":"lrc","text":"…","timing":{"lineTimes":{},"lineEnds":{},"snap":true,"snapWindowMs":150},"motion":{…JIZURA project subset…}},
+  "lyrics":{"engine":"jizura","source":"lrc","text":"…","timing":{"lineTimes":{},"lineEnds":{},"snap":true,"snapWindowMs":150},"motion":{…JIZURA project subset…},"stem":{"ref":"vocal.wav","sha256":"…","enabled":true}},
   "colors":{},"fonts":{},
   "export":{"width":1920,"height":1080,"fps":60,"format":"mp4","quality":"high","transparent":false} }
 ```
@@ -158,6 +158,7 @@ zunzun/
    - 選択した行、または全体をまとめて前後にずらせます（全体オフセット）。
    - 取り消しとやり直しに対応します（Ctrl/Cmd+Z/Y）。
    - 行を選ぶとその少し前から再生し、ループ試聴できます。
+   - **ボーカル stem（2026-09-29 ユーザー承認）**: ボーカルだけの音源を読み込むと、歌い出し候補をそこから拾います（伴奏の同じ帯域の楽器の出だしを候補にしないため）。ビートは元の曲から取り、再生・ビジュアライザー・書き出し・小節の吸着は元の曲のままです。stem の中身は保存せず、`lyrics.stem` にファイル名と sha256・使うかどうかだけを保存します（プロジェクトを読み込んだら選び直す）。
 3. **既存のLRC/SRTの自動オフセット補正**
    - 読み込んだタイミングが全体的にずれている場合に使います。歌声らしさとの相互相関から全体オフセットを1つ推定し、提案します。適用するかどうかはユーザーが決めます。
 

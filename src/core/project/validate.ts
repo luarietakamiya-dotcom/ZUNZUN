@@ -11,6 +11,7 @@ import {
   type LyricsCustomStyle,
   type LyricsMotion,
   type LyricsSettings,
+  type LyricsStem,
   type OverlayLayer,
   type ProjectFile,
   type RhythmSettings,
@@ -181,7 +182,15 @@ function sanitizeLyrics(raw: unknown): LyricsSettings | null {
       snapWindowMs: isFiniteNumber(timingRaw.snapWindowMs) ? Math.round(clamp(timingRaw.snapWindowMs, 0, 1000)) : base.timing.snapWindowMs,
     },
     motion: sanitizeLyricsMotion(raw.motion),
+    stem: sanitizeLyricsStem(raw.stem),
   };
+}
+
+/** ボーカル stem の参照。ファイル名と sha256 が無ければ使わない (null) */
+function sanitizeLyricsStem(raw: unknown): LyricsStem | null {
+  if (!isPlainObject(raw)) return null;
+  if (typeof raw.ref !== 'string' || typeof raw.sha256 !== 'string' || raw.ref === '' || !/^[0-9a-f]{64}$/.test(raw.sha256)) return null;
+  return { ref: raw.ref.slice(0, 512), sha256: raw.sha256, enabled: typeof raw.enabled === 'boolean' ? raw.enabled : true };
 }
 
 /** 歌詞モーションの設定。スタイル名はキーの形だけ確かめる (存在しないスタイルは JIZURA 側で既定の noir になる) */
