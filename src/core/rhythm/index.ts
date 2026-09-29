@@ -3,5 +3,5 @@ export { buildRhythmGrid, groupsForBar, normalizeBars, rhythmPositionAt } from '
 export type { RhythmBar, RhythmGrid, RhythmPosition, RhythmPulse } from './grid';
 export { barLengthEstimate, BarTapSession, fillGaps, fillToEnd, fillToStart } from './bars';
 export { barSnapTargetsFor } from './targets';
-export { barIndexAt, describeGrouping, removeMeter, setMeter } from './edit';
+export { barIndexAt, describeGrouping, moveBarHead, removeMeter, setMeter } from './edit';
 export { clickTrackSamples } from './click';

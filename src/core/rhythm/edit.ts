@@ -46,3 +46,20 @@ export function describeGrouping(pattern: string): string | null {
   const units = g.reduce((a, b) => a + b, 0);
   return g.every((x) => x === 1) ? `${units} 等分` : `${units} 等分を ${g.join('・')} にまとめる`;
 }
+
+/** 小節の頭どうしの最短間隔 (秒)。grid.ts の MIN_BAR と同じ (これより短い小節は捨てられる) */
+const MIN_BAR_GAP = 0.2;
+
+/**
+ * index 番目の小節の頭を t へ動かす (タイムラインのドラッグ)。前後の小節の頭を越えないよう、間を MIN_BAR_GAP 秒あける。
+ * 動かせなければ (番号が範囲外・t が数でない) 元の並びの複製を返す。
+ */
+export function moveBarHead(bars: readonly number[], index: number, t: number): number[] {
+  const b = normalizeBars(bars);
+  if (!Number.isInteger(index) || index < 0 || index >= b.length || !Number.isFinite(t)) return b;
+  const lo = index > 0 ? b[index - 1]! + MIN_BAR_GAP : 0;
+  const hi = index + 1 < b.length ? b[index + 1]! - MIN_BAR_GAP : Infinity;
+  if (lo > hi) return b;
+  b[index] = Math.round(Math.min(hi, Math.max(lo, t)) * 10000) / 10000;
+  return b;
+}

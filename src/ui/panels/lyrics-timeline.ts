@@ -6,6 +6,7 @@ import type { RhythmGrid } from '../../core/rhythm';
  * Lyrics タブのタイムライン (L4)。canvas 1 枚に、時刻の目盛り・波形・歌声らしさと歌い出し候補・ビート線・
  * 行のブロック・再生位置を描く。docs/ARCHITECTURE.md「タイムラインで後調整」に対応する。
  * 小節の頭を決めてあれば (R2)、小節線 (太線・小節の番号) と拍のまとまりの頭 (細線) も描く。
+ * 小節線は、波形の段でつかんで左右にドラッグすると動かせる (離した位置は音の立ち上がり → ビートへ吸着、Shift で吸着なし)。
  *
  * 操作:
  * - 行のブロック: 左端をドラッグで開始、右端で終了、真ん中で行ごと動かす。離した位置は吸着する (Shift を押している間は吸着しない。
@@ -33,6 +34,8 @@ export interface TimelineData {
   loop: { start: number; end: number } | null;
   /** 小節と拍のまとまり (小節の頭が無ければ null) */
   rhythm: RhythmGrid | null;
+  /** 小節の頭 (昇順、normalizeBars 済み)。小節線のドラッグの番号はこの並びの番号 */
+  barHeads: readonly number[];
 }
 
 export type DragKind = 'start' | 'end' | 'move';
@@ -44,6 +47,12 @@ export interface TimelineCallbacks {
   onDragCommit(kind: DragKind, line: number, value: number): void;
   /** 吸着 (noSnap のときはそのまま返す) */
   snap(t: number, noSnap: boolean): number;
+  /** 小節線をドラッグして離したとき (index = barHeads の番号、t = 吸着済みの時刻)。無ければ小節線は動かせない */
+  onBarDragCommit?(index: number, t: number): void;
+  /** 小節の頭の吸着 (noSnap のときはそのまま返す) */
+  snapBar?(t: number, noSnap: boolean): number;
+  /** 今、小節線を動かしてよいか (小節のタップ中などは false) */
+  canDragBars?(): boolean;
 }
 
 const HEIGHT = 196;
@@ -77,10 +86,7 @@ const BLOCK_STYLE: Record<LineTimeSource, { fill: string; stroke: string; dash: 
   estimate: { fill: 'rgba(154,161,173,0.08)', stroke: 'rgba(154,161,173,0.45)', dash: [4, 3] },
 };
 
-interface Hit {
-  line: number;
-  kind: DragKind;
-}
+type Hit = { kind: DragKind; line: number } | { kind: 'bar'; bar: number };
 
 interface DragState {
   pointerId: number;
@@ -88,7 +94,7 @@ interface DragState {
   downStart: number; // ドラッグ開始時の viewport.start (空の場所をドラッグして左右に動かすとき)
   hit: Hit | null;
   dragging: boolean;
-  /** プレビュー中の値 (kind が 'move' のときは動かした量) */
+  /** プレビュー中の値 (kind が 'move' のときは動かした量、'bar' のときは小節の頭の時刻) */
   value: number;
 }
 
@@ -128,7 +134,8 @@ export class LyricsTimeline {
     });
     const legend = document.createElement('span');
     legend.className = 'param-label';
-    legend.textContent = '青線 = 歌声らしさ / 緑の目盛り = 歌い出し候補 / 縦の薄い線 = ビート。ブロックの端をドラッグで開始・終了、真ん中で行ごと移動 (Shift を押すと吸着しない)';
+    legend.textContent =
+      '青線 = 歌声らしさ / 緑の目盛り = 歌い出し候補 / 縦の薄い線 = ビート / 橙の線 = 小節 (波形の段でつかんで動かせる)。ブロックの端をドラッグで開始・終了、真ん中で行ごと移動 (Shift を押すと吸着しない)';
     const toolbar = document.createElement('div');
     toolbar.className = 'row-gap lyrics-row-wrap';
     toolbar.append(zoomOut, zoomIn, fit, legend);
@@ -230,6 +237,15 @@ export class LyricsTimeline {
           g.fillRect(x, RULER_H, 1, HEIGHT - RULER_H);
         }
       }
+    }
+
+    // ドラッグ中の小節線 (離すとこの位置になる)
+    if (this.drag?.dragging && this.drag.hit?.kind === 'bar') {
+      const x = Math.round(X(this.drag.value));
+      g.fillStyle = '#ffffff';
+      g.fillRect(x - 1, RULER_H, 3, HEIGHT - RULER_H);
+      g.font = '10px system-ui, sans-serif';
+      g.fillText(`${this.drag.hit.bar + 1}`, x + 4, WAVE_TOP + 22);
     }
 
     // 目盛り
@@ -352,7 +368,7 @@ export class LyricsTimeline {
   /** ドラッグ中の行の見た目の時刻 */
   private previewTimes(d: TimelineData): { starts: readonly number[]; ends: readonly number[] } {
     const dr = this.drag;
-    if (!dr?.dragging || !dr.hit) return { starts: d.starts, ends: d.ends };
+    if (!dr?.dragging || !dr.hit || dr.hit.kind === 'bar') return { starts: d.starts, ends: d.ends };
     const i = dr.hit.line;
     const starts = d.starts.slice();
     const ends = d.ends.slice();
@@ -371,7 +387,22 @@ export class LyricsTimeline {
 
   private hitTest(x: number, y: number): Hit | null {
     const d = this.data;
-    if (!d || y < BLOCK_TOP || y > BLOCK_TOP + BLOCK_H) return null;
+    if (!d) return null;
+    // 波形の段では小節線をつかむ (いちばん近いもの)
+    if (y >= RULER_H && y < BLOCK_TOP) {
+      if (!this.cb.onBarDragCommit || (this.cb.canDragBars && !this.cb.canDragBars())) return null;
+      let best = -1;
+      let bestDx = EDGE_PX + 1;
+      d.barHeads.forEach((t, k) => {
+        const dx = Math.abs(this.vp.timeToX(t) - x);
+        if (dx < bestDx) {
+          bestDx = dx;
+          best = k;
+        }
+      });
+      return best >= 0 && bestDx <= EDGE_PX ? { kind: 'bar', bar: best } : null;
+    }
+    if (y < BLOCK_TOP || y > BLOCK_TOP + BLOCK_H) return null;
     // 後ろの行ほど上に描かれているので、後ろから調べる
     for (let i = d.lines.length - 1; i >= 0; i--) {
       const x0 = this.vp.timeToX(d.starts[i]!);
@@ -416,8 +447,13 @@ export class LyricsTimeline {
       this.lastUserScroll = performance.now();
       return;
     }
-    const i = dr.hit.line;
     const noSnap = e.shiftKey;
+    if (dr.hit.kind === 'bar') {
+      const raw = this.vp.xToTime(x);
+      dr.value = this.cb.snapBar ? this.cb.snapBar(raw, noSnap) : raw;
+      return;
+    }
+    const i = dr.hit.line;
     if (dr.hit.kind === 'move') {
       const raw = d.starts[i]! + (x - dr.downX) / this.vp.pxPerSec;
       dr.value = this.cb.snap(raw, noSnap) - d.starts[i]!;
@@ -437,8 +473,12 @@ export class LyricsTimeline {
       // 上と同じ
     }
     if (!dr.dragging) {
-      if (dr.hit) this.cb.onSelect(dr.hit.line);
+      if (dr.hit && dr.hit.kind !== 'bar') this.cb.onSelect(dr.hit.line);
       else this.cb.onSeek(Math.max(0, this.vp.xToTime(dr.downX)));
+      return;
+    }
+    if (dr.hit?.kind === 'bar') {
+      this.cb.onBarDragCommit?.(dr.hit.bar, dr.value);
       return;
     }
     if (dr.hit) {

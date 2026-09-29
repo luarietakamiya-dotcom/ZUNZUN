@@ -10,6 +10,7 @@ import {
   fillGaps,
   fillToEnd,
   fillToStart,
+  moveBarHead,
   normalizeBars,
   removeMeter,
   rhythmPositionAt,
@@ -50,6 +51,12 @@ export interface RhythmEditor {
   tick(t: number): void;
   /** 今の小節の頭と拍子から作った拍の並び (小節の頭が 2 つ未満なら null)。store.rhythm ごとにキャッシュする */
   grid(): RhythmGrid | null;
+  /** 小節の頭 (昇順)。タイムラインの小節線のドラッグの番号はこの並びの番号 */
+  barHeads(): number[];
+  /** タイムラインで小節線を動かしたとき (取り消しの履歴に積む) */
+  moveBar(index: number, t: number): void;
+  /** 小節の頭の吸着 (タップと同じ: 音の立ち上がり → ビート、±80ms)。noSnap ならそのまま */
+  snapBar(t: number, noSnap: boolean): number;
   dispose(): void;
 }
 
@@ -238,7 +245,7 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     'lyrics-help',
     '自動のビート検出は一定のテンポしか表せないので、5 拍子・7 拍子・途中で拍子が変わる曲は、小節の頭を叩いて決めます。' +
       '再生しながら小節の頭 (1 拍目) で Space を叩きます (Shift を押しながらだと吸着しない)。数小節叩いたら「残りを同じ長さで埋める」、' +
-      '数小節おきに叩いたら「間を埋める」が使えます。拍子は「2+2+3」(7 等分を 2・2・3 にまとめる) や「4」(4 等分) のように、小節の番号から区間ごとに書きます。',
+      '数小節おきに叩いたら「間を埋める」が使えます。ずれた小節は、タイムラインの橙の線を波形の段でつかんで左右に動かせます。拍子は「2+2+3」(7 等分を 2・2・3 にまとめる) や「4」(4 等分) のように、小節の番号から区間ごとに書きます。',
   );
   root.append(
     h('h3', 'lyrics-h3', 'リズム (変拍子)'),
@@ -387,6 +394,21 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     commit({ ...current(), bars });
   }
 
+  function snapBar(t: number, noSnap: boolean): number {
+    const analysis = store.audio.analysis;
+    return analysis ? snapTime(t, barSnapTargetsFor(analysis), BAR_SNAP_WINDOW, !noSnap).t : t;
+  }
+
+  function moveBar(index: number, t: number): void {
+    if (session) return;
+    const r = current();
+    const before = normalizeBars(r.bars);
+    const bars = moveBarHead(before, index, t);
+    if (bars[index] === before[index]) return;
+    editReport.textContent = `${index + 1} 小節目の頭を ${formatTime(bars[index]!)} に動かしました (取り消しで戻せます)。`;
+    commit({ ...r, bars });
+  }
+
   function doBack(): void {
     if (!session) return;
     const bars = session.back();
@@ -462,6 +484,9 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     refresh,
     tick,
     grid: () => gridFor(store.rhythm),
+    barHeads: () => normalizeBars(store.rhythm?.bars ?? []),
+    moveBar,
+    snapBar,
     dispose: () => {
       session = null;
       window.clearTimeout(clickTimer);

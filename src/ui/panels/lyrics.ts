@@ -255,6 +255,10 @@ export function renderLyricsPanel(): HTMLElement {
     onDragCommit: (kind, i, value) =>
       applyEdit((c, t) => (kind === 'start' ? moveLineStart(c, t, i, value) : kind === 'end' ? moveLineEnd(c, t, i, value) : moveLine(c, t, i, value))),
     snap: (t, noSnap) => snapTime(t, snapTargets(), currentLyrics().timing.snapWindowMs / 1000, !noSnap).t,
+    // 小節線のドラッグ (R2 の残り)。小節の頭の書き換え・吸着はリズム欄に任せる
+    onBarDragCommit: (i, t) => rhythmEditor.moveBar(i, t),
+    snapBar: (t, noSnap) => rhythmEditor.snapBar(t, noSnap),
+    canDragBars: () => tap == null && !rhythmEditor.isTapping,
   });
   const loopBtn = button('選択した行をループ試聴', () => toggleLoop(), 'tab-button lyrics-toggle');
   const offsetInput = el('input', { className: 'lyrics-offset-input' });
@@ -538,6 +542,7 @@ export function renderLyricsPanel(): HTMLElement {
       selected: selectedLine,
       loop: loopRegion(),
       rhythm: rhythmEditor.grid(),
+      barHeads: rhythmEditor.barHeads(),
     });
     shownLine = -2; // 次のフレームでプレビューを描き直す
   }

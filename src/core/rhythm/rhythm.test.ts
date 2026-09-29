@@ -4,7 +4,7 @@ import { barLengthEstimate, BarTapSession, fillGaps, fillToEnd, fillToStart } fr
 import { clickTrackSamples } from './click';
 import { buildRhythmGrid, groupsForBar, normalizeBars, rhythmPositionAt } from './grid';
 import { formatGrouping, parseGrouping } from './grouping';
-import { barIndexAt, describeGrouping, removeMeter, setMeter } from './edit';
+import { barIndexAt, describeGrouping, moveBarHead, removeMeter, setMeter } from './edit';
 import { barSnapTargetsFor } from './targets';
 
 describe('parseGrouping / formatGrouping', () => {
@@ -207,5 +207,19 @@ describe('clickTrackSamples', () => {
     expect(peak(1.0)).toBeGreaterThan(0.1);
     expect(peak(0.7)).toBe(0);
     expect(peak(2.25)).toBeGreaterThan(0.3);
+  });
+});
+
+describe('moveBarHead', () => {
+  it('前後の小節の頭を越えず、間を 0.2 秒あける。範囲外の番号・数でない時刻は何もしない', () => {
+    const bars = [1, 3, 5];
+    expect(moveBarHead(bars, 1, 3.3)).toEqual([1, 3.3, 5]);
+    expect(moveBarHead(bars, 1, 0.5)).toEqual([1, 1.2, 5]);
+    expect(moveBarHead(bars, 1, 9)).toEqual([1, 4.8, 5]);
+    expect(moveBarHead(bars, 0, -2)).toEqual([0, 3, 5]);
+    expect(moveBarHead(bars, 2, 60)).toEqual([1, 3, 60]);
+    expect(moveBarHead(bars, 3, 2)).toEqual([1, 3, 5]);
+    expect(moveBarHead(bars, 1, NaN)).toEqual([1, 3, 5]);
+    expect(bars).toEqual([1, 3, 5]);
   });
 });
