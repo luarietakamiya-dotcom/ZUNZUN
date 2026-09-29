@@ -1,3 +1,4 @@
+import type { RhythmMeter } from '../types';
 import { normalizeBars } from './grid';
 
 /**
@@ -32,6 +33,27 @@ export function fillToEnd(bars: readonly number[], duration: number, sample = 4)
     t += len;
   }
   return out;
+}
+
+/**
+ * 最初の小節から曲の頭 (0 秒) まで、同じ長さの小節で埋める (「前を同じ長さで埋める」)。最初の数小節の長さの中央値を使う。
+ * 足すのは丸ごとの小節だけで、曲の頭に残る端数 (弱起など) には小節を作らない (端数の小節を作ると、その中でまとまりが
+ * 等分されて拍の位置が間違うため。叩いた時刻の誤差として 80ms か 1 割までは 0 秒に切り詰める)。前に小節を足すと小節の番号がずれるので、拍子の区間の番号も同じだけずらす
+ * (1 小節目からの指定は 0 のまま = 足した小節にも同じ拍子が付く)。
+ */
+export function fillToStart(bars: readonly number[], meters: readonly RhythmMeter[], sample = 4): { bars: number[]; meters: RhythmMeter[]; added: number } {
+  const b = normalizeBars(bars);
+  const len = b.length >= 2 ? median(b.slice(1, sample + 1).map((t, i) => t - b[i]!)) : null;
+  if (len == null || !(len > 0)) return { bars: b, meters: meters.map((m) => ({ ...m })), added: 0 };
+  const head: number[] = [];
+  let t = b[0]! - len;
+  const slack = Math.min(0.08, len * 0.1);
+  while (t >= -slack && head.length < 10_000) {
+    head.unshift(Math.max(0, Math.round(t * 10000) / 10000));
+    t -= len;
+  }
+  const added = head.length;
+  return { bars: [...head, ...b], meters: meters.map((m) => ({ ...m, bar: m.bar === 0 ? 0 : m.bar + added })), added };
 }
 
 /**

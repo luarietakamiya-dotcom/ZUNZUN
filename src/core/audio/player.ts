@@ -8,6 +8,9 @@
 export class AudioPlayer {
   private ctx: AudioContext | null = null;
   private source: AudioBufferSourceNode | null = null;
+  /** 曲に重ねて同時に鳴らす音 (小節の確認用のクリック音など)。曲と同じ位置から、同じ時刻に始める */
+  private overlay: AudioBuffer | null = null;
+  private overlaySource: AudioBufferSourceNode | null = null;
   private gain: GainNode | null = null;
   private startedAtCtx = 0; // ctx.currentTime のうち再生を開始した時刻
   private startedAtMedia = 0; // そのときの再生位置 (秒)
@@ -27,7 +30,8 @@ export class AudioPlayer {
   /** 現在の再生位置 (秒)。停止中は最後に seek/pause した位置を返す。 */
   currentTime(): number {
     if (!this.playing || !this.ctx) return this.startedAtMedia;
-    const elapsed = this.ctx.currentTime - this.startedAtCtx;
+    // 鳴り始める時刻は play() の 10ms 後なので、それまでは始めた位置のまま (位置が戻って見えないように)
+    const elapsed = Math.max(0, this.ctx.currentTime - this.startedAtCtx);
     return Math.min(this.buffer.duration, this.startedAtMedia + elapsed);
   }
 
@@ -73,9 +77,19 @@ export class AudioPlayer {
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
     src.connect(this.gain);
-    src.start(0, Math.max(0, Math.min(at, this.buffer.duration)));
+    const offset = Math.max(0, Math.min(at, this.buffer.duration));
+    // 重ねる音は曲と同じ時刻に始める (start の when を同じにして、サンプル単位でそろえる)
+    const when = this.ctx.currentTime + 0.01;
+    src.start(when, offset);
+    if (this.overlay && offset < this.overlay.duration) {
+      const o = this.ctx.createBufferSource();
+      o.buffer = this.overlay;
+      o.connect(this.ctx.destination);
+      o.start(when, offset);
+      this.overlaySource = o;
+    }
     this.source = src;
-    this.startedAtCtx = this.ctx.currentTime;
+    this.startedAtCtx = when;
     this.startedAtMedia = at;
     this.playing = true;
     src.onended = () => {
@@ -94,6 +108,13 @@ export class AudioPlayer {
     const clamped = Math.max(0, Math.min(seconds, this.buffer.duration));
     if (this.playing) this.play(clamped);
     else this.startedAtMedia = clamped;
+  }
+
+  /** 曲に重ねる音を差し替える (null で外す)。再生中なら今の位置から鳴らし直す */
+  setOverlay(buffer: AudioBuffer | null): void {
+    if (buffer === this.overlay) return; // 同じものなら鳴らし直さない (表示の更新のたびに呼ばれるため)
+    this.overlay = buffer;
+    if (this.playing) this.play(this.currentTime());
   }
 
   setVolume(v: number): void {
@@ -118,6 +139,15 @@ export class AudioPlayer {
       }
       this.source.disconnect();
       this.source = null;
+    }
+    if (this.overlaySource) {
+      try {
+        this.overlaySource.stop();
+      } catch {
+        // 既に停止済みなら無視
+      }
+      this.overlaySource.disconnect();
+      this.overlaySource = null;
     }
   }
 }

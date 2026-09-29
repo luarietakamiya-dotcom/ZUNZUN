@@ -5,9 +5,11 @@ import {
   barSnapTargetsFor,
   BarTapSession,
   buildRhythmGrid,
+  clickTrackSamples,
   describeGrouping,
   fillGaps,
   fillToEnd,
+  fillToStart,
   normalizeBars,
   removeMeter,
   rhythmPositionAt,
@@ -59,6 +61,12 @@ const TAP_PREROLL = 2;
 const COMMON_PATTERNS = ['4', '3', '5', '3+2', '2+3', '6', '3+3', '7', '2+2+3', '3+2+2', '2+3+2', '3+3+2', '9', '2+2+2+3'];
 
 const history = new History<RhythmSettings | null>(null);
+/** 「クリック音で確認」がオンか (タブをまたいで残す。ほかのタブではクリック音を鳴らさない) */
+let clickOn = false;
+/** クリック音の音源のキャッシュ (小節・拍子と曲が同じ間は作り直さない) */
+let clickCache: { grid: RhythmGrid; duration: number; buffer: AudioBuffer } | null = null;
+/** クリック音の音源のサンプリング周波数 (短い「チッ」なので低くてよい。3 分で約 16MB) */
+const CLICK_SAMPLE_RATE = 22050;
 let datalistSeq = 0;
 
 function syncHistoryWithStore(): void {
@@ -135,6 +143,8 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
   tapActive.append(row(tapBtn, backBtn, stopBtn), tapReport);
 
   // ------------------------------------------------------------ 埋める・消す・取り消し
+  const fillStartBtn = btn('前を同じ長さで埋める', () => doFill('start'));
+  fillStartBtn.title = '最初の数小節の長さで、曲の頭まで小節の頭を足します (頭に残る端数には小節を作りません)';
   const fillEndBtn = btn('残りを同じ長さで埋める', () => doFill('end'));
   fillEndBtn.title = '最後の数小節の長さで、曲の終わりまで小節の頭を足します';
   const fillGapsBtn = btn('間を埋める', () => doFill('gaps'));
@@ -154,6 +164,38 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     if (history.canRedo) applyState(history.redo());
   });
   const editReport = h('div', 'param-label');
+
+  // ------------------------------------------------------------ クリック音で確認
+  const clickBox = h('input');
+  clickBox.type = 'checkbox';
+  const clickLabel = h('label', 'row-gap param-label');
+  clickLabel.append(clickBox, 'クリック音で確認 (小節の頭 = 高い音、まとまりの頭 = 低い音。Lyrics タブで再生している間だけ鳴ります)');
+  clickBox.addEventListener('change', () => {
+    clickOn = clickBox.checked;
+    applyClick();
+  });
+  let clickTimer = 0;
+  /** 小節を叩くたびに作り直さないよう、少し待ってから反映する */
+  function scheduleClick(): void {
+    window.clearTimeout(clickTimer);
+    clickTimer = window.setTimeout(applyClick, 250);
+  }
+  function applyClick(): void {
+    window.clearTimeout(clickTimer);
+    const grid = gridFor(store.rhythm);
+    if (!clickOn || !grid || !store.audio.isLoaded) {
+      store.audio.setOverlay(null);
+      return;
+    }
+    const duration = store.audio.duration;
+    if (clickCache?.grid !== grid || clickCache.duration !== duration) {
+      const samples = clickTrackSamples(grid, duration, CLICK_SAMPLE_RATE);
+      const buffer = new AudioBuffer({ length: samples.length, numberOfChannels: 1, sampleRate: CLICK_SAMPLE_RATE });
+      buffer.copyToChannel(samples, 0);
+      clickCache = { grid, duration, buffer };
+    }
+    store.audio.setOverlay(clickCache.buffer);
+  }
 
   // ------------------------------------------------------------ 拍子の区間
   const datalist = h('datalist');
@@ -205,7 +247,8 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     status,
     row(tapFirstBtn, tapHereBtn),
     tapActive,
-    row(fillEndBtn, fillGapsBtn, clearBtn, undoBtn, redoBtn),
+    row(fillStartBtn, fillEndBtn, fillGapsBtn, clearBtn, undoBtn, redoBtn),
+    clickLabel,
     editReport,
     h('h3', 'lyrics-h3', '拍子 (区間ごと)'),
     meterList,
@@ -244,6 +287,10 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     tapActive.hidden = session == null;
     backBtn.disabled = !session?.canBack;
     fillEndBtn.disabled = !loaded || session != null || bars.length < 2;
+    fillStartBtn.disabled = session != null || bars.length < 2;
+    clickBox.checked = clickOn;
+    clickBox.disabled = !loaded;
+    scheduleClick();
     fillGapsBtn.disabled = session != null || bars.length < 3;
     clearBtn.disabled = session != null || bars.length === 0;
     undoBtn.disabled = session != null || !history.canUndo;
@@ -350,9 +397,19 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     tapReport.textContent = '1 つ戻しました。3 秒前から流します。';
   }
 
-  function doFill(kind: 'end' | 'gaps'): void {
+  function doFill(kind: 'start' | 'end' | 'gaps'): void {
     const r = current();
     const before = normalizeBars(r.bars);
+    if (kind === 'start') {
+      const f = fillToStart(before, r.meters);
+      if (f.added <= 0) {
+        editReport.textContent = '足せる小節がありませんでした (小節の頭が 2 つ以上必要です。曲の頭までが 1 小節より短いときは足しません)。';
+        return;
+      }
+      editReport.textContent = `曲の頭の側に小節を ${f.added} 個足しました (拍子の区間の番号も ${f.added} ずらしました。取り消しで戻せます)。`;
+      commit({ ...r, bars: f.bars, meters: f.meters });
+      return;
+    }
     const bars = kind === 'end' ? fillToEnd(before, store.audio.duration) : fillGaps(before);
     const added = bars.length - before.length;
     if (added <= 0) {
@@ -407,6 +464,9 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     grid: () => gridFor(store.rhythm),
     dispose: () => {
       session = null;
+      window.clearTimeout(clickTimer);
+      // ほかのタブではクリック音を鳴らさない (オンのままなら、Lyrics タブに戻ったときにまた鳴らす)
+      store.audio.setOverlay(null);
     },
   };
 }

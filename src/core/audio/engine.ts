@@ -117,6 +117,11 @@ export class AudioEngine {
     this._player?.setVolume(v);
   }
 
+  /** 曲に重ねて鳴らす音 (小節の確認用のクリック音)。null で外す。音源を読み込み直すと外れる */
+  setOverlay(buffer: AudioBuffer | null): void {
+    this._player?.setOverlay(buffer);
+  }
+
   /** 現在の再生位置に対応する AudioFrame。再生していなければ最後の seek 位置のフレームを返す。 */
   currentFrame(): AudioFrame | null {
     if (!this._timeline) return null;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AudioAnalysis } from '../audio/analyze';
-import { barLengthEstimate, BarTapSession, fillGaps, fillToEnd } from './bars';
+import { barLengthEstimate, BarTapSession, fillGaps, fillToEnd, fillToStart } from './bars';
+import { clickTrackSamples } from './click';
 import { buildRhythmGrid, groupsForBar, normalizeBars, rhythmPositionAt } from './grid';
 import { formatGrouping, parseGrouping } from './grouping';
 import { barIndexAt, describeGrouping, removeMeter, setMeter } from './edit';
@@ -168,5 +169,43 @@ describe('拍子の区間の編集', () => {
     expect(describeGrouping('2+2+3')).toBe('7 等分を 2・2・3 にまとめる');
     expect(describeGrouping('4')).toBe('4 等分');
     expect(describeGrouping('x')).toBeNull();
+  });
+});
+
+describe('fillToStart', () => {
+  it('最初の小節から曲の頭まで、丸ごとの小節だけを足し、拍子の区間の番号をずらす (1 小節目からの指定は 0 のまま)', () => {
+    const meters = [{ bar: 0, pattern: '2+2+3' }, { bar: 2, pattern: '4' }];
+    const r = fillToStart([3.5, 5.25, 7, 8.75], meters);
+    expect(r.bars).toEqual([0, 1.75, 3.5, 5.25, 7, 8.75]);
+    expect(r.added).toBe(2);
+    expect(r.meters).toEqual([{ bar: 0, pattern: '2+2+3' }, { bar: 4, pattern: '4' }]);
+    expect(meters[1]!.bar).toBe(2);
+  });
+
+  it('頭に残る端数 (弱起) には小節を作らない。叩いた誤差ほどのはみ出しは 0 秒に切り詰める', () => {
+    expect(fillToStart([2.5, 4.25, 6], []).bars).toEqual([0.75, 2.5, 4.25, 6]);
+    expect(fillToStart([1.8, 3.55, 5.3], []).bars).toEqual([0.05, 1.8, 3.55, 5.3]);
+    // 1.75 秒戻ると −0.05 秒 (叩いた誤差ほどのはみ出し) → 0 秒に切り詰める
+    expect(fillToStart([1.7, 3.45, 5.2], []).bars).toEqual([0, 1.7, 3.45, 5.2]);
+    // −0.15 秒 (端数) → 足さない
+    expect(fillToStart([1.6, 3.35, 5.1], []).bars).toEqual([1.6, 3.35, 5.1]);
+  });
+
+  it('小節の頭が 2 つ未満なら何もしない', () => {
+    expect(fillToStart([3], [{ bar: 0, pattern: '4' }])).toEqual({ bars: [3], meters: [{ bar: 0, pattern: '4' }], added: 0 });
+  });
+});
+
+describe('clickTrackSamples', () => {
+  it('小節の頭とまとまりの頭にだけ音があり、小節の頭の方が大きい。曲の長さの配列', () => {
+    const grid = buildRhythmGrid({ bars: [0.5, 2.25], meters: [{ bar: 0, pattern: '2+2+3' }] });
+    const sr = 8000;
+    const x = clickTrackSamples(grid, 5, sr);
+    expect(x.length).toBe(5 * sr);
+    const peak = (t: number) => Math.max(...Array.from(x.subarray(Math.round(t * sr), Math.round((t + 0.03) * sr)), Math.abs));
+    expect(peak(0.5)).toBeGreaterThan(peak(1.0));
+    expect(peak(1.0)).toBeGreaterThan(0.1);
+    expect(peak(0.7)).toBe(0);
+    expect(peak(2.25)).toBeGreaterThan(0.3);
   });
 });
