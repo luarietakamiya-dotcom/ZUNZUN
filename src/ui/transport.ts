@@ -1,0 +1,101 @@
+import { formatTime } from '../core/lyrics';
+import { store } from '../core/store';
+
+/**
+ * ヘッダーに置く共通の再生欄 (どのタブでも使える)。再生/一時停止・−5 秒/+5 秒・シークバー・時刻・曲名。
+ * ヘッダーはタブを切り替えても作り直されないので、この欄はアプリを開いている間ずっと同じもの (シェルが 1 度だけ作る)。
+ * Space キーでも再生/一時停止できる。ただし Lyrics タブでは Space がタップ (記録) なので、そのタブの処理に任せる
+ * (spaceHandledByPanel が true を返す間は何もしない)。入力欄にフォーカスがあるときも何もしない。
+ */
+
+export interface TransportOptions {
+  /** 今のタブが Space を自分で使うか (Lyrics タブ) */
+  spaceHandledByPanel(): boolean;
+}
+
+const SKIP_SEC = 5;
+
+function isEditable(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+}
+
+function button(label: string, title: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'tab-button transport-button';
+  b.textContent = label;
+  b.title = title;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+export function createTransport(opts: TransportOptions): HTMLElement {
+  const root = document.createElement('div');
+  root.className = 'transport';
+  const audio = store.audio;
+
+  const playBtn = button('▶', '再生 / 一時停止 (Space)', () => toggle());
+  playBtn.classList.add('transport-play');
+  const backBtn = button('−5秒', '5 秒戻る', () => audio.seek(Math.max(0, audio.currentTime - SKIP_SEC)));
+  const fwdBtn = button('+5秒', '5 秒進む', () => audio.seek(Math.min(audio.duration, audio.currentTime + SKIP_SEC)));
+  const seek = document.createElement('input');
+  seek.type = 'range';
+  seek.className = 'transport-seek';
+  seek.min = '0';
+  seek.step = '0.01';
+  seek.title = 'シーク';
+  const time = document.createElement('span');
+  time.className = 'transport-time';
+  const name = document.createElement('span');
+  name.className = 'transport-name';
+  root.append(playBtn, backBtn, fwdBtn, seek, time, name);
+
+  function toggle(): void {
+    if (!audio.isLoaded) return;
+    if (audio.isPlaying) audio.pause();
+    else audio.play();
+  }
+
+  // シークバーをつかんでいる間は、表示の更新で位置を上書きしない
+  let dragging = false;
+  seek.addEventListener('pointerdown', () => (dragging = true));
+  window.addEventListener('pointerup', () => (dragging = false));
+  seek.addEventListener('input', () => {
+    if (audio.isLoaded) audio.seek(parseFloat(seek.value));
+  });
+  seek.addEventListener('change', () => (dragging = false));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== ' ' || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (opts.spaceHandledByPanel() || isEditable(e.target)) return;
+    // ボタンにフォーカスがあると、ブラウザの標準動作でそのボタンも押されてしまうので止める
+    e.preventDefault();
+    if (!e.repeat) toggle();
+  });
+
+  let shown = '';
+  const tick = (): void => {
+    const loaded = audio.isLoaded;
+    const playing = audio.isPlaying;
+    // 表示は「いまスピーカーから聞こえている位置」(Lyrics タブと同じ)
+    const t = loaded ? audio.heardTime : 0;
+    const dur = loaded ? audio.duration : 0;
+    const key = `${loaded}|${playing}|${t.toFixed(2)}|${dur}|${audio.fileName}`;
+    if (key !== shown) {
+      shown = key;
+      for (const b of [playBtn, backBtn, fwdBtn]) b.disabled = !loaded;
+      seek.disabled = !loaded;
+      playBtn.textContent = playing ? '❚❚' : '▶';
+      playBtn.setAttribute('aria-label', playing ? '一時停止' : '再生');
+      time.textContent = loaded ? `${formatTime(t)} / ${formatTime(dur)}` : '--:--';
+      name.textContent = loaded ? audio.fileName : '音源なし (Music タブで読み込む)';
+      name.title = name.textContent;
+      if (seek.max !== String(dur)) seek.max = String(dur || 1);
+      if (!dragging) seek.value = String(t);
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  return root;
+}

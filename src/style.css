@@ -438,3 +438,12 @@ body {
 }
 .background-thumb { max-width: 240px; max-height: 135px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border); }
 .background-body { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+
+/* 共通の再生欄 (ヘッダー) */
+.app-header { flex-wrap: wrap; }
+.transport { display: flex; align-items: center; gap: 6px; margin-left: auto; min-width: 0; }
+.transport-button { padding: 4px 8px; font-variant-numeric: tabular-nums; }
+.transport-play { min-width: 2.6em; color: var(--fg); border-color: var(--border); }
+.transport-seek { width: 180px; }
+.transport-time { font-size: 12px; color: var(--fg-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.transport-name { font-size: 12px; color: var(--fg-dim); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

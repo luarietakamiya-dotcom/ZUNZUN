@@ -1,5 +1,6 @@
 import type { PanelId } from './panels';
 import { PANELS } from './panels';
+import { createTransport } from './transport';
 
 const TAB_ORDER: PanelId[] = ['music', 'visualizer', 'lyrics', 'overlay', 'settings', 'export'];
 
@@ -33,6 +34,9 @@ export function mountShell(root: HTMLElement): void {
   root.appendChild(shell);
 
   let active: PanelId = 'music';
+
+  // 共通の再生欄 (どのタブでも使える)。Lyrics タブでは Space をタップに使うので、そのタブの処理に任せる
+  header.appendChild(createTransport({ spaceHandledByPanel: () => active === 'lyrics' }));
 
   const render = () => {
     tabs.innerHTML = '';
