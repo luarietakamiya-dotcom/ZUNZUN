@@ -3,6 +3,7 @@ import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsSettings } from '../../type
 import { buildJizuraProject, installTimingPatch, type JizuraApi } from '../jizura-adapter';
 import { CALM_STYLE_KEY } from './calm';
 import { INTENSE_STYLE_KEY } from './intense';
+import { ROCK_STYLE_KEY } from './rock';
 import { flashAllowed, MAX_FLASH_HZ } from './util';
 import { applyMotionPack, packForMotion, PACKS, registerMotionPacks } from './index';
 import type { PackJ } from './types';
@@ -91,6 +92,23 @@ describe('演出パック (本物の JIZURA)', () => {
     }
     for (const bad of ['strobe', 'invert', 'whiteFrame', 'bandInvert', 'mirrorFlash', 'negativeRing', 'flashCross', 'bloomFlash']) expect(used).not.toContain(`"${bad}"`);
     expect(project.fx).toMatchObject({ flash: false });
+  });
+
+  it('轟音: オリジナルの演出が使われ、graphic / glitch / editorial の印のない JIZURA の演出と可愛い装飾は使われない。点滅・反転の効果は出てこない', () => {
+    registerMotionPacks(J);
+    const { used, cuts } = planOf(lyricsOf(ROCK_STYLE_KEY));
+    const lyricCuts = cuts.filter((c) => c.line >= 0);
+    const ours = (k?: string) => !!k && k.startsWith('zz');
+    expect(lyricCuts.filter((c) => ours(c.enter)).length).toBeGreaterThan(0);
+    expect(lyricCuts.filter((c) => ours(c.exit)).length).toBeGreaterThan(0);
+    expect(lyricCuts.filter((c) => ours(c.cam)).length).toBeGreaterThan(0);
+    expect(lyricCuts.filter((c) => !!c.decor?.some((d) => ours(d.id))).length).toBeGreaterThan(0);
+    const ok = (g: string, k?: string) => !k || k === 'cut' || ours(k) || !!J.registry(g)[k]?.tags?.some((t) => ['graphic', 'glitch', 'editorial'].includes(t));
+    for (const c of lyricCuts) {
+      for (const g of ['enter', 'exit', 'hold', 'cam', 'layout'] as const) expect(ok(g, c[g]), `${g} ${c[g]}`).toBe(true);
+      for (const d of c.decor ?? []) expect(ok('decor', d.id), `decor ${d.id}`).toBe(true);
+    }
+    for (const bad of ['strobe', 'invert', 'whiteFrame', 'flashCross', 'heartsStars', 'petals']) expect(used).not.toContain(`"${bad}"`);
   });
 
   it('静寂: 画面を光らせる効果 (calm の印があるもの) も出てこない', () => {

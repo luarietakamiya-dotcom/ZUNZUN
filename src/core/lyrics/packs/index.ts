@@ -1,13 +1,14 @@
 import { CUSTOM_STYLE_KEY, type LyricsMotion } from '../../types';
 import { calmPack } from './calm';
 import { intensePack } from './intense';
+import { rockPack } from './rock';
 import type { MotionPack, PackJ } from './types';
 
 /**
  * オリジナルの歌詞モーション (演出パック) の一覧と、JIZURA への登録・プロジェクトへの反映。
  * パックを足すときは、ここの PACKS に 1 行足す。
  */
-export const PACKS: readonly MotionPack[] = [calmPack, intensePack];
+export const PACKS: readonly MotionPack[] = [calmPack, intensePack, rockPack];
 
 /** パックの演出とスタイルを JIZURA に登録する (何度呼んでも 1 回だけ) */
 export function registerMotionPacks(J: PackJ & { __zunzunPacks?: boolean }): void {
