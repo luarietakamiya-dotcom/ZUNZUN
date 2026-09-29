@@ -26,6 +26,7 @@ import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { MAX_LYRICS_LENGTH } from '../../core/project/validate';
 import { store } from '../../core/store';
 import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsMotion, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
+import { createRhythmEditor } from './lyrics-rhythm';
 import { createStyleEditor } from './lyrics-style-editor';
 import { LyricsTimeline } from './lyrics-timeline';
 
@@ -486,6 +487,10 @@ export function renderLyricsPanel(): HTMLElement {
   let shownTime = '';
   let rows: HTMLTableRowElement[] = [];
 
+  // ------------------------------------------------------------ リズム (変拍子, R2)。タイムラインのすぐ下に置く
+  const rhythmEditor = createRhythmEditor({ isBusy: () => tap != null, onChange: () => refresh() });
+  timelineCard.after(rhythmEditor.element);
+
   const snapTargets = (): SyncTargets =>
     store.audio.analysis ? syncTargetsFor(store.audio.analysis) : { onsets: [], candidates: [], beats: [] };
   /** 直前の吸着の結果が、今の状態のまま (その後に手を加えていない) か */
@@ -524,6 +529,7 @@ export function renderLyricsPanel(): HTMLElement {
       beats: targets.beats,
       selected: selectedLine,
       loop: loopRegion(),
+      rhythm: rhythmEditor.grid(),
     });
     shownLine = -2; // 次のフレームでプレビューを描き直す
   }
@@ -571,8 +577,9 @@ export function renderLyricsPanel(): HTMLElement {
       ? `${store.audio.fileName} — 歌い出し候補 ${snapTargets().candidates.length} 個 / ビート ${snapTargets().beats.length} 個`
       : '音源が読み込まれていません。Music タブで音源を読み込むと、再生とタップ同期ができます。';
     for (const b of [playBtn, backBtn, fwdBtn]) b.disabled = !loaded;
-    startFirstBtn.disabled = !loaded || !hasLines || tap != null;
-    startSelBtn.disabled = !loaded || !hasLines || tap != null;
+    const barTapping = rhythmEditor.isTapping;
+    startFirstBtn.disabled = !loaded || !hasLines || tap != null || barTapping;
+    startSelBtn.disabled = !loaded || !hasLines || tap != null || barTapping;
     startSelBtn.textContent = `選択した行 (${selectedLine + 1} 行目) からタップ`;
     tapActive.hidden = tap == null;
     tapCard.hidden = mode !== 'tap';
@@ -596,6 +603,7 @@ export function renderLyricsPanel(): HTMLElement {
     redoBtn.disabled = !history.canRedo || tap != null;
     emptyNote.hidden = hasLines;
     tableWrap.hidden = !hasLines;
+    rhythmEditor.refresh();
     if (tap) {
       const i = tap.line;
       const line = view.parsed.lines[i];
@@ -937,6 +945,8 @@ export function renderLyricsPanel(): HTMLElement {
     }
     const mod = e.ctrlKey || e.metaKey;
     if (isEditable(e.target)) return;
+    // 小節の頭のタップ中は、Space / Backspace / Esc をリズム欄が受ける
+    if (rhythmEditor.handleKey(e)) return;
     // Space はどのボタンにフォーカスがあってもタップ/再生に使う (「再生」ボタンを押したあと Space を押すと、
     // ブラウザの標準動作でそのボタンがもう一度押されて一時停止になっていた)。Enter はボタンの上ではボタンを押す
     const isTapKey = !mod && (e.key === ' ' || (e.key === 'Enter' && (!(e.target instanceof HTMLButtonElement) || e.target === tapButton)));
@@ -1000,6 +1010,7 @@ export function renderLyricsPanel(): HTMLElement {
       document.removeEventListener('keydown', onKey);
       window.clearTimeout(textTimer);
       timeline.dispose();
+      rhythmEditor.dispose();
       tap = null;
       return;
     }
@@ -1017,6 +1028,7 @@ export function renderLyricsPanel(): HTMLElement {
     timeline.setSelection(selectedLine, region);
     timeline.draw(t, playing);
     drawMotionPreview(t);
+    rhythmEditor.tick(t);
     const playText = playing ? '一時停止' : '再生';
     if (playBtn.textContent !== playText) playBtn.textContent = playText;
 

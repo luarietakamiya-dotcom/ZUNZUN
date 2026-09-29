@@ -1,9 +1,11 @@
 import { peakBetween, type Peaks } from '../../core/audio/peaks';
 import { Viewport, type LineTimeSource, type OnsetCandidate } from '../../core/lyrics';
+import type { RhythmGrid } from '../../core/rhythm';
 
 /**
  * Lyrics タブのタイムライン (L4)。canvas 1 枚に、時刻の目盛り・波形・歌声らしさと歌い出し候補・ビート線・
  * 行のブロック・再生位置を描く。docs/ARCHITECTURE.md「タイムラインで後調整」に対応する。
+ * 小節の頭を決めてあれば (R2)、小節線 (太線・小節の番号) と拍のまとまりの頭 (細線) も描く。
  *
  * 操作:
  * - 行のブロック: 左端をドラッグで開始、右端で終了、真ん中で行ごと動かす。離した位置は吸着する (Shift を押している間は吸着しない。
@@ -29,6 +31,8 @@ export interface TimelineData {
   selected: number;
   /** ループ試聴の区間 (無ければ null) */
   loop: { start: number; end: number } | null;
+  /** 小節と拍のまとまり (小節の頭が無ければ null) */
+  rhythm: RhythmGrid | null;
 }
 
 export type DragKind = 'start' | 'end' | 'move';
@@ -62,6 +66,9 @@ const COLORS = {
   loop: 'rgba(124,155,255,0.10)',
   text: '#e7e9ee',
   textDim: '#9aa1ad',
+  bar: 'rgba(240,179,90,0.9)',
+  group: 'rgba(240,179,90,0.35)',
+  barText: 'rgba(240,179,90,0.95)',
 };
 
 const BLOCK_STYLE: Record<LineTimeSource, { fill: string; stroke: string; dash: number[] }> = {
@@ -199,6 +206,30 @@ export class LyricsTimeline {
     if (beatGap * this.vp.pxPerSec >= 5) {
       g.fillStyle = COLORS.grid;
       for (const b of d.beats) if (b >= t0 && b <= t1) g.fillRect(Math.round(X(b)), RULER_H, 1, HEIGHT - RULER_H);
+    }
+
+    // 小節線 (太線) と拍のまとまりの頭 (細線)。まとまりの線は詰まりすぎるときは描かない
+    if (d.rhythm) {
+      const pps = this.vp.pxPerSec;
+      g.font = '10px system-ui, sans-serif';
+      const pulses = d.rhythm.pulses;
+      for (let k = 0; k < pulses.length; k++) {
+        const p = pulses[k]!;
+        if (p.t < t0 - 1 || p.t > t1) continue;
+        const x = Math.round(X(p.t));
+        if (p.barHead) {
+          g.fillStyle = COLORS.bar;
+          g.fillRect(x - 1, RULER_H, 2, HEIGHT - RULER_H);
+          const bar = d.rhythm.bars[p.bar]!;
+          if ((bar.end - bar.start) * pps >= 28) {
+            g.fillStyle = COLORS.barText;
+            g.fillText(String(p.bar + 1), x + 3, WAVE_TOP + 10);
+          }
+        } else if (p.length * pps >= 4 && k > 0 && (p.t - pulses[k - 1]!.t) * pps >= 4) {
+          g.fillStyle = COLORS.group;
+          g.fillRect(x, RULER_H, 1, HEIGHT - RULER_H);
+        }
+      }
     }
 
     // 目盛り

@@ -400,3 +400,22 @@ body {
 .lyrics-text-input { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; width: 14em; }
 .lyrics-custom-button { border: 1px solid var(--accent); color: var(--fg); }
 .lyrics-custom-button[hidden] { display: none; }
+
+/* リズム (変拍子) 欄 (R2) */
+.lyrics-meter-list { display: flex; flex-direction: column; gap: 6px; }
+.lyrics-meter-bar { min-width: 7em; }
+.lyrics-meter-input { width: 9em; }
+.lyrics-rhythm-pos { color: var(--fg); font-variant-numeric: tabular-nums; }
+.lyrics-rhythm-boxes { display: flex; gap: 4px; min-height: 26px; }
+.lyrics-rhythm-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(240, 179, 90, 0.45);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--fg-dim);
+  min-width: 18px;
+}
+.lyrics-rhythm-box.head { border-width: 2px; }
+.lyrics-rhythm-box.active { background: rgba(240, 179, 90, 0.85); color: #0b0c0f; font-weight: 700; }

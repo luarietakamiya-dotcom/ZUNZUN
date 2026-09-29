@@ -3,6 +3,7 @@ import type { AudioAnalysis } from '../audio/analyze';
 import { barLengthEstimate, BarTapSession, fillGaps, fillToEnd } from './bars';
 import { buildRhythmGrid, groupsForBar, normalizeBars, rhythmPositionAt } from './grid';
 import { formatGrouping, parseGrouping } from './grouping';
+import { barIndexAt, describeGrouping, removeMeter, setMeter } from './edit';
 import { barSnapTargetsFor } from './targets';
 
 describe('parseGrouping / formatGrouping', () => {
@@ -130,5 +131,42 @@ describe('barSnapTargetsFor', () => {
     expect(barSnapTargetsFor(analysis)).toBe(a);
     expect(a.beats).toEqual([1, 2]);
     expect(a.candidates.some((t) => Math.abs(t - 1) < 0.05)).toBe(true);
+  });
+});
+
+describe('拍子の区間の編集', () => {
+  it('setMeter: 同じ小節は置き換え、昇順に並べ、書き方をそろえる。読めない拍子は null', () => {
+    const base = [{ bar: 0, pattern: '4' }];
+    const a = setMeter(base, 4, '２＋２＋３')!;
+    expect(a).toEqual([{ bar: 0, pattern: '4' }, { bar: 4, pattern: '2+2+3' }]);
+    expect(setMeter(a, 2, '1+1+1')).toEqual([{ bar: 0, pattern: '4' }, { bar: 2, pattern: '3' }, { bar: 4, pattern: '2+2+3' }]);
+    expect(setMeter(a, 4, '5')).toEqual([{ bar: 0, pattern: '4' }, { bar: 4, pattern: '5' }]);
+    expect(setMeter(a, 0, '3+3')![0]).toEqual({ bar: 0, pattern: '3+3' });
+    expect(setMeter(a, 1, 'abc')).toBeNull();
+    expect(setMeter(a, -1, '4')).toBeNull();
+    // 1 小節目の指定が無ければ 4 を足す
+    expect(setMeter([], 3, '5')).toEqual([{ bar: 0, pattern: '4' }, { bar: 3, pattern: '5' }]);
+    expect(base).toEqual([{ bar: 0, pattern: '4' }]);
+  });
+
+  it('removeMeter: 1 小節目の指定は消さない', () => {
+    const m = [{ bar: 0, pattern: '4' }, { bar: 4, pattern: '2+2+3' }];
+    expect(removeMeter(m, 4)).toEqual([{ bar: 0, pattern: '4' }]);
+    expect(removeMeter(m, 0)).toEqual(m);
+  });
+
+  it('barIndexAt: その時刻を含む小節の番号 (前なら -1)', () => {
+    const bars = [1, 3, 5];
+    expect(barIndexAt(bars, 0.5)).toBe(-1);
+    expect(barIndexAt(bars, 1)).toBe(0);
+    expect(barIndexAt(bars, 4.99)).toBe(1);
+    expect(barIndexAt(bars, 100)).toBe(2);
+    expect(barIndexAt([], 3)).toBe(-1);
+  });
+
+  it('describeGrouping', () => {
+    expect(describeGrouping('2+2+3')).toBe('7 等分を 2・2・3 にまとめる');
+    expect(describeGrouping('4')).toBe('4 等分');
+    expect(describeGrouping('x')).toBeNull();
   });
 });

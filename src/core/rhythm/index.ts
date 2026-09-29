@@ -3,3 +3,4 @@ export { buildRhythmGrid, groupsForBar, normalizeBars, rhythmPositionAt } from '
 export type { RhythmBar, RhythmGrid, RhythmPosition, RhythmPulse } from './grid';
 export { barLengthEstimate, BarTapSession, fillGaps, fillToEnd } from './bars';
 export { barSnapTargetsFor } from './targets';
+export { barIndexAt, describeGrouping, removeMeter, setMeter } from './edit';
