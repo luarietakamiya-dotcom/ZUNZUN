@@ -77,6 +77,7 @@ function createRunnerFromStore(): ExportRunner {
   const lyrics = store.lyrics ? (JSON.parse(JSON.stringify(store.lyrics)) as typeof store.lyrics) : null;
   const analysis = audio.analysis;
   const rhythm = store.rhythm ? (JSON.parse(JSON.stringify(store.rhythm)) as typeof store.rhythm) : null;
+  const background = store.background && store.backgroundFile ? { config: { ...store.background }, file: store.backgroundFile } : null;
   const seed = store.seed;
 
   return (ctx) =>
@@ -95,6 +96,7 @@ function createRunnerFromStore(): ExportRunner {
         lyrics,
         analysis,
         rhythm,
+        background,
         fileName,
       },
       ctx,
@@ -224,11 +226,13 @@ export function renderExportPanel(): HTMLElement {
       prereq.textContent = '音源が読み込まれていません。Music タブで音源を読み込むと書き出せます。';
     } else {
       const missing = store.overlays.filter((o) => !store.getOverlayFile(o.id)).length;
-      prereq.style.display = missing > 0 ? '' : 'none';
-      prereq.textContent =
-        missing > 0
-          ? `画像がまだ選び直されていないオーバーレイが ${missing} 個あります (Overlay タブ)。それらは書き出しに含まれません。`
-          : '';
+      const bgMissing = store.background != null && store.backgroundFile == null;
+      const notes = [
+        missing > 0 ? `画像がまだ選び直されていないオーバーレイが ${missing} 個あります (Overlay タブ)。それらは書き出しに含まれません。` : '',
+        bgMissing ? `背景「${store.background!.ref}」がまだ選び直されていません (Overlay タブ)。背景なしで書き出します。` : '',
+      ].filter(Boolean);
+      prereq.style.display = notes.length > 0 ? '' : 'none';
+      prereq.textContent = notes.join(' ');
     }
 
     startBtn.disabled = running || !audioReady;

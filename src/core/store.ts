@@ -11,6 +11,8 @@ import {
   type OverlayLayer,
   type ProjectFile,
   type RhythmSettings,
+  type BackgroundSettings,
+  defaultBackground,
 } from './types';
 
 type Listener = () => void;
@@ -38,6 +40,9 @@ class Store {
   private _exportSettings: ExportSettings = defaultProject().export;
   private _lyrics: LyricsSettings | null = null;
   private _rhythm: RhythmSettings | null = null;
+  private _background: BackgroundSettings | null = null;
+  /** 背景の元のファイル (メモリ上だけ。Project JSON には ref/sha256 だけを保存する) */
+  private _backgroundFile: File | null = null;
   private readonly listeners = new Set<Listener>();
 
   /** 小節と拍子 (変拍子モード)。使っていない間は null。Project JSON の rhythm に保存される。 */
@@ -48,6 +53,42 @@ class Store {
   /** 小節と拍子を丸ごと差し替える (null で使わない状態に戻す)。 */
   setRhythm(next: RhythmSettings | null): void {
     this._rhythm = next;
+    this.emit();
+  }
+
+  /** 背景の一枚絵・動画の設定。使わない間は null。Project JSON の background に保存される */
+  get background(): BackgroundSettings | null {
+    return this._background;
+  }
+
+  /** 背景の元のファイル。Project JSON を読み込んだ直後など、まだ選び直していなければ null */
+  get backgroundFile(): File | null {
+    return this._backgroundFile;
+  }
+
+  /**
+   * 背景のファイルを選ぶ。同じファイル (sha256 が同じ) を選び直したときは設定をそのまま使い、別のファイルなら
+   * 既定の設定で始める (種類が変わったとき以外は、見た目の調整値は引き継ぐ)。
+   */
+  async setBackgroundFile(file: File, kind: BackgroundSettings['kind']): Promise<void> {
+    const sha256 = await sha256Hex(await file.arrayBuffer());
+    const cur = this._background;
+    if (cur && cur.sha256 === sha256) this._background = { ...cur, ref: file.name, kind };
+    else if (cur && cur.kind === kind) this._background = { ...cur, ref: file.name, sha256 };
+    else this._background = defaultBackground(file.name, sha256, kind);
+    this._backgroundFile = file;
+    this.emit();
+  }
+
+  updateBackground(patch: Partial<Omit<BackgroundSettings, 'ref' | 'sha256' | 'kind'>>): void {
+    if (!this._background) return;
+    this._background = { ...this._background, ...patch };
+    this.emit();
+  }
+
+  removeBackground(): void {
+    this._background = null;
+    this._backgroundFile = null;
     this.emit();
   }
 
@@ -213,6 +254,8 @@ class Store {
     this._exportSettings = { ...project.export };
     this._lyrics = project.lyrics;
     this._rhythm = project.rhythm;
+    this._background = project.background;
+    this._backgroundFile = null;
     this.emit();
   }
 

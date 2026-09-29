@@ -5,6 +5,7 @@ import {
   defaultLyrics,
   defaultLyricsMotion,
   defaultProject,
+  defaultBackground,
   defaultRhythm,
   type CommonParams,
   type ExportSettings,
@@ -14,6 +15,7 @@ import {
   type LyricsStem,
   type OverlayLayer,
   type ProjectFile,
+  type BackgroundSettings,
   type RhythmSettings,
 } from '../types';
 
@@ -208,6 +210,24 @@ function sanitizeLyricsMotion(raw: unknown): LyricsMotion {
   };
 }
 
+/** 背景の一枚絵・動画。ファイル名と sha256 (64 桁の 16 進) が無ければ使わない。値は範囲に収め、知らない選択肢は既定に戻す */
+function sanitizeBackground(raw: unknown): BackgroundSettings | null {
+  if (!isPlainObject(raw)) return null;
+  if (typeof raw.ref !== 'string' || raw.ref === '' || typeof raw.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(raw.sha256)) return null;
+  const kind = raw.kind === 'video' ? 'video' : 'image';
+  const base = defaultBackground(raw.ref.slice(0, 512), raw.sha256, kind);
+  const unit = (v: unknown, fallback: number): number => (isFiniteNumber(v) ? clamp(v, 0, 1) : fallback);
+  return {
+    ...base,
+    fit: raw.fit === 'contain' ? 'contain' : 'cover',
+    dim: unit(raw.dim, base.dim),
+    blur: unit(raw.blur, base.blur),
+    blend: raw.blend === 'add' || raw.blend === 'over' ? raw.blend : 'screen',
+    visualizerOpacity: unit(raw.visualizerOpacity, base.visualizerOpacity),
+    loop: typeof raw.loop === 'boolean' ? raw.loop : base.loop,
+  };
+}
+
 const MAX_BARS = 10_000;
 const MAX_METERS = 500;
 
@@ -323,6 +343,7 @@ export function sanitizeProject(raw: unknown): ProjectFile {
     overlays: sanitizeOverlays(raw.overlays),
     lyrics: sanitizeLyrics(raw.lyrics),
     rhythm: sanitizeRhythm(raw.rhythm),
+    background: sanitizeBackground(raw.background),
     colors: sanitizeColors(raw.colors),
     fonts: sanitizeFonts(raw.fonts),
     export: sanitizeExport(raw.export, base.export),

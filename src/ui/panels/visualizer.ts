@@ -127,6 +127,8 @@ export function renderVisualizerPanel(): HTMLElement {
     .map((config) => ({ config, file: store.getOverlayFile(config.id) }))
     .filter((e): e is { config: OverlayLayer; file: File } => e.file != null);
   void host.overlay.loadFrom(overlayEntries);
+  // 背景 (Overlay タブで設定)。ファイルがまだ選び直されていなければ背景なし
+  void host.background.load(store.background, store.backgroundFile).catch(() => {});
 
   const applyPreset = (id: string): void => {
     const mod = visualizerRegistry.get(id);

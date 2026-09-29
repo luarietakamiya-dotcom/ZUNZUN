@@ -1,6 +1,6 @@
 # 引き継ぎメモ（ローカル Claude Code ⇄ Cloud Session）
 
-最終更新: 2026-09-29（Cloud Session で吸着先の時刻の修正のあと、吸着用のボーカル stem を足した時点）。
+最終更新: 2026-09-29（Cloud Session で背景の一枚絵を足した時点。次は背景の動画）。
 これまでの作業は Claude Code の Cloud Session で行い、`npm install` が必要な確認だけをユーザーがローカル PC（Windows / PowerShell）で実行していた。
 ローカルの Claude Code なら `npm` も `git` も直接使えるので、以後は同じ場所で実装と検証を完結できる。
 
@@ -105,6 +105,13 @@ R3 の要点（`src/core/lyrics/jizura-adapter.ts`）:
 - `attachRhythm(plan, grid)`: `plan.zzRhythm` に小節とまとまりの並びを添える（ZUNZUN の拡張。JIZURA 本体は読まない）。`planRhythmAt(plan, t)` で「何小節目・何番目のまとまり・進み具合」が取れる（R4 の演出用）。
 - `LyricMotionOptions.rhythm`、`MotionRequest.rhythm`、`Mp4ExportJob.rhythm` を追加。プレビュー（Visualizer / Lyrics タブ）と書き出しは `store.rhythm` を渡す（書き出しは開始時に複製）。作り直しのキーは、変拍子モードがオンのときだけ小節と拍子を含む（オフの間に叩き直しても作り直さない）。
 - 確認できたこと: 本物の JIZURA（jsdom）で、7/8 の拍を渡すと plan のビートがそれになり、行の中のカットの切れ目が拍の上に乗る（`jizura-compat.test.ts`）。ヘッドレス Chromium で実際に描き、切れ目が 3.75（小節の頭）→ 4.25 → 4.75（まとまり）→ 5.5 …になること、同じ設定なら同じ絵、オフとは違う絵になること。**実際の曲での見た目は未確認**。
+
+背景（ユーザー要望・計画承認 2026-09-29。方針は `docs/ARCHITECTURE.md`「背景（一枚絵・動画）の方針」）:
+- **① 一枚絵: 実装済み・ユーザー確認待ち。次は ② 動画**（ユーザーは「背景として動画を流す」を選んだ。時刻を決めて差し込む動画は今回はやらない）。
+- `src/core/render/background.ts` `BackgroundCompositor`: 画面いっぱいの板 1 枚（`backgroundUvScale` で cover / contain、contain の余りは黒）。**ビジュアライザーを画面へ描いたあと、その上から背景を重ねる**（`Host.render` の PostFX のあと・歌詞の前に `composeOver`）。スクリーン = `src + dst×(1−src)`、加算 = `src + dst`、そのまま上に = 背景 × (1 − 濃さ) を足す。濃さ < 1 は先に黒を重ねてビジュアライザーを薄くする。背景の画像は値をそのまま出す（色の変換なし）。ぼかしは読み込み時に canvas の filter で 1 回（端が暗くならないよう少し大きく描く、長い辺 4096px まで縮める）。
+  - **ハマったこと**: 最初はビジュアライザーを画面外（EffectComposer の readBuffer）に描いてから背景の上に重ねたが、黒い背景でも背景なしと最大 144 違った。UnrealBloomPass は画面へ写すとき「元の絵だけ MeshBasicMaterial でリニア → sRGB に変換し、Bloom の光は変換せず足す」ため。スクリーン・加算は可換なので「ビジュアライザーを画面へ → 上から背景」に変えて一致させた（PostFX は無変更）。
+- 設定は `BackgroundSettings`（Project JSON 最上位 `background`、version 1 のまま、読み込み時に検証）。store に `background` / `backgroundFile`（メモリだけ）/ `setBackgroundFile`（同じ sha256 なら設定を引き継ぐ）/ `updateBackground` / `removeBackground`。Overlay タブの先頭に「背景 (一枚絵)」欄（`background-card.ts`、サムネイル・収め方・重ね方・暗さ・ぼかし・濃さ）。Visualizer タブと書き出し（`Mp4ExportJob.background`）が読み込む。ファイルが未選択なら背景なしで、Export タブに注意を出す。
+- 確認できたこと: E2E `tests/e2e/background.spec.ts`（3 プリセット × 黒い背景 + スクリーンは背景なしと ±2 以内・絵のある背景は明るくなる・同じ seed なら同じ画像・暗さを上げると暗くなる・「そのまま上に」濃さ 1 は背景なしと同じ）。ヘッドレス Chromium で夕焼けの絵 × 3 プリセットの見た目、Overlay タブ → Visualizer タブの一連の操作、保存 → 読み込みで設定が戻りファイルは選び直しの案内が出ること。**書き出しに背景が入ることは、この環境で H.264 を書き出せないので未確認**（同じ Host で描くので入るはず）。実際の写真での見た目も未確認。
 
 吸着用のボーカル stem（ユーザー要望・承認 2026-09-29、`src/core/lyrics/stem.ts`、`src/ui/panels/lyrics-stem.ts`）:
 - Lyrics タブの「再生とプレビュー」の下に「ボーカル stem (吸着用)」欄。ボーカルだけの音源を読み込むと、**歌い出し候補を stem から、ビートを元の曲から**取る（`lyricSyncTargets`、組み合わせごとにキャッシュ）。歌詞の「吸着」・タイムラインのドラッグの吸着・全体のずれの推定・タイムラインの波形と歌声らしさの表示が stem を使う。再生・ビジュアライザー・書き出し・小節の頭の吸着は元の曲のまま。

@@ -1,4 +1,5 @@
 import { store } from '../../core/store';
+import { createBackgroundCard } from './background-card';
 import type { OverlayLayer } from '../../core/types';
 
 const IMAGE_ACCEPT = 'image/png,image/webp,image/jpeg';
@@ -34,6 +35,9 @@ export function renderOverlayPanel(): HTMLElement {
     'ビジュアライザーの上にPNG/WebP/JPGを重ねます (Bloomの影響を受けない前面レイヤーです)。' +
     '実際の見た目はVisualizerタブのプレビューで確認してください。';
   el.appendChild(p);
+
+  // 背景の一枚絵 (ビジュアライザーの奥)。オーバーレイ (前面) とは別の欄
+  el.appendChild(createBackgroundCard());
 
   const addRow = document.createElement('div');
   addRow.className = 'row-gap';

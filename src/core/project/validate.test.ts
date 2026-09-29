@@ -182,6 +182,30 @@ describe('sanitizeProject', () => {
     expect(Object.keys(m.custom!)).toEqual(['name', 'base', 'colors', 'fonts', 'texture']);
   });
 
+  it('background: ファイル名と sha256 があるときだけ残し、値は範囲に収め、知らない選択肢は既定に戻す', () => {
+    const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
+    expect(sanitizeProject(raw).background).toBeNull();
+    const sha = 'd'.repeat(64);
+    raw.background = { ref: 'sky.jpg', sha256: sha, kind: 'image', fit: 'contain', dim: 3, blur: -1, blend: 'multiply', visualizerOpacity: 0.5, loop: 'yes' };
+    expect(sanitizeProject(raw).background).toEqual({
+      ref: 'sky.jpg',
+      sha256: sha,
+      kind: 'image',
+      fit: 'contain',
+      dim: 1,
+      blur: 0,
+      blend: 'screen',
+      visualizerOpacity: 0.5,
+      loop: true,
+    });
+    raw.background = { ref: 'a.mp4', sha256: sha, kind: 'video', blend: 'over' };
+    expect(sanitizeProject(raw).background).toMatchObject({ kind: 'video', fit: 'cover', dim: 0.35, blend: 'over', visualizerOpacity: 1 });
+    for (const bad of [{ ref: '', sha256: sha }, { ref: 'a', sha256: 'zz' }, 'a.png']) {
+      raw.background = bad;
+      expect(sanitizeProject(raw).background).toBeNull();
+    }
+  });
+
   it('lyrics.stem: ファイル名と sha256 (64 桁の 16 進) があるときだけ残し、enabled の既定は true', () => {
     const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
     const sha = 'c'.repeat(64);

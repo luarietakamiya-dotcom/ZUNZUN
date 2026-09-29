@@ -130,6 +130,8 @@ export interface ProjectFile {
   lyrics: LyricsSettings | null;
   /** 小節と拍子 (変拍子モード)。使わないプロジェクトは null (docs/ARCHITECTURE.md「変拍子（リズム）の方針」) */
   rhythm: RhythmSettings | null;
+  /** 背景の一枚絵・動画。使わないプロジェクトは null (docs/ARCHITECTURE.md「背景」) */
+  background: BackgroundSettings | null;
   colors: Record<string, string>;
   fonts: Record<string, string>;
   export: ExportSettings;
@@ -152,6 +154,43 @@ export interface RhythmMeter {
   bar: number;
   pattern: string;
 }
+
+/**
+ * 背景の一枚絵 (のちに動画も)。描画の順番は 背景 → ビジュアライザー (PostFX 込み、blend で重ねる) → 歌詞 → オーバーレイ。
+ * 中身は保存せず、ファイル名と sha256 だけを持つ (オーバーレイと同じ)。
+ */
+export interface BackgroundSettings {
+  ref: string;
+  sha256: string;
+  kind: 'image' | 'video';
+  /** 'cover' = 画面いっぱい (はみ出しは切る)、'contain' = 全体を収める (余りは黒) */
+  fit: 'cover' | 'contain';
+  /** 背景を暗くする量 (0 = そのまま、1 = 真っ黒) */
+  dim: number;
+  /** ぼかし (0..1、画像だけ) */
+  blur: number;
+  /**
+   * ビジュアライザーの重ね方。'screen' = スクリーン合成 (黒は透けて光だけ乗る)、'add' = 加算、
+   * 'over' = そのまま上に (visualizerOpacity で透かす。1 なら背景は見えない)
+   */
+  blend: 'screen' | 'add' | 'over';
+  /** ビジュアライザーの濃さ (0..1) */
+  visualizerOpacity: number;
+  /** 動画が曲より短いとき、くり返すか (false なら最後の絵で止める) */
+  loop: boolean;
+}
+
+export const defaultBackground = (ref: string, sha256: string, kind: BackgroundSettings['kind']): BackgroundSettings => ({
+  ref,
+  sha256,
+  kind,
+  fit: 'cover',
+  dim: 0.35,
+  blur: 0,
+  blend: 'screen',
+  visualizerOpacity: 1,
+  loop: true,
+});
 
 export const defaultRhythm = (): RhythmSettings => ({ enabled: false, bars: [], meters: [{ bar: 0, pattern: '4' }] });
 
@@ -301,6 +340,7 @@ export const defaultProject = (): ProjectFile => ({
   overlays: [],
   lyrics: null,
   rhythm: null,
+  background: null,
   colors: {},
   fonts: {},
   export: {

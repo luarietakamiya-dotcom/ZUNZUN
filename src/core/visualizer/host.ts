@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { LyricLayer } from '../lyrics/layer';
 import { OverlayManager } from '../overlay/manager';
 import { deriveSeed, makeRng } from '../random';
+import { BackgroundCompositor } from '../render/background';
 import { PostFxStack } from '../render/postfx';
 import type { AudioFrame, CommonParams, VisualizerPreset } from '../types';
 import type { VisualizerModule } from './registry';
@@ -42,6 +43,11 @@ export class VisualizerHost {
    * 描く LyricMotion は呼び出し側が lyrics.setMotion() で渡す (歌詞が無ければ何も描かない)
    */
   readonly lyrics: LyricLayer;
+  /**
+   * 背景の一枚絵 (見た目は Compositor のいちばん奥)。読み込むのは呼び出し側 (background.load)。
+   * ビジュアライザーを画面に描いたあと、その上からスクリーン合成などで重ねる (ビジュアライザーの見た目を変えないため)
+   */
+  readonly background = new BackgroundCompositor();
   private current: { preset: VisualizerPreset; moduleId: string } | null = null;
   private width = 1;
   private height = 1;
@@ -76,6 +82,7 @@ export class VisualizerHost {
     this.renderer.setSize(this.width, this.height, false);
     this.postfx.resize(this.width, this.height);
     this.overlay.resize(this.width, this.height);
+    this.background.resize(this.width, this.height);
     // 歌詞の 2D canvas は実際の描画ピクセル数に合わせる (にじまないように)
     const pr = this.renderer.getPixelRatio();
     this.lyrics.resize(this.width * pr, this.height * pr);
@@ -118,14 +125,19 @@ export class VisualizerHost {
     previous?.preset.dispose();
   }
 
-  /** 現在のプリセット → 歌詞モーション → オーバーレイ の順に、毎フレーム更新して描画する。 */
+  /** 現在のプリセット → (背景を重ねる) → 歌詞モーション → オーバーレイ の順に、毎フレーム更新して描画する。 */
   render(frame: AudioFrame, params: CommonParams & Record<string, unknown>): void {
     if (this.current) {
       const { preset } = this.current;
       preset.update(frame, params);
       this.postfx.setGlow(params.glow);
       this.postfx.render();
+    } else if (this.background.active) {
+      this.renderer.setRenderTarget(null);
+      this.renderer.clear();
     }
+    // 背景はビジュアライザーの上からスクリーン合成などで重ねる (見た目は背景が奥。core/render/background.ts)
+    this.background.composeOver(this.renderer);
     this.lyrics.render(this.renderer, frame.t);
     this.overlay.animate(frame);
     this.overlay.render(this.renderer);
@@ -138,6 +150,7 @@ export class VisualizerHost {
     this.postfx.dispose();
     this.lyrics.dispose();
     this.overlay.dispose();
+    this.background.dispose();
     this.renderer.dispose();
     // WebGL コンテキストは GC 任せだとしばらく残り、ブラウザの同時コンテキスト数上限 (Chrome は 16) に
     // 近づく。タブ切り替えや書き出しのたびに Host を作り直すので、ここで明示的に手放す。

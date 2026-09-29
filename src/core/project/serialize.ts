@@ -5,6 +5,7 @@ import {
   type LyricsSettings,
   type OverlayLayer,
   type ProjectFile,
+  type BackgroundSettings,
   type RhythmSettings,
 } from '../types';
 
@@ -29,6 +30,8 @@ export interface ProjectSourceState {
   lyrics: LyricsSettings | null;
   /** 小節と拍子 (変拍子モード)。使わない場合は null */
   rhythm: RhythmSettings | null;
+  /** 背景の一枚絵・動画。使わない場合は null (省略可: 古い呼び出し側・テストのため) */
+  background?: BackgroundSettings | null;
   exportSettings: ExportSettings;
 }
 
@@ -77,6 +80,7 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
     rhythm: state.rhythm
       ? { enabled: state.rhythm.enabled, bars: [...state.rhythm.bars], meters: state.rhythm.meters.map((m) => ({ ...m })) }
       : null,
+    background: state.background ? { ...state.background } : null,
     colors: {},
     fonts: {},
     export: { ...state.exportSettings },

@@ -13,8 +13,9 @@
 t ─→ FrameClock ─→ AudioTimeline.at(t) = AudioFrame
                   ├→ VisualizerHost → 現在のPreset.update(frame) → THREE.Scene → PostFX(bloom/rays)
                   ├→ LyricLayer (JIZURA Renderer.frame(ctx, plan, t, {transparent}))  ※MVP外
+                  ├→ BackgroundCompositor (背景の一枚絵・動画)
                   └→ OverlayManager (画像レイヤー群)
-                  → Compositor(Three: 背景=preset / 中=lyric texture / 前=overlay) → Canvas
+                  → Compositor(Three: 奥=背景 / preset / 中=lyric texture / 前=overlay) → Canvas
 Export: 同じ FrameClock を fps 刻みで回す → VideoFrame → Mediabunny(MP4/WebM) / PNG連番
 ```
 設計の軸：
@@ -127,6 +128,7 @@ zunzun/
   "visualizer":{"preset":"solar-gate","presetVersion":1,"common":{"intensity":0.8,"sensitivity":0.6,"bass":1,"mid":1,"high":1,"glow":0.7,"motion":0.6,"colorTheme":"gold","cameraMotion":0.4},"params":{}},
   "overlays":[{"id":"ov1","ref":"assets/logo.png","sha256":"…","x":0.5,"y":0.8,"scale":0.3,"rotation":0,"opacity":1,"z":10,"glow":0,"float":0,"beat":0.2}],
   "lyrics":{"engine":"jizura","source":"lrc","text":"…","timing":{"lineTimes":{},"lineEnds":{},"snap":true,"snapWindowMs":150},"motion":{…JIZURA project subset…},"stem":{"ref":"vocal.wav","sha256":"…","enabled":true}},
+  "background":{"ref":"assets/sky.jpg","sha256":"…","kind":"image","fit":"cover","dim":0.35,"blur":0,"blend":"screen","visualizerOpacity":1,"loop":true},
   "colors":{},"fonts":{},
   "export":{"width":1920,"height":1080,"fps":60,"format":"mp4","quality":"high","transparent":false} }
 ```
@@ -180,6 +182,12 @@ MVPへの影響
 - 歌詞モーション（JIZURA）には、変拍子モードのときだけ、自動検出のビートの代わりにこの拍の並びを渡します。あわせて「何小節目・何番目のまとまり・小節内の何拍目」を plan のデータに添えます。
 - **JIZURA は改変しません。** 変拍子向けの演出は、JIZURA が用意している拡張の仕組み `J.register` で ZUNZUN 独自の演出として追加し、それを選びやすくする変拍子用スタイルを作ります（独自の演出は JIZURA の「部品セット」に入れ、変拍子モードがオンで変拍子用スタイルのときだけ候補に入れる。既存のスタイルでは候補の一覧にも入らないので、カット割りは 1 つも変わらない。R4 の実装時に、重み 0 だけでは JIZURA の抽選の誤差で選ばれうると分かったためこうした）。JIZURA の中の「4 拍でひと回り」前提の演出は、変拍子用スタイルでは選ばないようにします。本家の更新はこれまでどおり取り込めます。
 - 進め方: R1 データと計算 → R2 画面（タップ・拍子の指定・タイムラインの小節線）→ R3 JIZURA とつなぐ → R4 変拍子パック（独自の演出と変拍子用スタイル）。
+
+## 背景（一枚絵・動画）の方針（2026-09-29 ユーザー承認、`core/render/background.ts`）
+- 見た目の順番は **背景 → ビジュアライザー → 歌詞 → オーバーレイ**。背景には Bloom をかけません（明るい写真が白飛びしないように）。
+- プリセットは背景を不透明な黒で塗るので、**プリセットには手を入れず合成で解決します**。ビジュアライザーは今までどおり画面へ直接描き、その上から背景を重ねます。重ね方は「スクリーン」（既定。黒は透けて光だけが乗る）・「加算」・「そのまま上に」（濃さで透かす）。スクリーンと加算はどちらが上でも同じ結果になるので、この順で描いても見た目は「背景が奥」になり、ビジュアライザーの色は背景なしと完全に同じです。
+- 背景の設定（収め方・暗さ・ぼかし・重ね方・ビジュアライザーの濃さ・動画のくり返し）は Project JSON 最上位の `background`。中身は保存せず ref + sha256 だけ（オーバーレイと同じく読み込み後に選び直す）。
+- 進め方: ①一枚絵（済）→ ②動画（プレビューはブラウザの動画を曲の位置に合わせ、書き出しは Mediabunny で各フレームの時刻ちょうどの絵を取り出す。動画の音は使わない。パッケージの追加なし）→ ③必要なら時刻を決めて差し込む動画（ユーザーは今回 ② まで = 「背景として動画を流す」を選択）。
 
 ## Verification
 - 各ステップで `npm run build`、`npm run lint`、`npm test`（Vitest）を実行します。

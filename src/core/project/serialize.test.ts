@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultCommonParams, defaultLyrics, defaultProject, type OverlayLayer } from '../types';
+import { defaultBackground, defaultCommonParams, defaultLyrics, defaultProject, type OverlayLayer } from '../types';
 import { buildProjectFile, type ProjectSourceState } from './serialize';
 import { sanitizeProject } from './validate';
 
@@ -75,6 +75,15 @@ describe('buildProjectFile', () => {
     const project = buildProjectFile(state({ exportSettings }));
     expect(project.export).toEqual(exportSettings);
     expect(project.export).not.toBe(exportSettings);
+  });
+
+  it('背景 (background) を複製して保存し、保存 → 読み込みで同じ内容に戻る', () => {
+    expect(buildProjectFile(state()).background).toBeNull();
+    const background = { ...defaultBackground('sky.jpg', 'e'.repeat(64), 'image'), dim: 0.5, blend: 'add' as const };
+    const project = buildProjectFile(state({ background }));
+    expect(project.background).toEqual(background);
+    expect(project.background).not.toBe(background);
+    expect(sanitizeProject(JSON.parse(JSON.stringify(project))).background).toEqual(background);
   });
 
   it('小節と拍子 (rhythm) を複製して保存し、保存 → 読み込みで同じ内容に戻る', () => {

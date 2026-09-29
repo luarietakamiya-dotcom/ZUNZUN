@@ -14,7 +14,7 @@ import type { AudioAnalysis } from '../audio/analyze';
 import type { AudioTimeline } from '../audio/timeline';
 import { buildJizuraAudio, LyricMotion, motionRhythmGrid } from '../lyrics/jizura-adapter';
 import { wantsMotion } from '../lyrics/motion-provider';
-import type { CommonParams, ExportSettings, LyricsSettings, OverlayLayer, RhythmSettings } from '../types';
+import type { BackgroundSettings, CommonParams, ExportSettings, LyricsSettings, OverlayLayer, RhythmSettings } from '../types';
 import { VisualizerHost } from '../visualizer/host';
 import type { VisualizerModule } from '../visualizer/registry';
 import { prepareAudioForEncode, sliceAudioBuffer } from './audio-prep';
@@ -39,6 +39,8 @@ export interface Mp4ExportJob {
   analysis: AudioAnalysis | null;
   /** 小節と拍子 (変拍子モードがオンのときだけ歌詞モーションに使う。省略 = 使わない) */
   rhythm?: RhythmSettings | null;
+  /** 背景の一枚絵 (設定と元のファイル)。省略 = 背景なし */
+  background?: { config: BackgroundSettings; file: File } | null;
   fileName: string;
 }
 
@@ -102,6 +104,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
     host.resize(width, height);
     await host.setPreset(job.preset, job.seed, job.params);
     await host.overlay.loadFrom(job.overlays);
+    await host.background.load(job.background?.config ?? null, job.background?.file ?? null);
     // 歌詞モーション: 書き出し開始時の設定で作る (プレビューと同じ seed・時刻・設定なので同じ絵になる。書き出しは軽い描画を使わない)
     const lyricReq = { lyrics: job.lyrics, analysis: job.analysis, projectSeed: job.seed, width, height, fps };
     if (wantsMotion(lyricReq)) {
