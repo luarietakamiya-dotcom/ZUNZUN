@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsSettings } from '../../types';
 import { buildJizuraProject, installTimingPatch, type JizuraApi } from '../jizura-adapter';
 import { CALM_STYLE_KEY } from './calm';
+import { CINEMA_STYLE_KEY } from './cinema';
 import { INTENSE_STYLE_KEY } from './intense';
 import { ROCK_STYLE_KEY } from './rock';
 import { flashAllowed, MAX_FLASH_HZ } from './util';
@@ -34,13 +35,13 @@ const lyricsOf = (style: string, custom: LyricsSettings['motion']['custom'] = nu
 });
 const audio = { duration: 34, beats: Array.from({ length: 64 }, (_, i) => i * 0.5), energy: new Float32Array(34 * 60).fill(0.3), energyRate: 60 };
 
-function planOf(lyrics: LyricsSettings): { json: string; used: string; cuts: Cut[]; project: Record<string, unknown> } {
+function planOf(lyrics: LyricsSettings, palette: Parameters<typeof applyMotionPack>[3] = {}): { json: string; used: string; cuts: Cut[]; project: Record<string, unknown>; plan: { style: { schemes: { fg: string; accent: string }[] }; events?: { type: string }[] } } {
   const project = buildJizuraProject(lyrics, J.defaultProject(), { seed: 5, aspect: '16:9', fps: 30 });
-  applyMotionPack(project, lyrics.motion, J);
+  applyMotionPack(project, lyrics.motion, J, palette);
   const plan = J.plan(project, audio);
   // 使われた演出を見るのはカットと出来事 (画面効果) だけ (plan.style にはスタイルの「選ばれやすさ」の表として名前が載る)
   const used = JSON.stringify({ cuts: plan.cuts, events: (plan as { events?: unknown }).events });
-  return { json: JSON.stringify(plan), used, cuts: plan.cuts as Cut[], project };
+  return { json: JSON.stringify(plan), used, cuts: plan.cuts as Cut[], project, plan: plan as unknown as { style: { schemes: { fg: string; accent: string }[] }; events?: { type: string }[] } };
 }
 
 type Cut = { line: number; layout?: string; enter?: string; exit?: string; hold?: string; cam?: string; decor?: { id: string }[] };
@@ -109,6 +110,32 @@ describe('演出パック (本物の JIZURA)', () => {
       for (const d of c.decor ?? []) expect(ok('decor', d.id), `decor ${d.id}`).toBe(true);
     }
     for (const bad of ['strobe', 'invert', 'whiteFrame', 'flashCross', 'heartsStars', 'petals']) expect(used).not.toContain(`"${bad}"`);
+  });
+
+  it('余白: レイアウト・表示中の動きはオリジナルだけ。装飾・画面効果・場面転換・背景の図形は使わない。背景の色で配色が変わる', () => {
+    registerMotionPacks(J);
+    const { cuts, plan } = planOf(lyricsOf(CINEMA_STYLE_KEY));
+    const lyricCuts = cuts.filter((c) => c.line >= 0);
+    const ours = (k?: string) => !!k && k.startsWith('zz');
+    for (const c of lyricCuts) {
+      expect(ours(c.layout), `layout ${c.layout}`).toBe(true);
+      expect(ours(c.hold), `hold ${c.hold}`).toBe(true);
+      expect(c.decor ?? []).toEqual([]);
+      const cc = c as Cut & { bg?: string; trans?: string | null; treat?: string };
+      expect([undefined, 'none']).toContain(cc.bg);
+      expect([undefined, null]).toContain(cc.trans);
+      expect([undefined, 'none']).toContain(cc.treat);
+      expect(['cut', 'blur', 'fadeStagger', 'blurStagger', 'trackIn'].includes(c.enter!) || ours(c.enter), `enter ${c.enter}`).toBe(true);
+    }
+    // 画面効果の出来事は、色ズレの跳ね・揺れ (JIZURA がカットの切れ目に自動で入れるもの) 以外は無い
+    for (const ev of plan.events ?? []) expect(['chroma', 'shake']).toContain(ev.type);
+    const layouts = new Set(lyricCuts.map((c) => c.layout));
+    expect(layouts.has('zzSubtitle')).toBe(true);
+    // 背景の色を渡すと、差し色が背景の色み (橙) になる
+    const warm = planOf(lyricsOf(CINEMA_STYLE_KEY), { palette: { dark: '#101830', light: '#f4e8d0', accent: '#d06a30', accent2: '#3050a0' } }).plan;
+    expect(warm.style.schemes[0]!.accent).not.toBe(plan.style.schemes[0]!.accent);
+    const n = parseInt(warm.style.schemes[0]!.accent.slice(1), 16);
+    expect((n >> 16) & 255).toBeGreaterThan(n & 255);
   });
 
   it('静寂: 画面を光らせる効果 (calm の印があるもの) も出てこない', () => {

@@ -22,6 +22,26 @@ export interface PackJ {
   rgba(hex: string, a?: number): string;
   mix(h1: string, h2: string, t: number): string;
   TAU: number;
+  /** レイアウトで文字を描く (登場・表示中・退場の演出がかかる)。文字の枠を返す */
+  mainDraw(env: unknown, item: Record<string, unknown>): PackBox | null;
+  /** 行を 1 行 maxPer 文字くらいで折り返す */
+  splitLines(text: string, maxPer: number): string[] | string;
+  /** 枠 (maxW × maxH) に収まる文字の大きさ */
+  fitSize(text: string[] | string, font: string, maxW: number, maxH: number, opt?: Record<string, unknown>): number;
+}
+
+/** 背景から読み取った色 (core/render/palette.ts の BgPalette と同じ形) */
+export interface PackPalette {
+  dark: string;
+  light: string;
+  accent: string;
+  accent2: string;
+}
+
+/** パックがスタイルを作り直すときに使える情報 */
+export interface PackContext {
+  /** 背景の色 (背景が無い・まだ読み取れていなければ null) */
+  palette?: PackPalette | null;
 }
 
 /** 文字ごとの変化 (JIZURA の charFns が返すもの) */
@@ -116,4 +136,9 @@ export interface MotionPack {
    * project.enabled[group][key] = false で無効にする。オリジナルの演出は触らないこと
    */
   configure?(project: Record<string, unknown>, J: PackJ): void;
+  /**
+   * 描くたびにスタイルを作り直すパック (背景の色を使うものなど)。J.STYLES[styleKey] を上書きしてよい。
+   * スタイルの材料 (ctx) が変わったら歌詞モーションを作り直すよう、呼び出し側は ctx をキーに含める
+   */
+  refreshStyle?(J: PackJ, ctx: PackContext): void;
 }

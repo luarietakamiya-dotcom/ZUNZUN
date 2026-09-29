@@ -1,10 +1,10 @@
 import type { AudioAnalysis } from '../audio/analyze';
-import { deriveSeed, makeRng } from '../random';
+import { deriveSeed, hashString, makeRng } from '../random';
 import { buildRhythmGrid, rhythmPositionAt, type RhythmGrid, type RhythmPosition } from '../rhythm';
 import { CUSTOM_STYLE_KEY, type LyricsCustomStyle, type LyricsSettings, type RhythmSettings } from '../types';
 import { FOUR_BEAT_EFFECTS, ODD_METER_SET, ODD_METER_STYLE_KEY, registerOddMeterPack, type PackApi } from './oddmeter-pack';
 import { applyMotionPack, packStyles, registerMotionPacks } from './packs';
-import type { PackJ } from './packs/types';
+import type { PackJ, PackPalette } from './packs/types';
 import { lyricsForEngine } from './parse';
 import { applyManualEnds } from './timing';
 
@@ -81,7 +81,7 @@ export interface JizuraApi {
   parseLyrics(raw: string): { lines: unknown[]; meta: Record<string, string> };
   fontsOfPlan(plan: JizuraPlan): string[];
   ensureFonts(text: string, keys: string[] | null): Promise<void>;
-  glyphs: { clear(): void };
+  glyphs: { clear(): void; get(fontKey: string, ch: string, px: number): { res: number; pieces: { id: number }[] } } & { __zunzunIds?: boolean };
   metrics: { clear(): void };
   STYLE_ORDER: string[];
   STYLES: Record<string, JizuraStyleDef>;
@@ -103,6 +103,7 @@ export function loadJizura(): Promise<JizuraApi> {
     const J = (globalThis as unknown as { J?: JizuraApi }).J;
     if (!J || typeof J.plan !== 'function') throw new Error('JIZURA のエンジンを読み込めませんでした');
     installTimingPatch(J);
+    installGlyphIdPatch(J);
     registerOddMeterPack(J as unknown as PackApi);
     // オリジナルの歌詞モーション (演出パック: 静寂 など)。そのスタイルのときだけ候補に入る (packs/index.ts)
     registerMotionPacks(J as unknown as PackJ);
@@ -127,6 +128,30 @@ export function installTimingPatch(J: JizuraApi): void {
     return tm;
   };
   J.__zunzunTimingPatched = true;
+}
+
+/**
+ * 決定論のための修正: JIZURA は文字を部品 (画の塊) に分けたとき、部品に**全体で 1 つの数え上げの番号** (_pid) を付け、
+ * 文字を破片に砕く演出 (J.fragments。爆散・崩落などの退場) がその番号を乱数の種に使う。番号はそれまでに文字をいくつ
+ * 分けたかで決まるので、歌詞モーションを作るたびに (セッションごとにも) 破片の形が変わり、同じプロジェクトでも
+ * 書き出しの数コマが違っていた (2026-09-30、既存のノワールでも 232 コマ中 9 コマ、画面の最大 13% が違った)。
+ * J.glyphs.get を包み、部品の番号を「書体・文字・大きさの段階・何番目の部品か」から決まる値に付け直す (同梱ファイルは改変しない)。
+ * 番号は色付きの部品の置き場 (tint) のキーにも使われるが、文字ごとに違う値なので問題ない。
+ */
+export function installGlyphIdPatch(J: JizuraApi): void {
+  if (J.glyphs.__zunzunIds) return;
+  const orig = J.glyphs.get.bind(J.glyphs);
+  J.glyphs.get = (fontKey, ch, px) => {
+    const g = orig(fontKey, ch, px) as ReturnType<typeof orig> & { __zzIds?: boolean };
+    if (g && !g.__zzIds) {
+      const base = hashString(`${fontKey}|${ch}|${g.res}`);
+      // 正の整数 (J.r / J.rs の引数として元の番号と同じ種類の値)
+      g.pieces.forEach((pc, k) => (pc.id = ((base + k * 2654435761) >>> 0) % 2147483647 || 1));
+      g.__zzIds = true;
+    }
+    return g;
+  };
+  J.glyphs.__zunzunIds = true;
 }
 
 // ------------------------------------------------------------------ 入力の変換 (純粋関数)
@@ -448,6 +473,8 @@ export interface LyricMotionOptions {
   fps: number;
   /** 変拍子モードの小節と拍子 (motionRhythmGrid の結果)。audio の beats もこれから作っておくこと */
   rhythm?: RhythmGrid | null;
+  /** 背景から読み取った色 (オリジナルの歌詞モーション「余白」が文字の色に使う。core/render/palette.ts) */
+  palette?: PackPalette | null;
 }
 
 /** 変拍子モードで作った plan に添える、小節とまとまりの並び (ZUNZUN の拡張。JIZURA 本体は読まない) */
@@ -533,7 +560,7 @@ export class LyricMotion {
       fps: opts.fps,
       oddMeter: usesOddMeterPack(lyrics.motion, opts.rhythm),
     });
-    applyMotionPack(project, lyrics.motion, J as unknown as PackJ);
+    applyMotionPack(project, lyrics.motion, J as unknown as PackJ, { palette: opts.palette ?? null });
     const plan = attachRhythm(keepLightTextSchemes(J.plan(project, audio), (c) => J.lum(c)), opts.rhythm ?? null);
     await prepareFonts(J, plan, lyricsForEngine(lyrics.text, lyrics.source) + HUD_CHARS);
     // 本番の Renderer は書体の準備が終わってから作る (内部のキャッシュに仮の書体の文字を残さない)

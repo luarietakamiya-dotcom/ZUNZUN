@@ -1,6 +1,8 @@
 import type { AudioAnalysis } from '../audio/analyze';
 import type { LyricsSettings, RhythmSettings } from '../types';
 import { buildJizuraAudio, LyricMotion, motionRhythmGrid, nearestAspect } from './jizura-adapter';
+import { motionUsesPalette } from './packs';
+import type { PackPalette } from './packs/types';
 
 /**
  * プレビュー用に、今の設定に合う LyricMotion を用意しておく係 (タブをまたいで 1 つだけ持つ)。
@@ -22,6 +24,8 @@ export interface MotionRequest {
   fps: number;
   /** 小節と拍子 (store.rhythm)。変拍子モードがオンのときだけ歌詞モーションに使う */
   rhythm?: RhythmSettings | null;
+  /** 背景から読み取った色 (背景の色を使うスタイル「余白」のときだけ使う) */
+  palette?: PackPalette | null;
 }
 
 const DEBOUNCE_MS = 350;
@@ -58,6 +62,8 @@ export function motionKey(req: MotionRequest & { lyrics: LyricsSettings }): stri
     analysisId(req.analysis),
     // 変拍子モードがオフの間は、小節を叩き直しても作り直さない
     req.rhythm?.enabled ? [req.rhythm.bars, req.rhythm.meters] : null,
+    // 背景の色を使うスタイルのときだけ、背景の色が変わったら作り直す
+    motionUsesPalette(lyrics.motion) ? (req.palette ?? null) : null,
   ]);
 }
 
@@ -98,7 +104,7 @@ export class LyricMotionProvider {
     this.building = true;
     const rhythm = motionRhythmGrid(req.rhythm);
     const audio = req.analysis ? buildJizuraAudio(req.analysis, rhythm) : null;
-    LyricMotion.create(req.lyrics, audio, { projectSeed: req.projectSeed, width: req.width, height: req.height, fps: req.fps, rhythm })
+    LyricMotion.create(req.lyrics, audio, { projectSeed: req.projectSeed, width: req.width, height: req.height, fps: req.fps, rhythm, palette: req.palette ?? null })
       .then((motion) => {
         this.current = motion;
         this.currentKey = key;

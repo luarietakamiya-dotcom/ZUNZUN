@@ -4,6 +4,7 @@ import { BAND_COUNT } from '../../core/audio';
 import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { VisualizerHost } from '../../core/visualizer/host';
 import { visualizerRegistry } from '../../visualizers';
+import { backgroundPaletteNow } from '../../core/render/palette';
 
 const NUMERIC_PARAMS: { key: keyof CommonParams; label: string; min: number; max: number; step: number }[] = [
   { key: 'intensity', label: 'Intensity', min: 0, max: 1, step: 0.01 },
@@ -173,6 +174,7 @@ export function renderVisualizerPanel(): HTMLElement {
             height: store.exportSettings.height,
             fps: store.exportSettings.fps,
             rhythm: store.rhythm,
+            palette: backgroundPaletteNow(store.background, store.backgroundFile),
           })
         : null,
     );

@@ -81,6 +81,16 @@ describe('変拍子 (R3) と作り直し', () => {
   });
 });
 
+describe('背景の色と作り直し', () => {
+  const palette = { dark: '#101830', light: '#f4e8d0', accent: '#d06a30', accent2: '#3050a0' };
+  it('背景の色を使うスタイル (余白) のときだけ、背景の色が変わるとキーも変わる', () => {
+    const cinema = req({ lyrics: lyrics({ motion: { ...defaultLyrics().motion, style: 'zz-cinema' } }) }) as MotionRequest & { lyrics: LyricsSettings };
+    expect(motionKey({ ...cinema, palette })).not.toBe(motionKey(cinema));
+    const noir = req() as MotionRequest & { lyrics: LyricsSettings };
+    expect(motionKey({ ...noir, palette })).toBe(motionKey(noir));
+  });
+});
+
 describe('LyricMotionProvider', () => {
   it('設定が落ち着いてから (350ms) 作り、同じ設定の間は作り直さない', async () => {
     const stub = stubCreate();

@@ -1,6 +1,6 @@
 # 引き継ぎメモ（ローカル Claude Code ⇄ Cloud Session）
 
-最終更新: 2026-09-30（ユーザーが寝ている間に、オリジナルの歌詞モーション「衝撃」「ロック」などを進めている時点。**この間のコミットは push していない**）。
+最終更新: 2026-09-30（ユーザーが寝ている間に、オリジナルの歌詞モーション「衝撃」「轟音」「余白」と決定論の直しまで進めた時点。**aed9a04 より後のコミットは push していない**）。
 これまでの作業は Claude Code の Cloud Session で行い、`npm install` が必要な確認だけをユーザーがローカル PC（Windows / PowerShell）で実行していた。
 ローカルの Claude Code なら `npm` も `git` も直接使えるので、以後は同じ場所で実装と検証を完結できる。
 
@@ -107,13 +107,20 @@ R3 の要点（`src/core/lyrics/jizura-adapter.ts`）:
 - 確認できたこと: 本物の JIZURA（jsdom）で、7/8 の拍を渡すと plan のビートがそれになり、行の中のカットの切れ目が拍の上に乗る（`jizura-compat.test.ts`）。ヘッドレス Chromium で実際に描き、切れ目が 3.75（小節の頭）→ 4.25 → 4.75（まとまり）→ 5.5 …になること、同じ設定なら同じ絵、オフとは違う絵になること。**実際の曲での見た目は未確認**。
 
 オリジナルの歌詞モーション（演出パック。方針は `docs/ARCHITECTURE.md`「オリジナルの歌詞モーション（演出パック）の方針」）:
-- **① しくみ + 「静寂 (ZUNZUN)」、② 「衝撃 (ZUNZUN)」「轟音 (ZUNZUN)」: 実装済み・ユーザー確認待ち。次は ③ 動画に寄り添う**（ユーザーは「あとでもっと増やす」予定。2026-09-29 夜「寝てる間に進めててほしい」）。
+- **① しくみ + 「静寂 (ZUNZUN)」、② 「衝撃 (ZUNZUN)」「轟音 (ZUNZUN)」、③ 「余白 (ZUNZUN)」（動画に寄り添う）: 実装済み・ユーザー確認待ち。次の候補は ④ ほかの曲調（ポップ・シティポップ・夢っぽいもの）と、曲の速さ・勢いからのおすすめ**（ユーザーは「あとでもっと増やす」予定。2026-09-29 夜「寝てる間に進めててほしい」）。
 - 共通（`packs/util.ts`）: `staggered` / イージング / `centerBox` / `allowOnlyTagged`（印のある JIZURA の演出だけを残す）/ `disable` / `flashAllowed`（**光過敏への配慮: 光る演出は毎秒 3 回まで**。拍の長さから「何拍おきに光らせるか」を決める。テストあり）/ `beatOf`（`env.beat`、無ければ 0.5 秒ごとの仮の拍）。
 - **コマ打ち**: JIZURA は既定で時刻を 12 コマ/秒に区切る（`fx.koma: 12`）。短い登場（0.16 秒）が 2 コマしか無くなるので、パックでは `koma: 0`（出力のフレームごと）にしている（静寂も、ゆっくりをなめらかにするため）。
   - なお、登場の途中のコマに文字が少ししか写らないのは、JIZURA のレイアウトが行の中の語を少しずつずらして出すため（JIZURA 自身の登場や「登場なし」に差し替えても同じだった）。見た目の確認は、1 カットを登場 → 表示中 → 退場の 4 コマで並べた一覧で行う（scratchpad の `pack-sheet.mjs`。クラウドの作業用で、リポジトリには入れていない）。
 - 衝撃（`packs/intense.ts`、EDM・速い曲）: acid を元に配色を作り直し（白い文字、シアンとマゼンタ）、太いゴシック、色ズレ 1.2。JIZURA の演出は pop / glitch / graphic の印があるものだけ。**画面を点滅・反転させる JIZURA の効果は使わない**（ストロボ・フラッシュ・反転・帯反転・ミラー・白コマ・反転リング・ブルームのフラッシュ・フラッシュ転換）。オリジナル 11 個: 登場 叩きつける `zzSlam`・シャッター `zzShutter`・奥から飛び込む `zzFlyIn`、退場 切り裂く `zzSlice`・吹き飛ぶ `zzBlast`、表示中 拍で脈打つ `zzBeatPump`・拍でずれる `zzJolt`、装飾 スピード線 `zzSpeedLines`・拍のバー `zzEqBars`・縁の閃き `zzEdgeFlash`（画面の縁だけ、弱く、毎秒 3 回まで）、カメラ キックで揺れる `zzKick`。どれも拍（`env.beat`）に合わせる。
   - 静寂でも、calm の印がある「ブルームのフラッシュ」「フラッシュ転換」「白コマ」を無効にした（「フラッシュは使わない」の約束どおりに）。
 - 轟音（`packs/rock.ts`、ロック）: crimson を元に配色を作り直し（黒・赤・白）、太くて荒い書体（Dela Gothic One など）、フィルムの粒 0.95。JIZURA の演出は graphic / glitch / editorial の印があるものだけ、可愛い装飾・レイアウト（ハート・泡・花びらなど）と点滅・反転の効果は使わない。オリジナル 10 個: 登場 スタンプ `zzStamp`・殴り書き `zzScrawl`・重く落ちる `zzDropHeavy`、退場 引き裂く `zzTear`・崩れ落ちる `zzCrumble`、表示中 ヘドバン `zzHeadbang`（拍でうなずく、表拍を強く）・ざらつき `zzGrit`（1 秒 12 回だけ変わる刷りのずれ）、装飾 引っかき傷 `zzScratches`・震える弦 `zzStrings`（拍ではじかれる 6 本の線）、カメラ 突き飛ばし `zzShove`。一覧（150 BPM）で目で確認。
+- 余白（`packs/cinema.ts`、背景が動画・写真のとき用）: 「小さくするだけ」ではなく、**置き場所・動き・色**で背景の邪魔をしない。
+  - 置き場所: オリジナルのレイアウト 3 つ（字幕の位置 `zzSubtitle`・画面の端の書き込み `zzMarginNote`・短い行だけの静かな題 `zzQuietTitle`）。画面の中央（横 50%・縦 40%）をほぼ空ける。JIZURA のレイアウト・装飾・カメラ・画面効果は使わない（`decor 0`・HUD なし・グリッチ 0・色ズレ 0.05）。
+  - 動き: 登場 フィルムのフェード `zzFilmFade`・ピント送り `zzFocusPull`・語ごとに浮かぶ `zzWordRise`、退場 `zzFilmFadeOut`・ピントが外れる `zzFocusOut`、表示中 静止 `zzStill`・ゆっくり漂う `zzSlowDrift`（どちらも読みやすさのための柔らかい影）、カメラ ごく小さなドリー `zzDolly`。JIZURA の演出は、ぼかし・フェード系の登場 4 つ（blur / fadeStagger / blurStagger / trackIn）と退場 5 つ（blur / dissolve / blurOutStagger / trackOutWide / hazeOut）だけ残す。
+  - 色: **背景から色を読み取って文字の配色にする**（`src/core/render/palette.ts`。画像は 64×36 に縮めて 1 枚、動画は 10〜90% の決まった 5 コマ。暗い色・明るい色・差し色 2 つ → 文字はほぼ白に明るい色の色みを少し、差し色は背景の色みのまま明るく）。同じファイル（sha256）なら覚えた結果を使う。プレビューは `backgroundPaletteNow`（まだ読めていなければ既定の配色で描き、読めたら作り直す）、書き出しは開始前に `await backgroundPalette`。作り直しのキーに色が入るのは、色を使うスタイル（`motionUsesPalette`）のときだけ。
+- **決定論の直し（既存のスタイルにも効く）**: JIZURA の `J.fragments`（文字の破片）が、破片の番号 `pc.id`（ページ全体で数え続ける番号）を乱数の種にしていたため、**同じプロジェクトでも作るたびに破片の形が変わっていた**（ノワールで 232 コマ中 9 コマが違った）。アダプタの `installGlyphIdPatch` で、書体・文字・解像度から決まる番号に付け替えた。直した後、ノワール・crimson・静寂・衝撃・轟音・余白は、3 回作って描いても全部同じ画像（E2E `motion-packs.spec.ts`）。
+  - 残っていること: 「衝撃」だけ、**ページを開いて最初の 1 回**に 1 コマ（全体の 0.2%）違うことがある。JIZURA の内側の作業用 canvas が途中で大きくなるときの初期化が原因と思われ、アダプタからは消せなかった（叩きつける登場の拡大を 2.4 → 1.7 倍に下げて減らした）。書き出しに 1 コマだけ差が出うる程度。
+  - SwiftShader の起動設定（WebGL 用）だと、2D canvas のぼかし・影の描画が描くたびに少し変わった（余白が一致しなかった）。E2E の歌詞モーションの試験はその設定を外して動かす。**ユーザーの GPU での一致は未確認**。
 - しくみ（`src/core/lyrics/packs/`）: `types.ts`（`MotionPack` = `styleKey` / `set` / `buildStyle(J)` / `effects(J)` / `configure(project, J)`）、`index.ts`（`PACKS` に 1 行足すとパックが増える。`registerMotionPacks` は `loadJizura` で 1 回、演出に `set` を付けて `J.register`、スタイルを `J.STYLES` へ。`applyMotionPack` は `LyricMotion.create` で、スタイル（かマイスタイルの元）がパックのものなら `project[set] = true` と `configure`）。`jizuraStyles` はパックのスタイルを一覧の先頭に出す。変拍子パック（`oddmeter-pack.ts`）は前からの作りのまま（そのうちこの形にまとめてよい）。
 - 静寂（`packs/calm.ts`）: gold を元に配色を作り直し（象牙色の文字、月明かりの青と温かい金、暗い背景の配色だけ）、細い明朝、粒 0.25、色ズレ 0.15。`configure` で JIZURA の演出は **calm の印があるものだけ**（layout / enter / exit / hold / cam / fx / trans / treat / bg / decor）、`fx.glitch = 0`・`chroma = 0.15`・`flash = false`。オリジナル 10 個: 登場 霧から浮かぶ `zzMistRise`・にじみ出る `zzInkBloom`・一文字ずつ灯る `zzLantern`、退場 静かに昇る `zzAscend`・溶けて消える `zzMelt`（長さは `inDur`/`outDur` で 0.4〜1.6 秒とゆっくり）、表示中 ゆっくり呼吸 `zzBreath`・月光が撫でる `zzMoonSweep`、装飾 光の塵 `zzDust`・細い線 `zzHairline`、カメラ ゆるやかな漂い `zzFloat`。レイアウトは余白の多いシンプルなものを選ばれやすく（calm の印のあるレイアウトにも泡・円軌道・通知のような賑やかなものが混ざっていたので、それらは選ばれにくく）。
   - 選ばれ方（10 行 40 カットの試し）: オリジナルが登場 11・退場 10・表示中 7・カメラ 11・装飾 24 カット。登場の途中などで 'cut' になるのは、行の中のカットのつなぎを JIZURA が決めるため。

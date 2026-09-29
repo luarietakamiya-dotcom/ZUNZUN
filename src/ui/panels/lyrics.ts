@@ -30,6 +30,7 @@ import { createRhythmEditor } from './lyrics-rhythm';
 import { activeStem, createStemCard } from './lyrics-stem';
 import { createStyleEditor } from './lyrics-style-editor';
 import { LyricsTimeline } from './lyrics-timeline';
+import { backgroundPaletteNow } from '../../core/render/palette';
 
 /**
  * Lyrics タブ (L3): 歌詞の入力・読み込み、再生しながらの半自動タップ同期、行ごとの時刻の確認と手入力。
@@ -559,6 +560,7 @@ export function renderLyricsPanel(): HTMLElement {
           height: store.exportSettings.height,
           fps: store.exportSettings.fps,
           rhythm: store.rhythm,
+          palette: backgroundPaletteNow(store.background, store.backgroundFile),
         })
       : null;
     const status = !store.audio.isLoaded

@@ -31,7 +31,7 @@ export function intenseEffects(J: PackJ): PackEffect[] {
         apply(_env: PackEnv, it: PackItem, p: number) {
           // 大きく手前から一気に落ちてきて、少し沈んで止まる
           const q = easeOutBack(Math.min(1, p), 2.2);
-          it.size *= 1 + (1 - q) * 1.4;
+          it.size *= 1 + (1 - q) * 0.7;
           it.blur = (it.blur ?? 0) + (1 - Math.min(1, p * 1.5)) * it.size * 0.05;
           it.alpha = (it.alpha ?? 1) * Math.min(1, p * 3);
         },
