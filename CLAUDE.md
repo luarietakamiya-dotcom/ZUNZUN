@@ -9,7 +9,7 @@ TypeScript + Vite + Three.js (r180) + WebCodecs/Mediabunny。**ユーザーと�
 ## 絶対に守ること
 
 - 作業対象はこの ZUNZUN リポジトリ（`luarietakamiya-dotcom/ZUNZUN`）だけ。**MusicSync など他のリポジトリには一切 commit/push しない。**
-- `git push` は**毎回ユーザーに確認してから**行う。force push はしない。
+- `git push` はユーザーへの確認なしで行ってよい（2026-09-30 ユーザー指示「push 毎回確認しなくていい」）。push 先は作業ブランチだけ。force push はしない。
 - `--dangerously-skip-permissions` は使わない。`npm audit fix --force` は実行しない。
 - パッケージを追加するときは、先に必要性を説明して了承を得る。
 - 大量のファイル削除・破壊的なコマンドは事前に確認する。秘密情報は扱わない。
