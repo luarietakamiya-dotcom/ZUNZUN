@@ -170,6 +170,7 @@ export function renderVisualizerPanel(): HTMLElement {
             width: store.exportSettings.width,
             height: store.exportSettings.height,
             fps: store.exportSettings.fps,
+            rhythm: store.rhythm,
           })
         : null,
     );

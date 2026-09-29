@@ -53,6 +53,34 @@ describe('wantsMotion / motionKey', () => {
   });
 });
 
+describe('変拍子 (R3) と作り直し', () => {
+  const rhythm = { enabled: true, bars: [1, 2.75, 4.5], meters: [{ bar: 0, pattern: '2+2+3' }] };
+
+  it('変拍子モードがオンの間は、小節・拍子が変わるとキーも変わる。オフの間は変わらない', () => {
+    const a = req({ rhythm }) as MotionRequest & { lyrics: LyricsSettings };
+    expect(motionKey(a)).not.toBe(motionKey({ ...a, rhythm: null }));
+    expect(motionKey({ ...a, rhythm: { ...rhythm, bars: [1, 2.7, 4.5] } })).not.toBe(motionKey(a));
+    expect(motionKey({ ...a, rhythm: { ...rhythm, meters: [{ bar: 0, pattern: '3+2+2' }] } })).not.toBe(motionKey(a));
+    const off = { ...a, rhythm: { ...rhythm, enabled: false } };
+    expect(motionKey({ ...off, rhythm: { ...off.rhythm, bars: [9] } })).toBe(motionKey(off));
+    expect(motionKey(off)).toBe(motionKey({ ...a, rhythm: null }));
+  });
+
+  it('変拍子モードなら、拍子から作った拍をビートにして、小節の並びと一緒に create へ渡す', async () => {
+    const spy = vi.spyOn(LyricMotion, 'create').mockResolvedValue({} as LyricMotion);
+    let now = 0;
+    const p = new LyricMotionProvider(() => now);
+    const analysis = { duration: 10, beats: [0.5, 1], rms: new Float32Array(4), frameRate: 60 } as unknown as MotionRequest['analysis'];
+    p.get(req({ rhythm, analysis }));
+    now = 400;
+    p.get(req({ rhythm, analysis }));
+    await new Promise((r) => setTimeout(r, 0));
+    const [, audio, opts] = spy.mock.calls[0]!;
+    expect(audio!.beats.slice(0, 4)).toEqual([1, 1.5, 2, 2.75]);
+    expect(opts.rhythm!.accents).toEqual([1, 2.75, 4.5]);
+  });
+});
+
 describe('LyricMotionProvider', () => {
   it('設定が落ち着いてから (350ms) 作り、同じ設定の間は作り直さない', async () => {
     const stub = stubCreate();

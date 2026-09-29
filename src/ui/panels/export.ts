@@ -76,6 +76,7 @@ function createRunnerFromStore(): ExportRunner {
   // 歌詞: 書き出し開始時点の設定を複製して渡す (書き出し中に Lyrics タブで直しても影響しない)
   const lyrics = store.lyrics ? (JSON.parse(JSON.stringify(store.lyrics)) as typeof store.lyrics) : null;
   const analysis = audio.analysis;
+  const rhythm = store.rhythm ? (JSON.parse(JSON.stringify(store.rhythm)) as typeof store.rhythm) : null;
   const seed = store.seed;
 
   return (ctx) =>
@@ -93,6 +94,7 @@ function createRunnerFromStore(): ExportRunner {
         overlays,
         lyrics,
         analysis,
+        rhythm,
         fileName,
       },
       ctx,

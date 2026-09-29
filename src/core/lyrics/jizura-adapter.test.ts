@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultLyrics } from '../types';
 import {
+  attachRhythm,
   buildCustomStyle,
   buildJizuraAudio,
   buildJizuraProject,
@@ -10,8 +11,10 @@ import {
   isDarkText,
   keepLightTextSchemes,
   lyricMotionSeed,
+  motionRhythmGrid,
   nearestAspect,
   normalizeEnergy,
+  planRhythmAt,
   type JizuraPlan,
   type JizuraStyleDef,
 } from './jizura-adapter';
@@ -138,6 +141,33 @@ describe('normalizeEnergy', () => {
     expect(e[3]).toBe(0);
     expect(normalizeEnergy(new Float32Array(0)).length).toBe(0);
     expect(Array.from(normalizeEnergy(new Float32Array(3)))).toEqual([0, 0, 0]);
+  });
+});
+
+describe('変拍子 (R3): motionRhythmGrid / buildJizuraAudio / attachRhythm', () => {
+  const rhythm = { enabled: true, bars: [1, 2.75, 4.5], meters: [{ bar: 0, pattern: '2+2+3' }] };
+
+  it('変拍子モードがオフ・小節が作れないときは null (自動検出のビートを使う)', () => {
+    expect(motionRhythmGrid(null)).toBeNull();
+    expect(motionRhythmGrid({ ...rhythm, enabled: false })).toBeNull();
+    expect(motionRhythmGrid({ ...rhythm, bars: [1] })).toBeNull();
+    expect(motionRhythmGrid(rhythm)!.beats.slice(0, 4)).toEqual([1, 1.5, 2, 2.75]);
+  });
+
+  it('小節と拍子があれば、ビートは自動検出のものではなく拍 (まとまりの頭) にする', () => {
+    const analysis = { duration: 10, beats: [0.5, 1, 1.5, 2, 2.5], rms: new Float32Array(10), frameRate: 60 };
+    const grid = motionRhythmGrid(rhythm)!;
+    expect(buildJizuraAudio(analysis, grid).beats).toEqual(grid.beats);
+    expect(buildJizuraAudio(analysis, null).beats).toEqual(analysis.beats);
+  });
+
+  it('attachRhythm: plan に小節の並びを添え、null なら外す。planRhythmAt で位置が分かる', () => {
+    const grid = motionRhythmGrid(rhythm)!;
+    const plan = { W: 1920, H: 1080, duration: 10, lines: [], cuts: [], style: { schemes: [] } };
+    expect(attachRhythm(plan, grid).zzRhythm).toBe(grid);
+    expect(planRhythmAt(plan, 2.1)).toMatchObject({ pulse: { bar: 0, group: 2 } });
+    expect(attachRhythm(plan, null).zzRhythm).toBeUndefined();
+    expect(planRhythmAt(plan, 2.1)).toBeNull();
   });
 });
 

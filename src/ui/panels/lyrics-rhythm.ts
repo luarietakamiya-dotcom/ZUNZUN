@@ -19,7 +19,7 @@ import { defaultRhythm, type RhythmSettings } from '../../core/types';
 
 /**
  * Lyrics タブの「リズム（変拍子）」欄 (R2)。docs/ARCHITECTURE.md「変拍子（リズム）の方針」。
- * - 変拍子モードのオン/オフ (store.rhythm.enabled。歌詞モーションへの反映は R3)
+ * - 変拍子モードのオン/オフ (store.rhythm.enabled。オンなら歌詞モーションはこの拍に合わせる: jizura-adapter の motionRhythmGrid)
  * - 再生しながら Space で小節の頭を叩く (BarTapSession)。叩いた時刻は聞こえている位置で、音の立ち上がり → ビートへ吸着する
  *   (Shift を押しながらだと吸着しない)。Backspace で 1 つ戻る (3 秒戻して再生)、Esc で終わる
  * - 「残りを同じ長さで埋める」(fillToEnd)、「間を埋める」(fillGaps)
@@ -115,7 +115,7 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
   enabled.type = 'checkbox';
   enabled.addEventListener('change', () => commit({ ...current(), enabled: enabled.checked }));
   const enabledLabel = h('label', 'row-gap param-label');
-  enabledLabel.append(enabled, '変拍子モード (小節の頭と拍子を自分で決める。歌詞モーションへの反映は次の段階で追加します)');
+  enabledLabel.append(enabled, '変拍子モード (オンにすると、歌詞モーションは自動検出のビートの代わりに、ここで決めた小節と拍子の拍に合わせて動きます)');
 
   // ------------------------------------------------------------ 小節の頭のタップ
   const status = h('div', 'param-label');

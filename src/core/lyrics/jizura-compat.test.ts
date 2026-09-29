@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { installTimingPatch, type JizuraApi } from './jizura-adapter';
+import { defaultLyrics } from '../types';
+import { attachRhythm, buildJizuraProject, installTimingPatch, motionRhythmGrid, planRhythmAt, type JizuraApi } from './jizura-adapter';
 import { parseLyrics } from './parse';
 import { computeLineTimes } from './timing';
 
@@ -61,5 +62,34 @@ describe('JIZURA との一致 (同梱した本物と比べる)', () => {
         }
       }
     }
+  });
+
+  it('変拍子 (R3): 拍子から作った拍をビートとして渡すと、plan のビートがそれになり、行の中のカットの切れ目もその拍に乗る', () => {
+    // 7/8 (2+2+3)、1 小節 1.75 秒 → 拍は 0.5・0.5・0.75 秒の不規則な間隔
+    const rhythm = { enabled: true, bars: [2, 3.75, 5.5, 7.25, 9, 10.75, 12.5], meters: [{ bar: 0, pattern: '2+2+3' }] };
+    const grid = motionRhythmGrid(rhythm)!;
+    const lyrics = {
+      ...defaultLyrics(),
+      text: 'ながいながい一行目の歌詞を/ここで/細かく/区切って/見せる\nもうひとつの/長い行を/たくさんの/カットに/分けて',
+      motion: { ...defaultLyrics().motion, density: 1 },
+      timing: { ...defaultLyrics().timing, lineTimes: { '0': 2, '1': 7.25 }, lineEnds: { '0': 7.1, '1': 14 } },
+    };
+    const project = buildJizuraProject(lyrics, J.defaultProject(), { seed: 7, aspect: '16:9', fps: 30 });
+    const audio = { duration: 16, beats: grid.beats, energy: new Float32Array(16 * 60), energyRate: 60 };
+    const plan = attachRhythm(J.plan(project, audio), grid);
+    expect(plan.beats).toEqual(grid.beats);
+    const cuts = plan.cuts as { line: number; start: number }[];
+    const inner = cuts.filter((c, i) => i > 0 && c.line >= 0 && cuts[i - 1]!.line === c.line).map((c) => c.start);
+    expect(inner.length).toBeGreaterThan(2);
+    // JIZURA は ±0.13 秒以内のビートへ寄せる: 近くに拍がある切れ目は、どれもちょうど拍の上にある
+    for (const t of inner) {
+      const nearest = Math.min(...grid.beats.map((b) => Math.abs(b - t)));
+      if (nearest < 0.13) expect(nearest).toBeLessThan(1e-9);
+    }
+    expect(inner.some((t) => grid.beats.includes(t))).toBe(true);
+    // plan に添えた小節の情報から、時刻の位置が分かる (5.5 秒 = 3 小節目の頭、6.6 秒 = 3 番目のまとまり)
+    expect(planRhythmAt(plan, 5.5)).toMatchObject({ pulse: { bar: 2, group: 0, barHead: true } });
+    expect(planRhythmAt(plan, 6.6)!.pulse.group).toBe(2);
+    expect(planRhythmAt(plan, 1)).toBeNull();
   });
 });

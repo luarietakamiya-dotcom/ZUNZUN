@@ -12,9 +12,9 @@ import {
 } from 'mediabunny';
 import type { AudioAnalysis } from '../audio/analyze';
 import type { AudioTimeline } from '../audio/timeline';
-import { buildJizuraAudio, LyricMotion } from '../lyrics/jizura-adapter';
+import { buildJizuraAudio, LyricMotion, motionRhythmGrid } from '../lyrics/jizura-adapter';
 import { wantsMotion } from '../lyrics/motion-provider';
-import type { CommonParams, ExportSettings, LyricsSettings, OverlayLayer } from '../types';
+import type { CommonParams, ExportSettings, LyricsSettings, OverlayLayer, RhythmSettings } from '../types';
 import { VisualizerHost } from '../visualizer/host';
 import type { VisualizerModule } from '../visualizer/registry';
 import { prepareAudioForEncode, sliceAudioBuffer } from './audio-prep';
@@ -37,6 +37,8 @@ export interface Mp4ExportJob {
   lyrics: LyricsSettings | null;
   /** 歌詞モーションに渡すビート・音量の元 (プレビューと同じ解析結果) */
   analysis: AudioAnalysis | null;
+  /** 小節と拍子 (変拍子モードがオンのときだけ歌詞モーションに使う。省略 = 使わない) */
+  rhythm?: RhythmSettings | null;
   fileName: string;
 }
 
@@ -103,8 +105,9 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
     // 歌詞モーション: 書き出し開始時の設定で作る (プレビューと同じ seed・時刻・設定なので同じ絵になる。書き出しは軽い描画を使わない)
     const lyricReq = { lyrics: job.lyrics, analysis: job.analysis, projectSeed: job.seed, width, height, fps };
     if (wantsMotion(lyricReq)) {
+      const rhythm = motionRhythmGrid(job.rhythm);
       host.lyrics.setMotion(
-        await LyricMotion.create(lyricReq.lyrics, job.analysis ? buildJizuraAudio(job.analysis) : null, { projectSeed: job.seed, width, height, fps }),
+        await LyricMotion.create(lyricReq.lyrics, job.analysis ? buildJizuraAudio(job.analysis, rhythm) : null, { projectSeed: job.seed, width, height, fps, rhythm }),
       );
     }
     if (signal.aborted) throw abortError();

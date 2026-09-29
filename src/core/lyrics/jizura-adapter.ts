@@ -1,6 +1,7 @@
 import type { AudioAnalysis } from '../audio/analyze';
 import { deriveSeed, makeRng } from '../random';
-import { CUSTOM_STYLE_KEY, type LyricsCustomStyle, type LyricsSettings } from '../types';
+import { buildRhythmGrid, rhythmPositionAt, type RhythmGrid, type RhythmPosition } from '../rhythm';
+import { CUSTOM_STYLE_KEY, type LyricsCustomStyle, type LyricsSettings, type RhythmSettings } from '../types';
 import { lyricsForEngine } from './parse';
 import { applyManualEnds } from './timing';
 
@@ -13,6 +14,9 @@ import { applyManualEnds } from './timing';
  *   ときだけ Math.random を seed 付きの乱数に差し替える。カット割り (J.plan) は project.seed から J.rng で決まる
  * - 行の終了 (ZUNZUN の lineEnds): J.computeTiming を包み、core/lyrics/timing.ts と同じ applyManualEnds を当てる
  * - 音: ZUNZUN の解析結果 (ビート・音量) を、J.plan が読む形 ({ duration, beats, energy, energyRate }) にする
+ * - 変拍子 (R3): 変拍子モードのときは、自動検出のビートの代わりに小節の頭と拍子から作った拍 (まとまりの頭) を beats として渡す。
+ *   JIZURA が beats を使うのは、行の頭の吸着・拍ごとの色ズレの脈動・演出が読む env.beat (何拍目・拍の長さ) なので、
+ *   どれも不規則な拍に従う。あわせて plan.zzRhythm に小節とまとまりの並びを添える (R4 の独自の演出が読む)
  * - フォント: J.ensureFonts で Google Fonts から読み込む (ユーザーの決定で、外部通信はフォントの取得だけ許している)
  */
 
@@ -42,6 +46,8 @@ export interface JizuraPlan {
   lines: { text: string; start: number; end: number }[];
   cuts: unknown[];
   style: { schemes: JizuraScheme[] };
+  /** J.plan が audio.beats を複製して持つビート (行の中のカットの切れ目の吸着・拍の脈動・演出の env.beat に使う) */
+  beats?: number[];
 }
 
 export interface JizuraRenderer {
@@ -154,11 +160,28 @@ export function normalizeEnergy(rms: Float32Array): Float32Array {
   return out;
 }
 
-/** ZUNZUN の解析結果を、J.plan が読む音の情報にする */
-export function buildJizuraAudio(analysis: Pick<AudioAnalysis, 'duration' | 'beats' | 'rms' | 'frameRate'>): JizuraAudio {
+/**
+ * 歌詞モーションに使う小節と拍子。変拍子モードがオンで、小節が 1 つ以上作れるときだけ返す (それ以外は null =
+ * 自動検出のビートを使う)。
+ */
+export function motionRhythmGrid(rhythm: RhythmSettings | null | undefined): RhythmGrid | null {
+  if (!rhythm?.enabled) return null;
+  const grid = buildRhythmGrid(rhythm);
+  return grid.bars.length > 0 ? grid : null;
+}
+
+/**
+ * ZUNZUN の解析結果を、J.plan が読む音の情報にする。rhythm (motionRhythmGrid の結果) があれば、
+ * ビートは自動検出のものではなく、小節の頭と拍子から作った拍 (まとまりの頭) にする。
+ * 小節の外 (最初の小節より前のイントロ・最後の小節より後ろ) には拍が無い (自動のビートは変拍子と合わないので混ぜない)。
+ */
+export function buildJizuraAudio(
+  analysis: Pick<AudioAnalysis, 'duration' | 'beats' | 'rms' | 'frameRate'>,
+  rhythm: RhythmGrid | null = null,
+): JizuraAudio {
   return {
     duration: analysis.duration,
-    beats: analysis.beats.slice().sort((a, b) => a - b),
+    beats: (rhythm ? rhythm.beats : analysis.beats).slice().sort((a, b) => a - b),
     energy: normalizeEnergy(analysis.rms),
     energyRate: analysis.frameRate,
   };
@@ -389,6 +412,25 @@ export interface LyricMotionOptions {
   width: number;
   height: number;
   fps: number;
+  /** 変拍子モードの小節と拍子 (motionRhythmGrid の結果)。audio の beats もこれから作っておくこと */
+  rhythm?: RhythmGrid | null;
+}
+
+/** 変拍子モードで作った plan に添える、小節とまとまりの並び (ZUNZUN の拡張。JIZURA 本体は読まない) */
+export type PlanWithRhythm = JizuraPlan & { zzRhythm?: RhythmGrid };
+
+/** plan に小節とまとまりの並びを添える (null なら外す)。引数の plan を書き換えて返す */
+export function attachRhythm(plan: JizuraPlan, rhythm: RhythmGrid | null): PlanWithRhythm {
+  const p = plan as PlanWithRhythm;
+  if (rhythm) p.zzRhythm = rhythm;
+  else delete p.zzRhythm;
+  return p;
+}
+
+/** plan の時刻 t が何小節目・何番目のまとまりのどこか (変拍子モードでない・小節の外なら null)。R4 の演出が使う */
+export function planRhythmAt(plan: JizuraPlan, t: number): RhythmPosition | null {
+  const grid = (plan as PlanWithRhythm).zzRhythm;
+  return grid ? rhythmPositionAt(grid, t) : null;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -452,7 +494,7 @@ export class LyricMotion {
     if (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom) registerCustomStyle(J, lyrics.motion.custom);
     const seed = lyricMotionSeed(opts.projectSeed);
     const project = buildJizuraProject(lyrics, J.defaultProject(), { seed, aspect: nearestAspect(opts.width, opts.height), fps: opts.fps });
-    const plan = keepLightTextSchemes(J.plan(project, audio), (c) => J.lum(c));
+    const plan = attachRhythm(keepLightTextSchemes(J.plan(project, audio), (c) => J.lum(c)), opts.rhythm ?? null);
     await prepareFonts(J, plan, lyricsForEngine(lyrics.text, lyrics.source) + HUD_CHARS);
     // 本番の Renderer は書体の準備が終わってから作る (内部のキャッシュに仮の書体の文字を残さない)
     const renderer = withSeededRandom(deriveSeed(seed, 'renderer'), () => {

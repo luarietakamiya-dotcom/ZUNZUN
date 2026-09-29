@@ -545,6 +545,7 @@ export function renderLyricsPanel(): HTMLElement {
           width: store.exportSettings.width,
           height: store.exportSettings.height,
           fps: store.exportSettings.fps,
+          rhythm: store.rhythm,
         })
       : null;
     const status = !store.audio.isLoaded
