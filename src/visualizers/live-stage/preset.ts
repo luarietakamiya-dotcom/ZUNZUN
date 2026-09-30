@@ -289,7 +289,7 @@ export class LiveStagePreset implements VisualizerPreset {
     for (const m of this.beamMaterials) m.uniforms.time!.value = (m.uniforms.time!.value as number) + dt * flowSpeed;
     this.wallMaterial.uniforms.glow!.value = 0.1 + (this.smoke * 0.4 + a.beat * 0.15) * intensity;
     this.applyStageSet(params);
-    this.stageSet?.update(dt, { bass: a.bass, high: a.high, rms: finite01(shaped.rms), beat: a.beat }, intensity, this.wallMaterial.uniforms.glow!.value as number, this.camera.position);
+    this.stageSet?.update(dt, { bass: a.bass, high: a.high, rms: finite01(shaped.rms), beat: a.beat }, intensity, this.wallMaterial.uniforms.glow!.value as number, this.camera.position, density);
 
     // high → レーザーのストロボ
     this.updateStrobe(dt, a.high, intensity, motion);

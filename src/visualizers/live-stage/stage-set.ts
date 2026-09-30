@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { BandGear, type GearAudio } from './band-gear';
 import type { LiveStagePalette } from './palette';
+import { Uplights } from './uplights';
 
 /**
  * Live Stage の舞台の機材 (このプリセットだけの設定 stageSet。既定 'none' = 今までどおり照明だけ)。
- * 'band' のとき: 格子のトラスと左右の柱 (門の形)、左右の黒い幕、奥のドラムの台、ドラム・アンプ・マイクスタンド (band-gear.ts)。
+ * 'band' のとき: 格子のトラスと左右の柱 (門の形)、左右の黒い幕、奥のドラムの台、ドラム・アンプ・マイクスタンド (band-gear.ts)、
+ * 奥の壁ぎわのアップライトと壁の色づき (uplights.ts)。
  * 機材は暗いシルエットにして、主役は照明のままにする。
  *
  * 形のばらつきに ctx.rng は使わない (rng を 1 回でも多く引くと、そのあとに選ばれるライトのパターンがずれて、
@@ -119,6 +121,7 @@ export class StageSet {
   private readonly riser: THREE.Mesh;
   private readonly box: THREE.BoxGeometry;
   private readonly gear: BandGear;
+  private readonly uplights: Uplights;
   private name: StageSetName = 'none';
 
   /** sparkleTexture = シンバルのきらめきに使う丸い光 (preset の灯体と同じもの。片づけは preset 側) */
@@ -153,6 +156,8 @@ export class StageSet {
     this.group.add(this.riser);
     this.gear = new BandGear({ riserTop: RISER.h, riserZ: dims.wallZ + RISER.fromWall }, (o) => this.track(o), sparkleTexture);
     this.group.add(this.gear.group);
+    this.uplights = new Uplights(dims.wallZ, (o) => this.track(o), sparkleTexture);
+    this.group.add(this.uplights.group);
     this.group.visible = false;
     this.layout(1);
   }
@@ -183,6 +188,7 @@ export class StageSet {
     this.riser.scale.set(RISER.w * Math.max(0.6, scale), RISER.h, RISER.d);
     this.riser.position.set(0, RISER.h / 2, wallZ + RISER.fromWall);
     this.gear?.layout(scale);
+    this.uplights?.layout(scale);
   }
 
   applyPalette(p: LiveStagePalette): void {
@@ -192,19 +198,23 @@ export class StageSet {
     (this.drapeMaterial.uniforms.baseColor!.value as THREE.Color).copy(p.wall);
     (this.drapeMaterial.uniforms.glowColor!.value as THREE.Color).copy(p.wallGlow);
     this.gear.applyPalette(p);
+    this.uplights.applyPalette(p);
   }
 
   /** 毎フレーム: 幕の照り返しを壁と同じ明るさにし、機材を音で動かす (機材なしのときは何もしない) */
-  update(dt: number, audio: GearAudio, intensity: number, wallGlow: number, camera: THREE.Vector3): void {
+  /** density = スモークの濃さ (アップライトの光の筋の濃さ。ムービングライトと同じ値) */
+  update(dt: number, audio: GearAudio, intensity: number, wallGlow: number, camera: THREE.Vector3, density: number): void {
     if (this.name === 'none') return;
     const glow = Number.isFinite(wallGlow) ? wallGlow : 0;
     this.drapeMaterial.uniforms.glow!.value = glow;
     this.gear.update(dt, audio, intensity, glow, camera);
+    this.uplights.update(dt, audio.beat, intensity, density);
   }
 
   /** テスト用: 部材の数・幕の位置など */
-  inspect(): { visible: boolean; trussParts: number; drapeX: number[]; riserTop: number; gear: ReturnType<BandGear['inspect']> } {
+  inspect(): { visible: boolean; trussParts: number; drapeX: number[]; riserTop: number; gear: ReturnType<BandGear['inspect']>; uplights: ReturnType<Uplights['inspect']> } {
     return {
+      uplights: this.uplights.inspect(),
       gear: this.gear.inspect(),
       visible: this.group.visible,
       trussParts: this.truss.count,

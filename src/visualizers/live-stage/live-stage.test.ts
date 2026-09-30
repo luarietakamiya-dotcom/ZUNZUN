@@ -378,6 +378,28 @@ describe('ステージの機材 (stageSet)', () => {
     p.dispose();
   });
 
+  it('アップライト (奥の壁ぎわの 6 台) は機材があるときだけ出て、beat で 0.75〜1.0 倍だけ強まる。Intensity が低いと弱い', () => {
+    const upOf = (p: LiveStagePreset): { count: number; level: number } =>
+      (p as unknown as { stageSet: { inspect(): { uplights: { count: number; level: number } } } }).stageSet.inspect().uplights;
+    const none = makePreset(5);
+    expect(named(none, 'LiveStageUplight').some(shown)).toBe(false);
+    none.dispose();
+    const p = makePreset(5, band());
+    run(p, 60, () => ({}), band());
+    expect(named(p, 'LiveStageUplight').filter(shown).length).toBe(6);
+    expect(named(p, 'LiveStageWallWash').filter(shown).length).toBe(6);
+    const calm = upOf(p).level;
+    run(p, 10, () => ({ beat: 1 }), band());
+    const hit = upOf(p).level;
+    expect(hit).toBeGreaterThan(calm);
+    expect(hit / calm).toBeLessThanOrEqual(1 / 0.75 + 1e-9);
+    run(p, 60, () => ({}), band({ intensity: 0.1 }));
+    expect(upOf(p).level).toBeLessThan(calm);
+    p.update(frame(0, { beat: NaN }), band({ intensity: NaN }));
+    expect(Number.isFinite(upOf(p).level)).toBe(true);
+    p.dispose();
+  });
+
   it('ステージの奥からのカメラではドラムを隠す (シンバルが目の前を覆わない)。ほかの場所では見える', () => {
     const p = makePreset(5, band());
     for (const spot of ['back', 'front', 'side', 'top'] as const) {
