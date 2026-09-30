@@ -69,13 +69,20 @@ export function createBeamMaterial(beamLength: number): THREE.ShaderMaterial {
       varying vec3 vWorld;
       ${NOISE_GLSL}
       void main() {
-        float facing = abs(dot(normalize(vNormalV), normalize(-vViewPos)));
+        // 補間した値を 0..1 に収めてから使う: 光の筋の三角形がカメラのすぐ近く・後ろにかかると、GPU によっては
+        // 補間の誤差で vAlong などが範囲を大きく外れ、pow で数千の明るさになる。それを bloom が広げて
+        // 1 コマだけ画面全体が真っ白になっていた (tests/e2e/flash-safety.spec.ts で見つかった)
+        float along = clamp(vAlong, 0.0, 1.0);
+        float facing = clamp(abs(dot(normalize(vNormalV), normalize(-vViewPos))), 0.0, 1.0);
         float core = pow(facing, 2.2);
-        float fall = pow(1.0 - vAlong, 1.6) + 0.5 * exp(-vAlong * 22.0);
+        float fall = pow(1.0 - along, 1.6) + 0.5 * exp(-along * 22.0);
         vec3 q = vWorld * 0.45 + vec3(time * 0.12, -time * 0.05, time * 0.08);
         float n = lsNoise(q) * 0.65 + lsNoise(q * 2.3) * 0.35;
         float smoke = density * (0.3 + 1.1 * n);
-        float a = core * fall * smoke * strength;
+        // カメラに近い所ほど薄くする (光の筋がカメラに迫って画面を覆い、真っ白になるのを防ぐ)。
+        // 6 より遠ければちょうど 1 なので、今までのカメラ・向きでは見た目は変わらない
+        float nearFade = smoothstep(1.2, 6.0, -vViewPos.z);
+        float a = core * fall * smoke * strength * nearFade;
         gl_FragColor = vec4(color * a, 1.0);
       }
     `,

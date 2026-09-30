@@ -12,6 +12,19 @@ export const manifest: VisualizerManifest = {
   post: { bloomStrength: 0.8, bloomRadius: 0.28, bloomThreshold: 0.6 },
   controls: [
     {
+      type: 'range',
+      key: 'towardCrowd',
+      label: { ja: '光を客席へ向ける', en: 'Lights toward the crowd' },
+      help: {
+        ja: '上げるほど、ライトが客席 (カメラ) の方へ振れて光が手前へ飛んできます。カメラを向いた瞬間はライトが強く光り、画面が一瞬少し明るくなります (多くても 1 秒に 1 回ほど)',
+        en: 'Higher swings the lights toward the crowd (camera) so the light comes at you. When a light faces the camera it flares and the screen briefly brightens a little (at most about once per second)',
+      },
+      min: 0,
+      max: 1,
+      step: 0.01,
+      default: 0,
+    },
+    {
       type: 'select',
       key: 'cameraSpot',
       label: { ja: 'カメラの場所', en: 'Camera position' },

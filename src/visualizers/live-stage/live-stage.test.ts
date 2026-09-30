@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { makeRng } from '../../core/random';
 import { defaultCommonParams, type AudioFrame, type CommonParams } from '../../core/types';
-import { CAMERA_SPOTS, LiveStagePreset, MAX_STROBE_HZ, PHRASE_BEATS } from './preset';
+import { CAMERA_SPOTS, LiveStagePreset, MAX_STROBE_HZ, PHRASE_BEATS, WASH_MAX, WASH_MIN_INTERVAL } from './preset';
 
 /**
  * WebGL を使わずに (three.js のシーングラフだけで) Live Stage を動かし、
@@ -208,5 +208,57 @@ describe('カメラ (このプリセットだけの設定)', () => {
     p.update(frame(0), still({ cameraSpot: 'nowhere', cameraHeight: NaN, cameraYaw: 'x' }));
     expect(p.camera.position.toArray()).toEqual([0, 2, 12]);
     p.dispose();
+  });
+});
+
+describe('光を客席へ向ける (towardCrowd)', () => {
+  const crowd = (v: number, o: Record<string, unknown> = {}): Params => ({ ...params(), towardCrowd: v, ...o }) as Params;
+
+  it('0 (既定) なら今までどおり: 客席側へ傾ける量は MAX_LEAN_Z まで、画面は明るくしない', () => {
+    const p = makePreset(3, crowd(0));
+    let maxLean = 0;
+    for (let i = 0; i < 600; i++) {
+      p.update(frame(i / 60, beats(i)), crowd(0));
+      maxLean = Math.max(maxLean, ...p.stageSnapshot().slice(8, 16));
+      expect(p.inspect().wash).toBe(0);
+    }
+    expect(maxLean).toBeLessThanOrEqual(0.6 + 1e-9);
+    expect(p.inspect().washRises).toBe(0);
+    p.dispose();
+  });
+
+  it('上げると、ライトがカメラを向く瞬間があり、画面が一瞬明るくなる。明るくなるのは WASH_MIN_INTERVAL 秒おき以上、WASH_MAX まで', () => {
+    const p = makePreset(3, crowd(1));
+    const rises: number[] = [];
+    let last = 0;
+    let maxHit = 0;
+    for (let i = 0; i < 1200; i++) {
+      const t = i / 60;
+      p.update(frame(t, beats(i)), crowd(1));
+      const s = p.inspect();
+      maxHit = Math.max(maxHit, s.maxHit);
+      expect(s.wash).toBeLessThanOrEqual(WASH_MAX + 1e-9);
+      if (s.washRises > last) rises.push(t);
+      last = s.washRises;
+    }
+    expect(maxHit).toBeGreaterThan(0.8);
+    expect(rises.length).toBeGreaterThan(2);
+    for (let k = 1; k < rises.length; k++) expect(rises[k]! - rises[k - 1]!).toBeGreaterThanOrEqual(WASH_MIN_INTERVAL - 1 / 60 - 1e-9);
+    // 1 秒あたり、光過敏のガイドラインの上限 (3 回) よりずっと少ない
+    expect(rises.length / 20).toBeLessThanOrEqual(1 / WASH_MIN_INTERVAL + 1e-9);
+    p.dispose();
+  });
+
+  it('同じ seed なら同じ演出 (光を客席へ向けても)', () => {
+    const a = makePreset(9, crowd(0.7));
+    const b = makePreset(9, crowd(0.7));
+    for (let i = 0; i < 300; i++) {
+      a.update(frame(i / 60, beats(i)), crowd(0.7));
+      b.update(frame(i / 60, beats(i)), crowd(0.7));
+    }
+    expect(a.stageSnapshot()).toEqual(b.stageSnapshot());
+    expect(a.inspect()).toEqual(b.inspect());
+    a.dispose();
+    b.dispose();
   });
 });

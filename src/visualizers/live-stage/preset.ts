@@ -59,8 +59,35 @@ export const CAMERA_SPOTS = {
 export type CameraSpot = keyof typeof CAMERA_SPOTS;
 /** 左右の向き (cameraYaw = ±1) で回る角度 (度) */
 const CAMERA_YAW_MAX = 40;
+/**
+ * 光を客席へ向ける (このプリセットだけの設定 towardCrowd = 0..1)。1 のとき、客席側へ傾ける量 (leanZ) の上限をここまで広げる
+ * (3 でほぼ水平に客席の方を向く)。0 なら今までどおり MAX_LEAN_Z まで
+ */
+const CROWD_LEAN_MAX = 3.2;
+/** ライトがカメラを向いたとみなす角度 (これより外は 0、内側ほど 1)。光の筋の開きより少し広く */
+const HIT_COS_OUTER = Math.cos(THREE.MathUtils.degToRad(16));
+const HIT_COS_INNER = Math.cos(THREE.MathUtils.degToRad(4));
+/**
+ * 光の筋がカメラの方を向くほど、筋そのもの (円錐) を薄くする範囲。カメラが円錐の中に入ると、円錐の内側の面が
+ * 画面いっぱいに重なって霧のように白っぽくなったため (ライトがカメラを向いていることは、玉と光条で見せる)
+ */
+const COVER_COS_OUTER = Math.cos(THREE.MathUtils.degToRad(30));
+const COVER_COS_INNER = Math.cos(THREE.MathUtils.degToRad(8));
+/**
+ * ライトがカメラを向いた瞬間に画面全体を少し明るくする量の上限 (ユーザーの選択 B)。
+ * 光過敏への配慮: 明るくなり始める回数は毎秒 MAX_STROBE_HZ 回まで、上限も控えめ
+ */
+export const WASH_MAX = 0.1;
+/**
+ * 画面全体が明るくなるのは、前回から少なくともこれだけ (秒) あいてから。光過敏のガイドラインの上限 (毎秒 3 回) より
+ * ずっと少なくする (最前列のカメラでは、毎秒 3 回近く明るくなると続けて点滅しているように見えた)
+ */
+export const WASH_MIN_INTERVAL = 0.75;
+/** 画面を明るくするのは、いちばん向いているライトの度合いがこれを下から越えた瞬間 */
+const HIT_FLASH = 0.8;
 const DOWN = new THREE.Vector3(0, -1, 0);
 const UP = new THREE.Vector3(0, 1, 0);
+const WHITE = new THREE.Color(1, 1, 1);
 
 export const PATTERNS = ['fan', 'cross', 'wave', 'chase', 'converge'] as const;
 export type PatternName = (typeof PATTERNS)[number];
@@ -86,6 +113,12 @@ export interface LiveStageInspection {
   laserFlashes: number;
   pattern: PatternName;
   patternChanges: number;
+  /** 画面全体を明るくしている量 (0..WASH_MAX) */
+  wash: number;
+  /** 画面全体が明るくなり始めた回数 */
+  washRises: number;
+  /** このフレームで、いちばんカメラを向いているライトの度合い (0..1) */
+  maxHit: number;
 }
 
 export class LiveStagePreset implements VisualizerPreset {
@@ -118,6 +151,20 @@ export class LiveStagePreset implements VisualizerPreset {
   private readonly convergePoints: THREE.Vector2[] = [];
   private truss!: THREE.Mesh;
   private fixtureMaterial!: THREE.MeshBasicMaterial;
+  /** ライトがカメラを向いたときの光条 (十字の光) */
+  private readonly streaks: THREE.Sprite[] = [];
+  private readonly streakMaterials: THREE.SpriteMaterial[] = [];
+  /** 画面全体を少し明るくする板 (カメラの目の前に置く) */
+  private wash!: THREE.Mesh;
+  private washMaterial!: THREE.MeshBasicMaterial;
+  private washLevel = 0;
+  private washPeak = 0;
+  private prevMaxHit = 0;
+  private lastWashRise = -Infinity;
+  private washRises = 0;
+  private maxHit = 0;
+  /** 光を客席へ向ける量 (0..1) */
+  private crowd = 0;
 
   // パターン
   private patternIndex = 0;
@@ -159,6 +206,7 @@ export class LiveStagePreset implements VisualizerPreset {
     this.buildFixtures();
     this.buildHaze();
     this.buildLasers();
+    this.buildWash();
 
     // seed ごとに変わるもの: 最初のパターン、ビートが無い区間の揺れの位相、集中パターンの狙う位置、レーザーの振りの位相
     this.patternIndex = Math.floor(this.rng() * PATTERNS.length) % PATTERNS.length;
@@ -191,6 +239,11 @@ export class LiveStagePreset implements VisualizerPreset {
     this.smoke += (a.bass - this.smoke) * (1 - Math.exp(-rate * dt));
     const density = 0.25 + this.smoke * 1.1 * intensity;
 
+    // 光を客席へ向ける量 (このプリセットだけの設定)
+    this.crowd = typeof params.towardCrowd === 'number' ? finite01(params.towardCrowd) : 0;
+    // カメラを先に動かす (ライトがカメラを向いたかどうかを、このフレームのカメラの位置で決めるため)
+    this.updateCamera(params);
+
     // beat → ムービングライトの振り
     this.updatePattern(frame);
     const k = 1 - Math.exp(-(3 + motion * 9) * dt);
@@ -201,6 +254,7 @@ export class LiveStagePreset implements VisualizerPreset {
     // ビートのたびに全体が強く明滅すると画面の広い範囲が点滅するので、変化の幅は控えめにする
     const strength = (0.25 + 0.75 * intensity) * (0.65 + 0.35 * a.beat);
     this.writeFixtures(a.beat, strength, density);
+    this.updateWash(dt, intensity);
 
     const flowSpeed = 0.5 + motion;
     for (const m of this.hazeMaterials) {
@@ -212,7 +266,6 @@ export class LiveStagePreset implements VisualizerPreset {
 
     // high → レーザーのストロボ
     this.updateStrobe(dt, a.high, intensity, motion);
-    this.updateCamera(params);
   }
 
   resize(width: number, height: number): void {
@@ -250,6 +303,9 @@ export class LiveStagePreset implements VisualizerPreset {
       laserFlashes: this.laserFlashes,
       pattern: PATTERNS[this.patternIndex]!,
       patternChanges: this.patternChanges,
+      wash: this.washLevel,
+      washRises: this.washRises,
+      maxHit: this.maxHit,
     };
   }
 
@@ -298,6 +354,7 @@ export class LiveStagePreset implements VisualizerPreset {
     const spotGeo = this.track(new THREE.CircleGeometry(1, 40));
     spotGeo.rotateX(-Math.PI / 2);
     const radial = this.track(makeRadialTexture());
+    const streakTex = this.track(makeStreakTexture());
 
     for (let i = 0; i < FIXTURE_COUNT; i++) {
       const bm = this.track(createBeamMaterial(BEAM_LENGTH));
@@ -327,7 +384,16 @@ export class LiveStagePreset implements VisualizerPreset {
       this.spotMaterials.push(sm);
       this.spots.push(spot);
 
-      this.fixtures.add(beam, head, lens, spot);
+      const stm = this.track(
+        new THREE.SpriteMaterial({ map: streakTex, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, transparent: true }),
+      );
+      const streak = new THREE.Sprite(stm);
+      streak.visible = false;
+      streak.renderOrder = 5;
+      this.streakMaterials.push(stm);
+      this.streaks.push(streak);
+
+      this.fixtures.add(beam, head, lens, spot, streak);
     }
     this.scene.add(this.fixtures);
   }
@@ -364,6 +430,46 @@ export class LiveStagePreset implements VisualizerPreset {
     this.lasers.renderOrder = 4;
     for (let e = 0; e < LASER_EMITTERS; e++) this.laserOrigins.push(new THREE.Vector3());
     this.scene.add(this.lasers);
+  }
+
+  /** 画面全体を少し明るくする板 (カメラの目の前に置く。加算) */
+  private buildWash(): void {
+    this.washMaterial = this.track(
+      new THREE.MeshBasicMaterial({ color: 0x000000, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true }),
+    );
+    this.wash = new THREE.Mesh(this.track(new THREE.PlaneGeometry(1, 1)), this.washMaterial);
+    this.wash.frustumCulled = false;
+    this.wash.renderOrder = 10;
+    this.wash.visible = false;
+    this.scene.add(this.wash);
+  }
+
+  /**
+   * ライトがカメラを向いた瞬間に、画面全体を少し明るくする (ユーザーの選択 B)。**向いた瞬間だけ**: いちばん向いている
+   * ライトの度合いが HIT_FLASH を下から越えたときに明るくし、0.3 秒ほどで引く (向いたままでも明るいままにはしない。
+   * 最初は向いている度合いの合計に合わせていたが、客席へ向けると常にどれかが少し向いているので、画面がずっと灰色にかすんだ)。
+   * 光過敏への配慮: 明るくなり始めるのは前回から WASH_MIN_INTERVAL 秒たってから (毎秒 3 回よりずっと少ない)。上限は WASH_MAX
+   */
+  private updateWash(dt: number, intensity: number): void {
+    const crossed = this.maxHit > HIT_FLASH && this.prevMaxHit <= HIT_FLASH;
+    this.prevMaxHit = this.maxHit;
+    if (crossed && this.t - this.lastWashRise >= WASH_MIN_INTERVAL && intensity > 0) {
+      this.lastWashRise = this.t;
+      this.washRises++;
+      this.washPeak = WASH_MAX * intensity * this.maxHit;
+    }
+    // 立ち上がりは 0.05 秒ほどでなめらかに、そのあと引いていく
+    const since = this.t - this.lastWashRise;
+    const target = since < 0.05 ? this.washPeak : this.washPeak * Math.exp(-(since - 0.05) * 7);
+    this.washLevel += (target - this.washLevel) * (1 - Math.exp(-dt * 40));
+    this.wash.visible = this.washLevel > 0.002;
+    if (!this.wash.visible) return;
+    this.washMaterial.color.copy(this.palette.beamA).lerp(this.palette.beamB, 0.5).lerp(WHITE, 0.3).multiplyScalar(this.washLevel);
+    // カメラの目の前 (0.5 先) に、見える範囲より十分大きく置く (Host が傾けたり拡大・縮小したりしても覆えるように)
+    const fwd = this.tmpDir.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    this.wash.position.copy(this.camera.position).addScaledVector(fwd, 0.5);
+    this.wash.quaternion.copy(this.camera.quaternion);
+    this.wash.scale.set(4, 4, 1);
   }
 
   /** 灯体とレーザーの発射位置を layoutScale に合わせて並べ直す。 */
@@ -459,8 +565,20 @@ export class LiveStagePreset implements VisualizerPreset {
         }
       }
       this.targetX[i] = lx * xs;
-      this.targetZ[i] = Math.min(MAX_LEAN_Z, lz);
+      this.targetZ[i] = this.crowdLean(lz, i, step);
     }
+  }
+
+  /**
+   * 客席側への傾き。光を客席へ向ける量が 0 なら今までどおり (MAX_LEAN_Z まで)。
+   * 量を上げると、拍ごとに灯体の半分くらいずつが客席 (カメラ) の方へ振れる
+   */
+  private crowdLean(lz: number, i: number, step: number): number {
+    const c = this.crowd;
+    if (c <= 0) return Math.min(MAX_LEAN_Z, lz);
+    const aim = c * (0.55 + 0.45 * Math.cos(((i + step) * Math.PI) / 2));
+    const limit = MAX_LEAN_Z + c * (CROWD_LEAN_MAX - MAX_LEAN_Z);
+    return Math.min(limit, lz + aim * (CROWD_LEAN_MAX - lz));
   }
 
   /** ビートが無い区間: 灯体ごとに位相をずらしたゆっくりのスイープ。 */
@@ -468,23 +586,40 @@ export class LiveStagePreset implements VisualizerPreset {
     const xs = 0.5 + 0.5 * this.layoutScale;
     for (let i = 0; i < FIXTURE_COUNT; i++) {
       this.targetX[i] = 0.45 * Math.sin(this.t * 0.35 + this.idlePhase[i * 2]!) * xs;
-      this.targetZ[i] = 0.35 + 0.25 * Math.sin(this.t * 0.27 + this.idlePhase[i * 2 + 1]!);
+      this.targetZ[i] = this.crowdLean(0.35 + 0.25 * Math.sin(this.t * 0.27 + this.idlePhase[i * 2 + 1]!), i, Math.floor(this.t * 0.5));
     }
   }
 
   private writeFixtures(beat: number, strength: number, density: number): void {
+    this.maxHit = 0;
     for (let i = 0; i < FIXTURE_COUNT; i++) {
       const dir = this.tmpDir.set(this.leanX[i]!, -1, this.leanZ[i]!).normalize();
       const beam = this.beams[i]!;
       beam.quaternion.setFromUnitVectors(DOWN, dir);
       this.heads[i]!.quaternion.copy(beam.quaternion);
 
+      const toCam0 = this.tmpVec.copy(this.camera.position).sub(beam.position).normalize();
+      const facing = dir.dot(toCam0);
+      const cover = THREE.MathUtils.smoothstep(facing, COVER_COS_OUTER, COVER_COS_INNER);
       const u = this.beamMaterials[i]!.uniforms;
-      u.strength!.value = strength;
+      // カメラを向いた円錐は薄くする (今までのカメラ・向きでは cover = 0 なので変わらない)
+      u.strength!.value = strength * (1 - 0.9 * cover);
       u.density!.value = density;
 
+      // ライトがカメラを向いているか (0..1)。向いているほど、レンズの玉が大きく強く光り、十字の光条が出る
+      const toCam = this.tmpVec.copy(this.camera.position).sub(beam.position).normalize();
+      const hit = THREE.MathUtils.smoothstep(dir.dot(toCam), HIT_COS_OUTER, HIT_COS_INNER);
+      this.maxHit = Math.max(this.maxHit, hit);
       // レンズ: Bloom のしきい値を超えて光るのはここだけ (ビートで強く)
-      this.lensMaterials[i]!.color.copy(this.beamColor(i)).multiplyScalar(strength * (1.4 + 2.2 * beat));
+      this.lensMaterials[i]!.color.copy(this.beamColor(i)).multiplyScalar(strength * (1.4 + 2.2 * beat) * (1 + 3 * hit));
+      this.lenses[i]!.scale.setScalar(0.9 * (1 + 2.2 * hit));
+      const streak = this.streaks[i]!;
+      streak.visible = hit > 0.01;
+      if (streak.visible) {
+        streak.position.copy(this.lenses[i]!.position);
+        streak.scale.setScalar(0.9 * (2 + 7 * hit));
+        this.streakMaterials[i]!.color.copy(this.beamColor(i)).lerp(WHITE, 0.4).multiplyScalar(1.6 * strength * hit);
+      }
 
       // 床に落ちる光の輪: 光線と床 (y=0) の交点。床に届かない向きなら消す
       const spot = this.spots[i]!;
@@ -545,6 +680,16 @@ export class LiveStagePreset implements VisualizerPreset {
             const side = e === 1 ? -1 : 1;
             this.tmpVec.set((-side * (1 + 7 * (j / (LASERS_PER_EMITTER - 1)) * spread) + sweep * 5) * s, 0.5 + 2 * (1 - spread), LASER_TARGET_Z);
           }
+          // 光を客席へ向けるときは、カメラのすぐそばを通るように寄せる (カメラの手前で消えるので、太い線にはならない)
+          if (this.crowd > 0) {
+            const cam = this.camera.position;
+            const side = j % 2 === 0 ? 1 : -1;
+            this.tmpVec.x = THREE.MathUtils.lerp(this.tmpVec.x, cam.x + side * (1.2 + 3 * Math.abs(u)), this.crowd * 0.7);
+            this.tmpVec.y = THREE.MathUtils.lerp(this.tmpVec.y, cam.y + 0.6 * u, this.crowd * 0.7);
+          }
+          // カメラが客席の前の方にいるときは、カメラより手前 (ステージ側) で消す
+          const cz = this.camera.position.z;
+          if (cz > 0) this.tmpVec.z = Math.min(LASER_TARGET_Z, cz - 1.5);
           const dir = this.tmpDir.copy(this.tmpVec).sub(origin);
           const length = dir.length();
           dir.divideScalar(length);
@@ -609,6 +754,35 @@ function makeRadialTexture(): THREE.DataTexture {
       data[i + 1] = a;
       data[i + 2] = a;
       data[i + 3] = a;
+    }
+  }
+  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** ライトがカメラを向いたときの十字の光条 (縦横に強く、斜めに弱く伸びる線 + 中心の光) */
+function makeStreakTexture(): THREE.DataTexture {
+  const size = 128;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = ((x + 0.5) / size - 0.5) * 2;
+      const dy = ((y + 0.5) / size - 0.5) * 2;
+      const r = Math.hypot(dx, dy);
+      const fade = Math.max(0, 1 - r);
+      const ray = (px: number): number => Math.exp(-Math.abs(px) * 60);
+      const cross = Math.max(ray(dx) , ray(dy)) * fade;
+      const diag = Math.max(ray((dx - dy) * 0.7071), ray((dx + dy) * 0.7071)) * fade * 0.35;
+      const core = Math.pow(Math.max(0, 1 - r * 3), 2);
+      const v = Math.round(Math.min(1, cross + diag + core) * 255);
+      const i = (y * size + x) * 4;
+      data[i] = v;
+      data[i + 1] = v;
+      data[i + 2] = v;
+      data[i + 3] = v;
     }
   }
   const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
