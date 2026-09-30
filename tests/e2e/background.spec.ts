@@ -95,7 +95,7 @@ function maxDiff(a: number[], b: number[]): number {
   return m;
 }
 
-for (const presetId of ['solar-gate', 'milky-way', 'live-stage']) {
+for (const presetId of ['solar-gate', 'milky-way', 'live-stage', 'speaker-rack']) {
   test(`背景 ${presetId}: 黒い背景 + スクリーン合成は背景なしとほぼ同じ、絵のある背景では変わり、同じ seed なら同じ`, async ({ page }) => {
     await page.goto('/');
     const none = await render(page, presetId, 20260927, null);

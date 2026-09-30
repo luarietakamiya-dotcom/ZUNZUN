@@ -91,6 +91,8 @@ const CASES: [string, Record<string, unknown>][] = [
   ['solar-gate', {}],
   ['milky-way', {}],
   ['_debug-bars', {}],
+  ['speaker-rack', {}],
+  ['speaker-rack', { framing: 'closeup' }],
   ['live-stage', {}],
   ['live-stage', { towardCrowd: 1 }],
   ['live-stage', { towardCrowd: 1, cameraSpot: 'front' }],

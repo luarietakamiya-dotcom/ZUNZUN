@@ -3,6 +3,7 @@ import { debugBarsModule } from './_debug';
 import { liveStageModule } from './live-stage';
 import { milkyWayModule } from './milky-way';
 import { solarGateModule } from './solar-gate';
+import { speakerRackModule } from './speaker-rack';
 
 /**
  * プリセットの登録一覧。新しいプリセットを追加するときは、そのフォルダを作って
@@ -12,6 +13,7 @@ import { solarGateModule } from './solar-gate';
 visualizerRegistry.register(solarGateModule);
 visualizerRegistry.register(milkyWayModule);
 visualizerRegistry.register(liveStageModule);
+visualizerRegistry.register(speakerRackModule);
 visualizerRegistry.register(debugBarsModule);
 
 export { visualizerRegistry };

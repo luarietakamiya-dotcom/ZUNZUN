@@ -81,7 +81,7 @@ async function renderPreset(page: Page, presetId: string, seed: number, seconds:
   );
 }
 
-for (const presetId of ['solar-gate', 'milky-way', 'live-stage']) {
+for (const presetId of ['solar-gate', 'milky-way', 'live-stage', 'speaker-rack']) {
   test(`Visualizer ${presetId}: 真っ黒でなく、同じ seed なら同じ画像、seed が違えば違う画像`, async ({ page }) => {
     await openApp(page);
     const a = await renderPreset(page, presetId, 20260927, 2.1);
