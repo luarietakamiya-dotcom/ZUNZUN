@@ -1,8 +1,8 @@
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { makeRng } from '../../core/random';
 import { defaultCommonParams, type AudioFrame, type CommonParams } from '../../core/types';
-import { CAMERA_SPOTS, LiveStagePreset, MAX_STROBE_HZ, PHRASE_BEATS, WASH_MAX, WASH_MIN_INTERVAL } from './preset';
+import { CAMERA_SPOTS, hazeYaw, LiveStagePreset, MAX_STROBE_HZ, PHRASE_BEATS, WASH_MAX, WASH_MIN_INTERVAL } from './preset';
 
 /**
  * WebGL を使わずに (three.js のシーングラフだけで) Live Stage を動かし、
@@ -207,6 +207,40 @@ describe('カメラ (このプリセットだけの設定)', () => {
     expect(p.camera.position.y).toBeGreaterThanOrEqual(0.3);
     p.update(frame(0), still({ cameraSpot: 'nowhere', cameraHeight: NaN, cameraYaw: 'x' }));
     expect(p.camera.position.toArray()).toEqual([0, 2, 12]);
+    p.dispose();
+  });
+
+  it('スモークの板はカメラの方へ回る: 客席の後ろ・ステージの奥からは今までどおり、真横からは正面寄りに見える', () => {
+    const p = makePreset(1, still());
+    const hazeNormals = (): THREE.Vector3[] => {
+      const out: THREE.Vector3[] = [];
+      p.scene.updateMatrixWorld(true);
+      p.scene.traverse((o) => {
+        if (o instanceof THREE.Mesh && (o.material as THREE.ShaderMaterial).name === 'LiveStageHaze') out.push(new THREE.Vector3(0, 0, 1).transformDirection(o.matrixWorld));
+      });
+      return out;
+    };
+    // 板の法線と、カメラから見る点への向き (水平) のなす角の cos の大きさ (1 = 正面、0 = 真横から)
+    const facing = (): number => {
+      const view = new THREE.Vector3();
+      p.camera.getWorldDirection(view);
+      view.y = 0;
+      view.normalize();
+      return Math.min(...hazeNormals().map((n) => Math.abs(n.dot(view))));
+    };
+    for (const spot of ['back', 'stage', 'top'] as const) {
+      p.update(frame(0), still({ cameraSpot: spot }));
+      expect(hazeNormals().length).toBe(4);
+      for (const n of hazeNormals()) expect(n.distanceTo(new THREE.Vector3(0, 0, 1)), spot).toBeLessThan(1e-12);
+    }
+    // 真横・左右に回したカメラからも、板をほぼ正面から見る
+    p.update(frame(0), still({ cameraSpot: 'side' }));
+    expect(facing()).toBeGreaterThan(0.95);
+    p.update(frame(0), still({ cameraYaw: 1 }));
+    expect(facing()).toBeGreaterThan(0.95);
+    expect(hazeYaw(0, -5)).toBe(0);
+    expect(hazeYaw(5, -5)).toBeCloseTo(-Math.PI / 4, 12);
+    expect(Math.abs(hazeYaw(5, 0.0001))).toBeLessThanOrEqual(Math.PI / 2);
     p.dispose();
   });
 });

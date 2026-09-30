@@ -57,6 +57,20 @@ export const CAMERA_SPOTS = {
   stage: { pos: new THREE.Vector3(0, 2.2, -8.2), look: new THREE.Vector3(0, 3.4, 8) },
 } as const;
 export type CameraSpot = keyof typeof CAMERA_SPOTS;
+/** スモークの板のまとまりの中心 (奥行き)。ここを軸に回す */
+const HAZE_PIVOT_Z = -2.75;
+/**
+ * スモークの板 (縦の板の重なり) をカメラの方へ向ける左右の角度。板を横から見ると端や線が見えるので、
+ * カメラ (揺れを足す前の位置) の方へ回して、いつも正面寄りから見えるようにする。
+ * 板は表も裏も同じなので ±90° に折りたたむ (客席の後ろ・ステージの奥からは 0 = 今までと同じ)
+ */
+export function hazeYaw(dx: number, dz: number): number {
+  if (dx === 0) return 0;
+  let a = Math.atan2(dx, dz);
+  if (a > Math.PI / 2) a -= Math.PI;
+  else if (a < -Math.PI / 2) a += Math.PI;
+  return a;
+}
 /** 左右の向き (cameraYaw = ±1) で回る角度 (度) */
 const CAMERA_YAW_MAX = 40;
 /**
@@ -175,6 +189,8 @@ export class LiveStagePreset implements VisualizerPreset {
   // スモーク
   private smoke = 0;
   private hazeMaterials: THREE.ShaderMaterial[] = [];
+  /** スモークの板のまとまり (カメラの方へ左右に回す。hazeYaw) */
+  private readonly hazeGroup = new THREE.Group();
   private wallMaterial!: THREE.ShaderMaterial;
   private floor!: Reflector;
   private floorUniforms!: Record<string, THREE.IUniform>;
@@ -400,16 +416,20 @@ export class LiveStagePreset implements VisualizerPreset {
 
   private buildHaze(): void {
     const geo = this.track(new THREE.PlaneGeometry(40, 9));
-    const depths = [-8, -4.5, -1, 2.5];
+    // 板の奥行き (-8, -4.5, -1, 2.5) を、まとまりの中心 HAZE_PIVOT_Z からの距離で置く
+    const depths = [-5.25, -1.75, 1.75, 5.25];
+    this.hazeGroup.position.set(0, 0, HAZE_PIVOT_Z);
     for (let i = 0; i < depths.length; i++) {
       const m = this.track(createHazeMaterial());
       m.uniforms.offset!.value = i * 3.7 + this.rng() * 10;
+      m.uniforms.wallZ!.value = WALL_Z;
       const haze = new THREE.Mesh(geo, m);
       haze.position.set(0, 4.5, depths[i]!);
       haze.renderOrder = 1;
       this.hazeMaterials.push(m);
-      this.scene.add(haze);
+      this.hazeGroup.add(haze);
     }
+    this.scene.add(this.hazeGroup);
   }
 
   private buildLasers(): void {
@@ -724,6 +744,7 @@ export class LiveStagePreset implements VisualizerPreset {
     const offset = this.tmpVec.copy(spot.pos).sub(spot.look).applyAxisAngle(UP, yaw).multiplyScalar(dist);
     const pos = offset.add(spot.look);
     pos.y = Math.max(0.3, pos.y + height * 3);
+    this.hazeGroup.rotation.y = hazeYaw(pos.x, pos.z - HAZE_PIVOT_Z);
     this.camera.position.set(
       pos.x + Math.sin(this.t * 0.09) * 1.4 * cm * this.layoutScale,
       pos.y + Math.sin(this.t * 0.07) * 0.35 * cm,

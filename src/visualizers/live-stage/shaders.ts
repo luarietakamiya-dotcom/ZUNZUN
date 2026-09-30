@@ -104,6 +104,8 @@ export function createHazeMaterial(): THREE.ShaderMaterial {
       density: { value: 0.3 },
       time: { value: 0 },
       offset: { value: 0 },
+      /** 奥の壁の位置 (z)。板が壁に刺さる所で線が見えないよう、壁の手前 1.5 で消す (-8.5 より手前は今までどおり) */
+      wallZ: { value: -10 },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -119,6 +121,7 @@ export function createHazeMaterial(): THREE.ShaderMaterial {
       uniform float density;
       uniform float time;
       uniform float offset;
+      uniform float wallZ;
       varying vec2 vUv;
       varying vec3 vWorld;
       ${NOISE_GLSL}
@@ -128,7 +131,7 @@ export function createHazeMaterial(): THREE.ShaderMaterial {
         n = smoothstep(0.25, 1.0, n);
         float low = (1.0 - smoothstep(0.0, 0.85, vUv.y)) * smoothstep(0.0, 0.12, vUv.y);
         float sides = smoothstep(0.0, 0.2, vUv.x) * smoothstep(1.0, 0.8, vUv.x);
-        float a = density * n * low * sides;
+        float a = density * n * low * sides * smoothstep(wallZ, wallZ + 1.5, vWorld.z);
         gl_FragColor = vec4(color * a, 1.0);
       }
     `,
