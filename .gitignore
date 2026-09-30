@@ -19,3 +19,4 @@ coverage/
 *.log
 .vscode/*
 !.vscode/extensions.json
+pw-tmp.config.ts
