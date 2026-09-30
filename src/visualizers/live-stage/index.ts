@@ -26,6 +26,20 @@ export const manifest: VisualizerManifest = {
     },
     {
       type: 'select',
+      key: 'stageSet',
+      label: { ja: 'ステージの機材', en: 'Stage set' },
+      help: {
+        ja: '照明のほかに、ステージの機材 (トラス・幕・ドラムの台など) を置きます。「なし」は照明だけ',
+        en: 'Adds stage gear besides the lights (truss, drapes, drum riser, …). "None" shows the lights only',
+      },
+      options: [
+        { value: 'none', label: { ja: 'なし (照明だけ)', en: 'None (lights only)' } },
+        { value: 'band', label: { ja: 'バンド', en: 'Band' } },
+      ],
+      default: 'none',
+    },
+    {
+      type: 'select',
       key: 'cameraSpot',
       label: { ja: 'カメラの場所', en: 'Camera position' },
       help: { ja: 'どこからステージを見るか', en: 'Where the stage is seen from' },

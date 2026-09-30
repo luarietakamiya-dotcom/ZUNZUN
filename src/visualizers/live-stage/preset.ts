@@ -4,6 +4,7 @@ import { shapeAudio } from '../../core/visualizer/response';
 import type { AudioFrame, CommonParams, VisualizerInitContext, VisualizerPreset } from '../../core/types';
 import { liveStagePalette, type LiveStagePalette } from './palette';
 import { createBeamMaterial, createHazeMaterial, createWallMaterial, stageFloorShader } from './shaders';
+import { StageSet, stageSetName } from './stage-set';
 
 /**
  * Live Stage — ライブ会場のステージ照明。
@@ -133,6 +134,8 @@ export interface LiveStageInspection {
   washRises: number;
   /** このフレームで、いちばんカメラを向いているライトの度合い (0..1) */
   maxHit: number;
+  /** 舞台の機材の組 (設定 stageSet) */
+  stageSet: string;
 }
 
 export class LiveStagePreset implements VisualizerPreset {
@@ -164,6 +167,8 @@ export class LiveStagePreset implements VisualizerPreset {
   private readonly idlePhase = new Float32Array(FIXTURE_COUNT * 2);
   private readonly convergePoints: THREE.Vector2[] = [];
   private truss!: THREE.Mesh;
+  /** 舞台の機材 (設定 stageSet。既定は無し = 今までどおり) */
+  private stageSet: StageSet | null = null;
   private fixtureMaterial!: THREE.MeshBasicMaterial;
   /** ライトがカメラを向いたときの光条 (十字の光) */
   private readonly streaks: THREE.Sprite[] = [];
@@ -223,6 +228,10 @@ export class LiveStagePreset implements VisualizerPreset {
     this.buildHaze();
     this.buildLasers();
     this.buildWash();
+    // 舞台の機材 (rng は使わない。stage-set.ts の説明)
+    this.stageSet = new StageSet({ trussY: TRUSS_Y, trussZ: TRUSS_Z, span: FIXTURE_COUNT * FIXTURE_SPACING + 1, wallZ: WALL_Z });
+    this.scene.add(this.stageSet.group);
+    this.applyStageSet(ctx.params);
 
     // seed ごとに変わるもの: 最初のパターン、ビートが無い区間の揺れの位相、集中パターンの狙う位置、レーザーの振りの位相
     this.patternIndex = Math.floor(this.rng() * PATTERNS.length) % PATTERNS.length;
@@ -279,6 +288,8 @@ export class LiveStagePreset implements VisualizerPreset {
     }
     for (const m of this.beamMaterials) m.uniforms.time!.value = (m.uniforms.time!.value as number) + dt * flowSpeed;
     this.wallMaterial.uniforms.glow!.value = 0.1 + (this.smoke * 0.4 + a.beat * 0.15) * intensity;
+    this.applyStageSet(params);
+    this.stageSet?.update(this.wallMaterial.uniforms.glow!.value as number);
 
     // high → レーザーのストロボ
     this.updateStrobe(dt, a.high, intensity, motion);
@@ -303,6 +314,8 @@ export class LiveStagePreset implements VisualizerPreset {
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;
     this.floor?.dispose();
+    this.stageSet?.dispose();
+    this.stageSet = null;
     this.scene.clear();
     this.renderer = null;
   }
@@ -322,6 +335,7 @@ export class LiveStagePreset implements VisualizerPreset {
       wash: this.washLevel,
       washRises: this.washRises,
       maxHit: this.maxHit,
+      stageSet: this.stageSet?.current ?? 'none',
     };
   }
 
@@ -331,6 +345,16 @@ export class LiveStagePreset implements VisualizerPreset {
   }
 
   // ---------------------------------------------------------------- build
+
+  /** 設定 stageSet を当てる。機材があるときは、今までの横棒のトラスを格子のトラスに置き換える */
+  private applyStageSet(params: Record<string, unknown>): void {
+    const set = this.stageSet;
+    if (!set) return;
+    const name = stageSetName(params.stageSet);
+    if (name === set.current) return;
+    set.set(name);
+    this.truss.visible = name === 'none';
+  }
 
   private track<T extends { dispose(): void }>(obj: T): T {
     this.disposables.push(obj);
@@ -503,6 +527,7 @@ export class LiveStagePreset implements VisualizerPreset {
     }
     this.truss.position.set(0, TRUSS_Y + 0.42, TRUSS_Z);
     this.truss.scale.set((FIXTURE_COUNT * FIXTURE_SPACING + 1) * s, 1, 1);
+    this.stageSet?.layout(s);
     this.laserOrigins[0]!.set(0, 1.0, WALL_Z + 0.4);
     this.laserOrigins[1]!.set(-6.8 * s, 6.6, WALL_Z + 0.6);
     this.laserOrigins[2]!.set(6.8 * s, 6.6, WALL_Z + 0.6);
@@ -522,6 +547,7 @@ export class LiveStagePreset implements VisualizerPreset {
     (this.wallMaterial.uniforms.glowColor!.value as THREE.Color).copy(p.wallGlow);
     (this.floorUniforms.floorColor!.value as THREE.Color).copy(p.floor);
     this.fixtureMaterial.color.copy(p.fixture);
+    this.stageSet?.applyPalette(p);
   }
 
   private beamColor(i: number): THREE.Color {

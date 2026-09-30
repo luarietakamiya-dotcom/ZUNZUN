@@ -296,3 +296,61 @@ describe('光を客席へ向ける (towardCrowd)', () => {
     b.dispose();
   });
 });
+
+describe('ステージの機材 (stageSet)', () => {
+  const named = (p: LiveStagePreset, name: string): THREE.Object3D[] => {
+    const out: THREE.Object3D[] = [];
+    p.scene.traverse((o) => {
+      if (o instanceof THREE.Mesh && (o.material as THREE.Material).name === name) out.push(o);
+    });
+    return out;
+  };
+  /** 実際に画面に出るか (親まで含めて visible か) */
+  const shown = (o: THREE.Object3D): boolean => {
+    for (let x: THREE.Object3D | null = o; x; x = x.parent) if (!x.visible) return false;
+    return true;
+  };
+
+  it('既定 (なし) は何も出さない。バンドにするとトラス・幕・台が出て、今までの横棒は隠れる。壊れた値はなし', () => {
+    const p = makePreset(1);
+    p.update(frame(0), params());
+    expect(p.inspect().stageSet).toBe('none');
+    expect(named(p, 'LiveStageDrape').some(shown)).toBe(false);
+    p.update(frame(0), params({ stageSet: 'band' } as never));
+    expect(p.inspect().stageSet).toBe('band');
+    const drapes = named(p, 'LiveStageDrape');
+    expect(drapes.length).toBe(2);
+    expect(drapes.every(shown)).toBe(true);
+    p.update(frame(0), params({ stageSet: 'rocket' } as never));
+    expect(p.inspect().stageSet).toBe('none');
+    expect(drapes.some(shown)).toBe(false);
+    p.dispose();
+  });
+
+  it('機材を置いても照明の動きは同じ (seed の乱数を使わない)', () => {
+    const a = makePreset(7);
+    const b = makePreset(7, params({ stageSet: 'band' } as never));
+    run(a, 600, beats, params({ high: 1 }));
+    run(b, 600, beats, params({ high: 1, stageSet: 'band' } as never));
+    expect(b.stageSnapshot()).toEqual(a.stageSnapshot());
+    expect(b.inspect().pattern).toBe(a.inspect().pattern);
+    a.dispose();
+    b.dispose();
+  });
+
+  it('縦長にすると幕が内側へ寄るが、トラスの部材の数は変わらない。dispose で落ちない', () => {
+    const p = makePreset(3, params({ stageSet: 'band' } as never));
+    p.update(frame(0), params({ stageSet: 'band' } as never));
+    const set = (p as unknown as { stageSet: { inspect(): { trussParts: number; drapeX: number[]; riserTop: number } } }).stageSet;
+    const wide = set.inspect();
+    expect(wide.trussParts).toBeGreaterThan(100);
+    expect(wide.drapeX[0]).toBeCloseTo(-wide.drapeX[1]!, 9);
+    expect(wide.riserTop).toBeGreaterThan(0);
+    p.resize(720, 1280);
+    const tall = set.inspect();
+    expect(tall.trussParts).toBe(wide.trussParts);
+    expect(Math.abs(tall.drapeX[1]!)).toBeLessThan(Math.abs(wide.drapeX[1]!));
+    p.update(frame(0, { bass: NaN }), params({ stageSet: 'band', intensity: NaN } as never));
+    expect(() => p.dispose()).not.toThrow();
+  });
+});

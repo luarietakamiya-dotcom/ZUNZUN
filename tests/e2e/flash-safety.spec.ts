@@ -95,6 +95,7 @@ const CASES: [string, Record<string, unknown>][] = [
   ['live-stage', { towardCrowd: 1 }],
   ['live-stage', { towardCrowd: 1, cameraSpot: 'front' }],
   ['live-stage', { towardCrowd: 1, cameraSpot: 'side' }],
+  ['live-stage', { stageSet: 'band', towardCrowd: 1 }],
 ];
 
 for (const [preset, extra] of CASES) {
