@@ -205,3 +205,81 @@ test('「背景と素材」タブ: 素材を足すとレイヤーの一覧のい
   await expect(page.locator('.media-item')).toHaveCount(0);
   expect(await page.locator('.layer-row').evaluateAll((rows) => rows.map((r) => (r as HTMLElement).dataset.layer))).toEqual(['overlays', 'lyrics', 'visualizer', 'background']);
 });
+
+test('グリーンバックの素材を 3 枚足せて、3 枚とも緑が透け、描いてある所だけが重なって見える', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('zunzun.lang', 'en'));
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Overlay' }).click();
+  // 緑の上に、1 枚ごとに違う場所 (左・真ん中・右) へ色の四角を 1 つ描いた PNG
+  const colors: [number, number, number][] = [
+    [230, 40, 40],
+    [40, 80, 230],
+    [240, 220, 40],
+  ];
+  const us = [0.2, 0.5, 0.8];
+  for (let i = 0; i < 3; i++) {
+    const dataUrl = await page.evaluate(
+      ({ u, c }) => {
+        const cv = document.createElement('canvas');
+        cv.width = 160;
+        cv.height = 90;
+        const g = cv.getContext('2d')!;
+        g.fillStyle = '#22dd44';
+        g.fillRect(0, 0, 160, 90);
+        g.fillStyle = `rgb(${c.join(',')})`;
+        g.fillRect(u * 160 - 15, 30, 30, 30);
+        return cv.toDataURL('image/png');
+      },
+      { u: us[i]!, c: colors[i]! },
+    );
+    await page.locator('.media-card input[type="file"]').first().setInputFiles({ name: `gs${i}.png`, mimeType: 'image/png', buffer: Buffer.from(dataUrl.split(',')[1]!, 'base64') });
+    await expect(page.locator('.media-item')).toHaveCount(i + 1);
+  }
+  // それぞれのサムネイルの緑の所を押す = 透かす色に緑を選ぶ (クロマキーが入る)
+  const items = page.locator('.media-item');
+  for (let i = 0; i < 3; i++) {
+    await items.nth(i).locator('.media-thumb').click({ position: { x: 3, y: 3 } });
+    await expect(items.nth(i).locator('input[data-media="chroma"]')).toBeChecked();
+  }
+  expect(await page.locator('.layer-row').evaluateAll((rows) => rows.filter((r) => (r as HTMLElement).dataset.layer!.startsWith('media:')).length)).toBe(3);
+
+  // プレビューの絵を読む (素材は既定で画面の高さの 6 割、真ん中: 画像の u は画面の 0.2 + 0.6u)
+  await page.getByRole('tab', { name: 'Visualizer' }).click();
+  await page.waitForTimeout(1500);
+  const shot = await page.locator('.visualizer-canvas').screenshot();
+  const r = await page.evaluate(
+    async ({ b64, us }) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      const g = c.getContext('2d')!;
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      const at = (x: number, y: number) => {
+        const k = (Math.floor(y * c.height) * c.width + Math.floor(x * c.width)) * 4;
+        return [d[k]!, d[k + 1]!, d[k + 2]!];
+      };
+      // 素材の範囲 (画面の 0.2〜0.8) で、はっきり緑の画素の割合
+      let green = 0;
+      let n = 0;
+      for (let y = Math.floor(0.2 * c.height); y < 0.8 * c.height; y += 2) {
+        for (let x = Math.floor(0.2 * c.width); x < 0.8 * c.width; x += 2) {
+          const k = (y * c.width + x) * 4;
+          n++;
+          if (d[k + 1]! > d[k]! + 60 && d[k + 1]! > d[k + 2]! + 60) green++;
+        }
+      }
+      return { squares: us.map((u) => at(0.2 + 0.6 * u, 0.5)), green: green / n };
+    },
+    { b64: shot.toString('base64'), us },
+  );
+  for (let i = 0; i < 3; i++) {
+    const [cr, cg, cb] = r.squares[i]!;
+    const [er, eg, eb] = colors[i]!;
+    expect(Math.abs(cr! - er) + Math.abs(cg! - eg) + Math.abs(cb! - eb), `square ${i}: ${r.squares[i]}`).toBeLessThan(60);
+  }
+  expect(r.green).toBeLessThan(0.01);
+});
