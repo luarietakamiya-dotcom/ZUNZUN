@@ -21,7 +21,7 @@ async function render(page: Page, presetId: string, seed: number, bg: Bg): Promi
     async ({ presetId, seed, bg }) => {
       const { VisualizerHost } = await import('/src/core/visualizer/host.ts');
       const { visualizerRegistry } = await import('/src/visualizers/index.ts');
-      const { defaultCommonParams, defaultBackground } = await import('/src/core/types.ts');
+      const { defaultCommonParams, defaultBackground, defaultComposition } = await import('/src/core/types.ts');
       const W = 320;
       const H = 180;
       const canvas = document.createElement('canvas');
@@ -51,8 +51,10 @@ async function render(page: Page, presetId: string, seed: number, bg: Bg): Promi
           g.fill();
         }
         const blob = await new Promise<Blob>((r) => src.toBlob((b) => r(b!), 'image/png'));
-        const settings = { ...defaultBackground('bg.png', 'a'.repeat(64), 'image' as const), dim: bg.dim ?? 0, blend: bg.blend ?? 'screen', visualizerOpacity: bg.opacity ?? 1 };
+        const settings = { ...defaultBackground('bg.png', 'a'.repeat(64), 'image' as const), dim: bg.dim ?? 0 };
         await host.background.load(settings, blob);
+        // ビジュアライザーの重ね方と濃さは、レイヤーの設定 (composition) に持つ
+        host.composition = { ...defaultComposition(), visualizerBlend: bg.blend ?? 'screen', visualizerOpacity: bg.opacity ?? 1 };
       }
       const params = defaultCommonParams() as ReturnType<typeof defaultCommonParams> & Record<string, unknown>;
       await host.setPreset(visualizerRegistry.get(presetId)!, seed, params);

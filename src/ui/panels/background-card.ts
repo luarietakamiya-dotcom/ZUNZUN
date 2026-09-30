@@ -1,6 +1,6 @@
 import { store } from '../../core/store';
 import type { BackgroundSettings } from '../../core/types';
-import { t2, tr, type Text2 } from '../../core/i18n';
+import { tr, type Text2 } from '../../core/i18n';
 import { sliderRow } from './panel-helpers';
 
 /**
@@ -17,16 +17,9 @@ function kindOf(file: File): 'image' | 'video' {
   return file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(file.name) ? 'video' : 'image';
 }
 
-const BLEND_LABELS: Record<BackgroundSettings['blend'], Text2> = {
-  screen: { ja: 'スクリーン (黒い部分は透けて、光だけが背景に乗る。おすすめ)', en: 'Screen (black becomes see-through, only light is added. Recommended)' },
-  add: { ja: '加算 (スクリーンより明るい。真っ白になりやすい)', en: 'Add (brighter than Screen, blows out to white easily)' },
-  over: { ja: 'そのまま上に (「ビジュアライザーの濃さ」で透かす。1 なら背景は見えない)', en: 'Normal (see through by "Visualizer opacity". At 1 the background is hidden)' },
-};
-
-const SLIDERS: { key: 'dim' | 'blur' | 'visualizerOpacity'; label: Text2; help: Text2 }[] = [
+const SLIDERS: { key: 'dim' | 'blur'; label: Text2; help: Text2 }[] = [
   { key: 'dim', label: { ja: '背景の暗さ', en: 'Background dim' }, help: { ja: '上げるほど背景が暗くなり、ビジュアライザーが見やすくなります', en: 'Darkens the background so the visuals stand out' } },
   { key: 'blur', label: { ja: '背景のぼかし', en: 'Background blur' }, help: { ja: '背景をぼかして、手前を目立たせます', en: 'Blurs the background so the foreground stands out' } },
-  { key: 'visualizerOpacity', label: { ja: 'ビジュアライザーの濃さ', en: 'Visualizer opacity' }, help: { ja: '0 = ビジュアライザーを消す、1 = そのまま', en: '0 = hide the visuals, 1 = full strength' } },
 ];
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = ''): HTMLElementTagNameMap[K] {
@@ -54,8 +47,8 @@ export function createBackgroundCard(): HTMLElement {
       'p',
       'lyrics-help',
       tr(
-        'ビジュアライザーの奥に写真か動画 (MP4 (H.264) / WebM) を敷きます。ビジュアライザーは背景の上に重ねて描きます (スクリーンなら、黒い部分は透けて光だけが乗ります)。背景には光のにじみはかかりません。動画の音は使いません。動画は曲と同じ時刻から流れ、曲より短ければくり返すか最後の絵で止めます。見た目は「ビジュアライザー」タブで確かめてください。',
-        'Place a photo or video (MP4 (H.264) / WebM) behind the visuals. The visuals are drawn on top (with Screen, black is see-through and only light is added). The background gets no glow. Video sound is not used. The video plays from the same time as the song; if shorter it loops or holds the last frame. Check the result in the Visualizer tab.',
+        '写真か動画 (MP4 (H.264) / WebM) を背景に敷きます。重なる順番とビジュアライザーの重ね方は、上の「レイヤー」で変えられます (スクリーンなら、ビジュアライザーの黒い部分は透けて光だけが乗ります)。背景には光のにじみはかかりません。動画の音は使いません。動画は曲と同じ時刻から流れ、曲より短ければくり返すか最後の絵で止めます。見た目は「ビジュアライザー」タブで確かめてください。',
+        'Place a photo or video (MP4 (H.264) / WebM) as the background. Change the stacking order and how the visuals are layered in "Layers" above (with Screen, the visuals\' black is see-through and only light is added). The background gets no glow. Video sound is not used. The video plays from the same time as the song; if shorter it loops or holds the last frame. Check the result in the Visualizer tab.',
       ),
     ),
   );
@@ -126,20 +119,12 @@ export function createBackgroundCard(): HTMLElement {
     }
     fit.value = bg.fit;
     fit.addEventListener('change', () => store.updateBackground({ fit: fit.value as BackgroundSettings['fit'] }));
-    const blend = h('select', 'select');
-    for (const [v, label] of Object.entries(BLEND_LABELS)) {
-      const o = h('option', '', t2(label));
-      o.value = v;
-      blend.appendChild(o);
-    }
-    blend.value = bg.blend;
-    blend.addEventListener('change', () => store.updateBackground({ blend: blend.value as BackgroundSettings['blend'] }));
     const selRow = (label: string, el: HTMLElement): HTMLElement => {
       const r = h('label', 'param-row');
       r.append(h('span', 'param-label', label), el);
       return r;
     };
-    grid.append(selRow(tr('収め方', 'Fit'), fit), selRow(tr('ビジュアライザーの重ね方', 'How the visuals are layered'), blend));
+    grid.append(selRow(tr('収め方', 'Fit'), fit));
     if (bg.kind === 'video') {
       const loop = h('input');
       loop.type = 'checkbox';

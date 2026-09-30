@@ -99,6 +99,7 @@ function createRunnerFromStore(): ExportRunner {
         rhythm,
         background,
         view: { ...store.view },
+        composition: JSON.parse(JSON.stringify(store.composition)),
         fileName,
       },
       ctx,

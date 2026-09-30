@@ -153,6 +153,8 @@ export interface ProjectFile {
   rhythm: RhythmSettings | null;
   /** 背景の一枚絵・動画。使わないプロジェクトは null (docs/ARCHITECTURE.md「背景」) */
   background: BackgroundSettings | null;
+  /** レイヤーの順番と重ね方。古いプロジェクトには無い (読み込むと、背景の設定から移して作る) */
+  composition?: CompositionSettings;
   colors: Record<string, string>;
   fonts: Record<string, string>;
   export: ExportSettings;
@@ -190,13 +192,6 @@ export interface BackgroundSettings {
   dim: number;
   /** ぼかし (0..1、画像だけ) */
   blur: number;
-  /**
-   * ビジュアライザーの重ね方。'screen' = スクリーン合成 (黒は透けて光だけ乗る)、'add' = 加算、
-   * 'over' = そのまま上に (visualizerOpacity で透かす。1 なら背景は見えない)
-   */
-  blend: 'screen' | 'add' | 'over';
-  /** ビジュアライザーの濃さ (0..1) */
-  visualizerOpacity: number;
   /** 動画が曲より短いとき、くり返すか (false なら最後の絵で止める) */
   loop: boolean;
 }
@@ -208,9 +203,42 @@ export const defaultBackground = (ref: string, sha256: string, kind: BackgroundS
   fit: 'cover',
   dim: 0.35,
   blur: 0,
-  blend: 'screen',
-  visualizerOpacity: 1,
   loop: true,
+});
+
+/**
+ * ビジュアライザーを、その下のレイヤーにどう重ねるか。'screen' = スクリーン合成 (黒は透けて光だけ乗る)、'add' = 加算、
+ * 'over' = そのまま上に (濃さで透かす。1 なら下は見えない)
+ */
+export type VisualizerBlend = 'screen' | 'add' | 'over';
+
+/** 決まったレイヤー (素材のレイヤーは 'media:<id>') */
+export const BASE_LAYERS = ['background', 'visualizer', 'lyrics', 'overlays'] as const;
+export type BaseLayerId = (typeof BASE_LAYERS)[number];
+
+/**
+ * 画面の組み立て (レイヤーの順番と重ね方。docs/ARCHITECTURE.md「レイヤー」)。
+ * 以前は背景の設定 (background.blend / visualizerOpacity) に入っていたビジュアライザーの重ね方も、ここに持つ
+ * (背景が無くても、下に素材を置けば重ね方が要るため)。古いプロジェクトは読み込むときに移す。
+ */
+export interface CompositionSettings {
+  /** 奥 → 手前の順。決まったレイヤーは必ず 1 回ずつ入る */
+  order: string[];
+  /** 隠しているレイヤー */
+  hidden: string[];
+  visualizerBlend: VisualizerBlend;
+  /** ビジュアライザーの濃さ (0..1) */
+  visualizerOpacity: number;
+  /** 歌詞の濃さ (0..1) */
+  lyricsOpacity: number;
+}
+
+export const defaultComposition = (): CompositionSettings => ({
+  order: [...BASE_LAYERS],
+  hidden: [],
+  visualizerBlend: 'screen',
+  visualizerOpacity: 1,
+  lyricsOpacity: 1,
 });
 
 export const defaultRhythm = (): RhythmSettings => ({ enabled: false, bars: [], meters: [{ bar: 0, pattern: '4' }] });

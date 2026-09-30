@@ -190,7 +190,7 @@ describe('sanitizeProject', () => {
     expect(sanitizeProject(raw).visualizer.view).toEqual({ zoom: 1, x: 1, y: -0.5, roll: -180 });
   });
 
-  it('background: ファイル名と sha256 があるときだけ残し、値は範囲に収め、知らない選択肢は既定に戻す', () => {
+  it('background: ファイル名と sha256 があるときだけ残し、値は範囲に収め、知らない選択肢は既定に戻す。古い重ね方はレイヤーの設定へ', () => {
     const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
     expect(sanitizeProject(raw).background).toBeNull();
     const sha = 'd'.repeat(64);
@@ -202,12 +202,13 @@ describe('sanitizeProject', () => {
       fit: 'contain',
       dim: 1,
       blur: 0,
-      blend: 'screen',
-      visualizerOpacity: 0.5,
       loop: true,
     });
+    // 古いプロジェクトの背景の重ね方 (知らない値は既定) は、レイヤーの設定へ移る
+    expect(sanitizeProject(raw).composition).toMatchObject({ visualizerBlend: 'screen', visualizerOpacity: 0.5 });
     raw.background = { ref: 'a.mp4', sha256: sha, kind: 'video', blend: 'over' };
-    expect(sanitizeProject(raw).background).toMatchObject({ kind: 'video', fit: 'cover', dim: 0.35, blend: 'over', visualizerOpacity: 1 });
+    expect(sanitizeProject(raw).background).toMatchObject({ kind: 'video', fit: 'cover', dim: 0.35 });
+    expect(sanitizeProject(raw).composition).toMatchObject({ visualizerBlend: 'over', visualizerOpacity: 1 });
     for (const bad of [{ ref: '', sha256: sha }, { ref: 'a', sha256: 'zz' }, 'a.png']) {
       raw.background = bad;
       expect(sanitizeProject(raw).background).toBeNull();
@@ -265,5 +266,20 @@ describe('sanitizeProject', () => {
     expect(lyrics.source).toBe('lrc');
     expect(lyrics.text).toHaveLength(MAX_LYRICS_LENGTH);
     expect(lyrics.timing).toEqual(defaultLyrics().timing);
+  });
+});
+
+describe('composition (レイヤーの順番と重ね方)', () => {
+  it('無ければ既定 (背景があればその重ね方を引き継ぐ)。知らないレイヤー・重複は捨て、足りない決まったレイヤーは足す', () => {
+    const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
+    expect(sanitizeProject(raw).composition).toEqual({ order: ['background', 'visualizer', 'lyrics', 'overlays'], hidden: [], visualizerBlend: 'screen', visualizerOpacity: 1, lyricsOpacity: 1 });
+    raw.composition = { order: ['lyrics', 'lyrics', 'evil', 'visualizer', 'media:abc', 'media:<x>'], hidden: ['lyrics', 'nope'], visualizerBlend: 'multiply', visualizerOpacity: 7, lyricsOpacity: 0.4 };
+    raw.background = { ref: 'a.png', sha256: 'd'.repeat(64), blend: 'add' };
+    const c = sanitizeProject(raw).composition!;
+    // 足りない決まったレイヤーは、既定の順番で 1 つ奥にあるもののすぐ手前に入る (背景 = いちばん奥、重ねる画像 = 歌詞のすぐ手前)
+    expect(c.order).toEqual(['background', 'lyrics', 'overlays', 'visualizer', 'media:abc']);
+    expect(c.hidden).toEqual(['lyrics']);
+    // composition があれば、背景の古い重ね方は使わない
+    expect(c).toMatchObject({ visualizerBlend: 'screen', visualizerOpacity: 1, lyricsOpacity: 0.4 });
   });
 });

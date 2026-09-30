@@ -86,9 +86,18 @@ describe('buildProjectFile', () => {
     expect(sanitizeProject(JSON.parse(JSON.stringify(project))).visualizer.view).toEqual(view);
   });
 
+  it('レイヤーの順番と重ね方 (composition) を保存し、保存 → 読み込みで同じ内容に戻る', () => {
+    expect(buildProjectFile(state()).composition!.order).toEqual(['background', 'visualizer', 'lyrics', 'overlays']);
+    const composition = { order: ['lyrics', 'background', 'visualizer', 'overlays'], hidden: ['overlays'], visualizerBlend: 'add' as const, visualizerOpacity: 0.7, lyricsOpacity: 0.5 };
+    const project = buildProjectFile(state({ composition }));
+    expect(project.composition).toEqual(composition);
+    expect(project.composition!.order).not.toBe(composition.order);
+    expect(sanitizeProject(JSON.parse(JSON.stringify(project))).composition).toEqual(composition);
+  });
+
   it('背景 (background) を複製して保存し、保存 → 読み込みで同じ内容に戻る', () => {
     expect(buildProjectFile(state()).background).toBeNull();
-    const background = { ...defaultBackground('sky.jpg', 'e'.repeat(64), 'image'), dim: 0.5, blend: 'add' as const };
+    const background = { ...defaultBackground('sky.jpg', 'e'.repeat(64), 'image'), dim: 0.5 };
     const project = buildProjectFile(state({ background }));
     expect(project.background).toEqual(background);
     expect(project.background).not.toBe(background);

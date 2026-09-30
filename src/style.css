@@ -469,3 +469,10 @@ body {
 .transport-seek { width: 180px; }
 .transport-time { font-size: 12px; color: var(--fg-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .transport-name { font-size: 12px; color: var(--fg-dim); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* レイヤーの一覧 (背景と素材タブ) */
+.layers-list { display: flex; flex-direction: column; gap: 6px; }
+.layer-row { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+.layer-head { align-items: center; }
+.layer-name { flex: 1; font-size: 13px; }
+.layer-move { padding: 2px 8px; }

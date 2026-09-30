@@ -5,7 +5,9 @@ import { deriveSeed, makeRng } from '../random';
 import { BackgroundCompositor } from '../render/background';
 import { PostFxStack } from '../render/postfx';
 import { applyView, normalizeView } from '../render/view';
-import { type AudioFrame, type CommonParams, defaultView, type ViewSettings, type VisualizerPreset } from '../types';
+import { framePlan, normalizeComposition } from '../render/composition';
+import { ScreenCapture } from '../render/screen-capture';
+import { type AudioFrame, type CommonParams, type CompositionSettings, defaultComposition, defaultView, type ViewSettings, type VisualizerPreset } from '../types';
 import type { VisualizerModule } from './registry';
 
 export interface VisualizerHostOptions {
@@ -50,6 +52,16 @@ export class VisualizerHost {
    */
   readonly background = new BackgroundCompositor();
   private _view: ViewSettings = defaultView();
+  private _composition: CompositionSettings = defaultComposition();
+  /** レイヤーの順番を組み替えたときに、ビジュアライザーの絵を写し取っておく所 */
+  private readonly capture = new ScreenCapture();
+  /** レイヤーの順番と重ね方 (docs/ARCHITECTURE.md「レイヤー」)。描くたびに使う */
+  get composition(): CompositionSettings {
+    return this._composition;
+  }
+  set composition(c: CompositionSettings) {
+    this._composition = c === this._composition ? c : normalizeComposition(c);
+  }
   /** ビジュアライザーの見え方 (拡大・位置・傾き)。描くたびにカメラへ当てて戻す (core/render/view.ts) */
   get view(): ViewSettings {
     return this._view;
@@ -134,12 +146,25 @@ export class VisualizerHost {
     previous?.preset.dispose();
   }
 
-  /** 現在のプリセット → (背景を重ねる) → 歌詞モーション → オーバーレイ の順に、毎フレーム更新して描画する。 */
+  /**
+   * 毎フレーム、レイヤーの順番 (composition) どおりに描く。既定の順番は 背景 → ビジュアライザー → 歌詞 → 重ねる画像。
+   * - ビジュアライザーより奥が背景だけなら、今までどおりビジュアライザーを画面へ直接描いてから背景を上から重ねる (fast)
+   * - そうでなければ、ビジュアライザーを画面へ描いて写し取り、画面を消してから奥から順に重ね直す
+   */
   render(frame: AudioFrame, params: CommonParams & Record<string, unknown>): void {
+    const comp = this._composition;
     this.background.update(frame.t);
-    if (this.current) {
-      const { preset } = this.current;
-      preset.update(frame, params);
+    this.background.setVisualizerBlend(comp.visualizerBlend, comp.visualizerOpacity);
+    this.lyrics.setOpacity(comp.lyricsOpacity);
+    this.overlay.animate(frame);
+    const plan = framePlan(comp, (id) => {
+      if (id === 'background') return this.background.active;
+      if (id === 'visualizer') return this.current != null;
+      if (id === 'lyrics' || id === 'overlays') return true;
+      return false;
+    });
+    const drawVisualizer = (): void => {
+      const { preset } = this.current!;
       this.postfx.setGlow(params.glow);
       const restoreView = applyView(preset.camera, this._view, this.width, this.height);
       try {
@@ -147,15 +172,30 @@ export class VisualizerHost {
       } finally {
         restoreView();
       }
-    } else if (this.background.active) {
+    };
+    // プリセットは隠していても動かし続ける (表示に戻したときに続きから動くように)
+    if (this.current) this.current.preset.update(frame, params);
+    const vi = plan.draw.indexOf('visualizer');
+    let rest = plan.draw;
+    if (plan.fast) {
+      drawVisualizer();
+      // 背景はビジュアライザーの上からスクリーン合成などで重ねる (見た目は背景が奥。core/render/background.ts)
+      if (vi > 0) this.background.composeOver(this.renderer);
+      rest = plan.draw.slice(vi + 1);
+    } else {
+      if (vi >= 0) {
+        drawVisualizer();
+        this.capture.capture(this.renderer);
+      }
       this.renderer.setRenderTarget(null);
       this.renderer.clear();
     }
-    // 背景はビジュアライザーの上からスクリーン合成などで重ねる (見た目は背景が奥。core/render/background.ts)
-    this.background.composeOver(this.renderer);
-    this.lyrics.render(this.renderer, frame.t);
-    this.overlay.animate(frame);
-    this.overlay.render(this.renderer);
+    for (const id of rest) {
+      if (id === 'background') this.background.drawOpaque(this.renderer);
+      else if (id === 'visualizer') this.capture.draw(this.renderer, comp.visualizerBlend, comp.visualizerOpacity);
+      else if (id === 'lyrics') this.lyrics.render(this.renderer, frame.t);
+      else if (id === 'overlays') this.overlay.render(this.renderer);
+    }
   }
 
   dispose(): void {
@@ -166,6 +206,7 @@ export class VisualizerHost {
     this.lyrics.dispose();
     this.overlay.dispose();
     this.background.dispose();
+    this.capture.dispose();
     this.renderer.dispose();
     // WebGL コンテキストは GC 任せだとしばらく残り、ブラウザの同時コンテキスト数上限 (Chrome は 16) に
     // 近づく。タブ切り替えや書き出しのたびに Host を作り直すので、ここで明示的に手放す。

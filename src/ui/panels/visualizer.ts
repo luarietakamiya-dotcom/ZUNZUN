@@ -289,6 +289,7 @@ export function renderVisualizerPanel(): HTMLElement {
         : null,
     );
     host.view = store.view;
+    host.composition = store.composition;
     if (frame) host.render(frame, store.params as CommonParams & Record<string, unknown>);
     requestAnimationFrame(tick);
   };

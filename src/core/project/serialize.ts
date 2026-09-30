@@ -9,6 +9,8 @@ import {
   type RhythmSettings,
   defaultView,
   type ViewSettings,
+  defaultComposition,
+  type CompositionSettings,
 } from '../types';
 
 /** buildProjectFile が必要とする AudioEngine の最小の形 (実体は core/audio/engine.ts の AudioEngine)。 */
@@ -36,6 +38,8 @@ export interface ProjectSourceState {
   background?: BackgroundSettings | null;
   /** ビジュアライザーの見え方 (省略可: 古い呼び出し側・テストのため。省略すると既定) */
   view?: ViewSettings;
+  /** レイヤーの順番と重ね方 (省略可。省略すると既定) */
+  composition?: CompositionSettings;
   exportSettings: ExportSettings;
 }
 
@@ -86,6 +90,7 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
       ? { enabled: state.rhythm.enabled, bars: [...state.rhythm.bars], meters: state.rhythm.meters.map((m) => ({ ...m })) }
       : null,
     background: state.background ? { ...state.background } : null,
+    composition: JSON.parse(JSON.stringify(state.composition ?? defaultComposition())) as CompositionSettings,
     colors: {},
     fonts: {},
     export: { ...state.exportSettings },

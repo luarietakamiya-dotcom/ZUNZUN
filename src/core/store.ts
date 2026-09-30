@@ -1,5 +1,6 @@
 import { AudioEngine } from './audio';
 import { sha256Hex } from './hash';
+import { moveLayer, normalizeComposition } from './render/composition';
 import {
   defaultCommonParams,
   defaultLyrics,
@@ -15,6 +16,8 @@ import {
   defaultBackground,
   defaultView,
   type ViewSettings,
+  defaultComposition,
+  type CompositionSettings,
 } from './types';
 import { tr } from './i18n';
 
@@ -50,6 +53,28 @@ class Store {
   /** 背景の元のファイル (メモリ上だけ。Project JSON には ref/sha256 だけを保存する) */
   private _backgroundFile: File | null = null;
   private _view: ViewSettings = defaultView();
+  private _composition: CompositionSettings = defaultComposition();
+
+  /** レイヤーの順番と重ね方。Project JSON の composition に保存される */
+  get composition(): CompositionSettings {
+    return this._composition;
+  }
+
+  updateComposition(patch: Partial<CompositionSettings>): void {
+    this._composition = { ...this._composition, ...patch };
+    this.emit();
+  }
+
+  /** レイヤーを 1 つ手前 (1) か奥 (-1) へ */
+  moveLayer(id: string, dir: 1 | -1): void {
+    this.updateComposition({ order: moveLayer(this._composition.order, id, dir) });
+  }
+
+  setLayerVisible(id: string, visible: boolean): void {
+    const hidden = this._composition.hidden.filter((h) => h !== id);
+    if (!visible) hidden.push(id);
+    this.updateComposition({ hidden });
+  }
   private readonly listeners = new Set<Listener>();
 
   /** ビジュアライザーの見え方 (拡大・位置・傾き)。Project JSON の visualizer.view に保存される */
@@ -268,6 +293,7 @@ class Store {
     this._presetId = project.visualizer.preset;
     this._params = { ...project.visualizer.common };
     this._view = { ...(project.visualizer.view ?? defaultView()) };
+    this._composition = normalizeComposition(project.composition);
     this._expectedAudio = project.audio;
     this._overlays = project.overlays;
     this.overlayFiles.clear();

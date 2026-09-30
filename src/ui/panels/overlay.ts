@@ -1,5 +1,6 @@
 import { store } from '../../core/store';
 import { createBackgroundCard } from './background-card';
+import { createLayersCard } from './layers-card';
 import type { OverlayLayer } from '../../core/types';
 import { tr, type Text2 } from '../../core/i18n';
 import { sliderRow } from './panel-helpers';
@@ -40,6 +41,8 @@ export function renderOverlayPanel(): HTMLElement {
   el.appendChild(p);
 
   // 背景の一枚絵 (ビジュアライザーの奥)。オーバーレイ (前面) とは別の欄
+  // レイヤーの順番 (手前が上)、そのあと背景の一枚絵・動画
+  el.appendChild(createLayersCard());
   el.appendChild(createBackgroundCard());
 
   const addRow = document.createElement('div');

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { BackgroundSettings } from '../types';
+import type { BackgroundSettings, VisualizerBlend } from '../types';
 import { ExactVideo, PreviewVideo } from './background-video';
 import { tr } from '../i18n';
 
@@ -14,7 +14,7 @@ import { tr } from '../i18n';
  * 結果が同じなので)。最初はビジュアライザーを画面外に描いてから背景の上に重ねていたが、PostFX の最後の UnrealBloomPass は
  * 画面へ写すときに「元の絵だけ リニア → sRGB に変換し、Bloom の光は変換せずに足す」ので、まとめて変換すると
  * Bloom の強いプリセットで色が合わなかった (E2E で差が最大 144)。この描き方なら、ビジュアライザーの見た目は背景なしと完全に同じ。
- * - 濃さ (visualizerOpacity) < 1: 先に黒を重ねてビジュアライザーを薄くしてから、背景を重ねる
+ * - 濃さ (レイヤーの設定の visualizerOpacity) < 1: 先に黒を重ねてビジュアライザーを薄くしてから、背景を重ねる
  * - 'over' (そのまま上に): 背景に (1 − 濃さ) を掛けて足す = ビジュアライザー × 濃さ + 背景 × (1 − 濃さ)
  * 背景の画像はファイルの値 (sRGB) をそのまま出す (色の変換をしない)。背景には Bloom をかけない (明るい写真が白飛びしないように)。
  */
@@ -59,7 +59,7 @@ void main() {
 `;
 
 /** 背景をビジュアライザー (画面に描いてある絵 = dst) の上に重ねる合成 */
-function blendFor(material: THREE.ShaderMaterial, blend: BackgroundSettings['blend']): void {
+function blendFor(material: THREE.ShaderMaterial, blend: VisualizerBlend): void {
   material.blending = THREE.CustomBlending;
   material.blendEquation = THREE.AddEquation;
   material.blendSrc = THREE.OneFactor;
@@ -121,6 +121,9 @@ export class BackgroundCompositor {
   private srcAspect = 1;
   private dstAspect = 1;
   private settings: BackgroundSettings | null = null;
+  /** ビジュアライザーの重ね方と濃さ (レイヤーの設定から。setVisualizerBlend) */
+  private vBlend: VisualizerBlend = 'screen';
+  private vOpacity = 1;
   /** load() の呼び出し世代 (読み込み中に別の読み込みが来たら古い方を捨てる) */
   private generation = 0;
 
@@ -212,6 +215,34 @@ export class BackgroundCompositor {
     this.apply();
   }
 
+  /** ビジュアライザーを背景にどう重ねるか (レイヤーの設定。変わったときだけ作り直す) */
+  setVisualizerBlend(blend: VisualizerBlend, opacity: number): void {
+    const o = Math.max(0, Math.min(1, Number.isFinite(opacity) ? opacity : 1));
+    if (blend === this.vBlend && o === this.vOpacity) return;
+    this.vBlend = blend;
+    this.vOpacity = o;
+    this.apply();
+  }
+
+  /**
+   * 背景だけを、下に何も無い画面へ不透明に描く (レイヤーの順番を組み替えたとき用。ビジュアライザーはこのあと別に重ねる)
+   */
+  drawOpaque(renderer: THREE.WebGLRenderer): void {
+    if (!this.active || !this.settings) return;
+    const brightness = this.bgMaterial.uniforms.brightness!;
+    const before = brightness.value as number;
+    brightness.value = 1 - Math.max(0, Math.min(1, this.settings.dim));
+    const { blending } = this.bgMaterial;
+    this.bgMaterial.blending = THREE.NoBlending;
+    renderer.setRenderTarget(null);
+    const prevAutoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.render(this.bgMesh, this.camera);
+    renderer.autoClear = prevAutoClear;
+    this.bgMaterial.blending = blending;
+    brightness.value = before;
+  }
+
   /**
    * 画面に描いてあるビジュアライザーの上から背景を重ねる (ビジュアライザーを描いた直後、歌詞・オーバーレイの前に呼ぶ)。
    * ビジュアライザーを描いていなければ、先に画面を黒で消してから呼ぶこと
@@ -250,12 +281,12 @@ export class BackgroundCompositor {
     if (!s) return;
     const [sx, sy] = backgroundUvScale(this.srcAspect, this.dstAspect, s.fit);
     (this.bgMaterial.uniforms.uvScale!.value as THREE.Vector2).set(sx, sy);
-    const opacity = Math.max(0, Math.min(1, s.visualizerOpacity));
+    const opacity = this.vOpacity;
     const bright = 1 - Math.max(0, Math.min(1, s.dim));
-    this.bgMaterial.uniforms.brightness!.value = s.blend === 'over' ? bright * (1 - opacity) : bright;
+    this.bgMaterial.uniforms.brightness!.value = this.vBlend === 'over' ? bright * (1 - opacity) : bright;
     // ビジュアライザーを (1 − 濃さ) だけ黒へ寄せる = ビジュアライザー × 濃さ
     this.fadeMaterial.uniforms.fade!.value = 1 - opacity;
     this.fadeMesh.visible = opacity < 1;
-    blendFor(this.bgMaterial, s.blend);
+    blendFor(this.bgMaterial, this.vBlend);
   }
 }

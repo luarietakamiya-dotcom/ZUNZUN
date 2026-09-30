@@ -43,6 +43,12 @@ export class LyricLayer {
     this.scene.add(this.mesh);
   }
 
+  /** 歌詞の濃さ (0..1) */
+  setOpacity(opacity: number): void {
+    const o = Math.max(0, Math.min(1, Number.isFinite(opacity) ? opacity : 1));
+    this.material.opacity = o;
+  }
+
   get currentMotion(): LyricMotion | null {
     return this.motion;
   }

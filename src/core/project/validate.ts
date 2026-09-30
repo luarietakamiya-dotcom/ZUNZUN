@@ -20,6 +20,7 @@ import {
   type ViewSettings,
 } from '../types';
 import { normalizeView } from '../render/view';
+import { normalizeComposition } from '../render/composition';
 import { tr } from '../i18n';
 
 /**
@@ -225,8 +226,6 @@ function sanitizeBackground(raw: unknown): BackgroundSettings | null {
     fit: raw.fit === 'contain' ? 'contain' : 'cover',
     dim: unit(raw.dim, base.dim),
     blur: unit(raw.blur, base.blur),
-    blend: raw.blend === 'add' || raw.blend === 'over' ? raw.blend : 'screen',
-    visualizerOpacity: unit(raw.visualizerOpacity, base.visualizerOpacity),
     loop: typeof raw.loop === 'boolean' ? raw.loop : base.loop,
   };
 }
@@ -348,6 +347,8 @@ export function sanitizeProject(raw: unknown): ProjectFile {
     lyrics: sanitizeLyrics(raw.lyrics),
     rhythm: sanitizeRhythm(raw.rhythm),
     background: sanitizeBackground(raw.background),
+    // 古いプロジェクトは、ビジュアライザーの重ね方を背景の設定 (blend / visualizerOpacity) に持っていたので、そこから移す
+    composition: normalizeComposition(raw.composition, { legacy: isPlainObject(raw.background) ? raw.background : null }),
     colors: sanitizeColors(raw.colors),
     fonts: sanitizeFonts(raw.fonts),
     export: sanitizeExport(raw.export, base.export),
