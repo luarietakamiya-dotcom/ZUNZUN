@@ -3,11 +3,12 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { shapeAudio, shapeBands } from '../../core/visualizer/response';
 import type { AudioFrame, CommonParams, VisualizerInitContext, VisualizerPreset } from '../../core/types';
 import { speakerRackPalette, type SpeakerRackPalette } from './palette';
-import { bandsToBars, follow, makeRadialTexture, PeakMeter, safeDt, stepSpring, type Materials, type Spring } from './parts';
+import { ALLEY_CAMERA, ALLEY_ROW_DELAY, ALLEY_ROWS, AlleyScene } from './alley-scene';
+import { bandsToBars, DelayLine, follow, makeRadialTexture, PeakMeter, safeDt, stepSpring, type Materials, type Spring } from './parts';
 import { EQ_BANDS, RACK_FIT_HALF_HEIGHT, RACK_FIT_HALF_WIDTH, RACK_LOOK_AT, RackScene, SPECTRUM_BARS } from './rack-scene';
 
 /**
- * Speaker Rack — スピーカーと機材ラック (参考画像②)。
+ * Speaker Rack — スピーカーと機材ラック (参考画像②) / 積み上げたスピーカーの通路 (参考画像③。設定「並び」)。
  *
  * 反応の仕組み:
  * - bass: 左右のウーファーのコーンが前後に動く (重さのあるばね。強い音で押し出され、少し行き過ぎて戻る)。
@@ -19,7 +20,10 @@ import { EQ_BANDS, RACK_FIT_HALF_HEIGHT, RACK_FIT_HALF_WIDTH, RACK_LOOK_AT, Rack
  * - beat: 足もとの灯りの帯が少し強まる。
  * 光るのは小さな LED・ランプ・真空管・細い帯だけなので、画面の広い範囲は点滅しない。
  *
- * 乱数は ctx.rng (つまみの角度・スライダーの位置・真空管のゆらぎ) だけを使い、Math.random は使わない。
+ * 通路では、コーンが手前から奥へ少しずつ遅れて動く (低音の波が奥へ伝わって見える)。
+ *
+ * 乱数は ctx.rng (つまみの角度・スライダーの位置・真空管のゆらぎ・通路の積み方) だけを使い、Math.random は使わない。
+ * 両方の並びを最初に組み立てる (途中で並びを変えても、乱数を引く順番が変わらないように)。
  */
 
 const CAMERA_FOV = 32;
@@ -37,7 +41,11 @@ export interface SpeakerRackInspection {
   tubeGlow: number;
   shake: number;
   layout: string;
+  /** 通路の列ごとの動き (手前 → 奥) */
+  alleyRows: number[];
 }
+
+export type SpeakerRackLayout = 'rack' | 'alley';
 
 export class SpeakerRackPreset implements VisualizerPreset {
   readonly scene = new THREE.Scene();
@@ -49,10 +57,21 @@ export class SpeakerRackPreset implements VisualizerPreset {
   private aspect = 16 / 9;
   private t = 0;
   private framing: 'full' | 'closeup' = 'full';
+  private layout: SpeakerRackLayout = 'rack';
+  private pixelRatio = 1;
+  private width = 1;
+  private height = 1;
 
   private readonly disposables: { dispose(): void }[] = [];
   private materials!: Materials;
   private rack!: RackScene;
+  private alley!: AlleyScene;
+  /** ラックの並びの照明 (通路の照明は AlleyScene の中) */
+  private readonly rackLights = new THREE.Group();
+  private readonly fog = new THREE.FogExp2(0x000000, 0.035);
+  /** 通路の列を遅らせて動かすための、ウーファーの動きの遅れ */
+  private readonly wave = new DelayLine(ALLEY_ROWS * ALLEY_ROW_DELAY + 0.05);
+  private readonly rows = new Float32Array(ALLEY_ROWS);
   private envTexture: THREE.Texture | null = null;
   private readonly accentLights: THREE.PointLight[] = [];
 
@@ -95,21 +114,27 @@ export class SpeakerRackPreset implements VisualizerPreset {
     this.rack = new RackScene(this.materials, track, this.rng, halo);
     this.scene.add(this.rack.group);
     this.tubePhase = this.rng() * Math.PI * 2;
+    this.alley = new AlleyScene(this.materials, track, this.rng, halo);
+    this.alley.group.visible = false;
+    this.scene.add(this.alley.group);
+    this.scene.add(this.rackLights);
+    this.pixelRatio = typeof ctx.renderer.getPixelRatio === 'function' ? ctx.renderer.getPixelRatio() : 1;
 
     // 照明: ほの暗い全体光、上からの主な光、足もとの灯りの色の点光源 2 つ。金属の映り込みには部屋の環境 (RoomEnvironment)
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.03));
+    const L = this.rackLights;
     const key = new THREE.DirectionalLight(0xfff1e0, 0.8);
     key.position.set(-4, 9, 10);
-    this.scene.add(key, key.target);
+    L.add(key, key.target);
     const top = new THREE.SpotLight(0xffe2c0, 30, 30, Math.PI / 5, 0.6, 1.6);
     top.position.set(0, 12, 6);
     top.target.position.set(0, 0, 0);
-    this.scene.add(top, top.target);
+    L.add(top, top.target);
     for (const x of [-7.5, 7.5]) {
       const l = new THREE.PointLight(0xffffff, 6, 10, 1.8);
       l.position.set(x, -5.0, 2.2);
       this.accentLights.push(l);
-      this.scene.add(l);
+      L.add(l);
     }
     this.makeEnvironment(ctx.renderer);
 
@@ -162,6 +187,9 @@ export class SpeakerRackPreset implements VisualizerPreset {
     // VU メーター: 左は低音寄り、右は高音寄りを少し混ぜる (左右の振れ方が少し違って見える)
     this.vu[0] = rms * 0.85 + fin(a.bass) * 0.15;
     this.vu[1] = rms * 0.85 + fin(a.high) * 0.15;
+    // 通路: ウーファーの動きを覚えておき、奥の列ほど遅らせて使う
+    this.wave.push(this.woofer[0].x, dt);
+    for (let r = 0; r < ALLEY_ROWS; r++) this.rows[r] = this.wave.get(r * ALLEY_ROW_DELAY);
 
     this.updateCamera(params);
     this.writeScene(dt);
@@ -171,10 +199,14 @@ export class SpeakerRackPreset implements VisualizerPreset {
     this.aspect = Math.max(1, width) / Math.max(1, height);
     this.camera.aspect = this.aspect;
     this.camera.updateProjectionMatrix();
+    this.width = Math.max(1, width);
+    this.height = Math.max(1, height);
+    this.alley?.resize(this.width, this.height, this.pixelRatio);
   }
 
   dispose(): void {
     this.rack?.dispose();
+    this.alley?.dispose();
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;
     this.envTexture?.dispose();
@@ -194,8 +226,14 @@ export class SpeakerRackPreset implements VisualizerPreset {
       vuLamp: this.rack.meters[0]!.lampOn,
       tubeGlow: this.tubeGlow(),
       shake: this.shake,
-      layout: 'rack',
+      layout: this.layout,
+      alleyRows: this.alley.inspectRows().excursion,
     };
+  }
+
+  /** テスト用: 通路の列ごとのスピーカーの数 */
+  alleyCounts(): number[] {
+    return this.alley.inspectRows().counts;
   }
 
   // ----------------------------------------------------------------
@@ -235,14 +273,34 @@ export class SpeakerRackPreset implements VisualizerPreset {
     this.scene.background = p.background.clone();
     for (const l of this.accentLights) l.color.copy(p.accent);
     this.rack.applyPalette(p);
+    this.alley.applyPalette(p);
+    this.fog.color.copy(p.background);
   }
 
   private applyControls(params: Record<string, unknown>): void {
     this.framing = params.framing === 'closeup' ? 'closeup' : 'full';
+    const layout: SpeakerRackLayout = params.layout === 'alley' ? 'alley' : 'rack';
+    if (layout === this.layout && this.rack.group.visible === (layout === 'rack')) return;
+    this.layout = layout;
+    const rack = layout === 'rack';
+    this.rack.group.visible = rack;
+    this.rackLights.visible = rack;
+    this.alley.group.visible = !rack;
+    this.scene.fog = rack ? null : this.fog;
+    this.camera.fov = rack ? CAMERA_FOV : ALLEY_CAMERA.fov;
+    this.camera.updateProjectionMatrix();
   }
 
   private updateCamera(params: CommonParams & Record<string, unknown>): void {
     const cm = Number.isFinite(params.cameraMotion) ? Math.min(1, Math.max(0, params.cameraMotion)) : 0;
+    if (this.layout === 'alley') {
+      // 通路: ゆっくり前後に進み、少し左右に揺れる。縦長の画面では少し下がる
+      const back = this.aspect < 1 ? 3 : 0;
+      const p = ALLEY_CAMERA.pos;
+      this.camera.position.set(p.x + Math.sin(this.t * 0.07) * 0.5 * cm, p.y + Math.sin(this.t * 0.05) * 0.2 * cm, p.z + back - (Math.sin(this.t * 0.04) * 0.5 + 0.5) * 3 * cm);
+      this.camera.lookAt(ALLEY_CAMERA.look);
+      return;
+    }
     const [hw, hh] = this.framing === 'closeup' ? [CLOSEUP_HALF_WIDTH, CLOSEUP_HALF_HEIGHT] : [RACK_FIT_HALF_WIDTH, RACK_FIT_HALF_HEIGHT];
     const tan = Math.tan(THREE.MathUtils.degToRad(CAMERA_FOV / 2));
     // 横にも縦にも収まる距離 (縦長の画面でも、はみ出さない)
@@ -275,6 +333,7 @@ export class SpeakerRackPreset implements VisualizerPreset {
       accent: this.beatEnv,
       dt,
     });
+    this.alley.update({ rows: this.rows, spectrum: this.spectrum.level, accent: this.beatEnv, time: this.t });
     // 箱ごとの小さな震え (拍の頭で)
     const s = this.shake * 0.025;
     this.rack.group.position.set(Math.sin(this.t * 61) * s, Math.sin(this.t * 47) * s, 0);
