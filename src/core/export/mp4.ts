@@ -21,6 +21,7 @@ import type { VisualizerModule } from '../visualizer/registry';
 import { prepareAudioForEncode, sliceAudioBuffer } from './audio-prep';
 import type { ExportResult, ExportRunContext } from './controller';
 import { evenDimension, frameTimestamp, qualityLevel, totalFrameCount } from './plan';
+import { tr } from '../i18n';
 
 /** renderMp4 に渡す、書き出し開始時点のスナップショット。store には依存しない。 */
 export interface Mp4ExportJob {
@@ -83,7 +84,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
   const quality = QUALITY[qualityLevel(job.quality)];
 
   if (!(await canEncodeVideo('avc', { width, height, bitrate: quality }))) {
-    throw new Error(`このブラウザでは ${width}×${height} の H.264 エンコードができません。サイズを下げるか Chrome/Edge を使ってください。`);
+    throw new Error(tr(`このブラウザでは ${width}×${height} の H.264 の動画を作れません。画面の大きさを下げるか Chrome / Edge を使ってください。`, `This browser cannot encode ${width}×${height} H.264 video. Lower the size or use Chrome / Edge.`));
   }
 
   const audio = await prepareAudioForEncode(job.audioBuffer);
@@ -94,7 +95,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
     : (await canEncodeAudio('opus', audioOpts))
       ? ('opus' as const)
       : null;
-  if (!audioCodec) throw new Error('このブラウザでは音声 (AAC/Opus) のエンコードができません。Chrome/Edge を使ってください。');
+  if (!audioCodec) throw new Error(tr('このブラウザでは音声 (AAC / Opus) を作れません。Chrome / Edge を使ってください。', 'This browser cannot encode audio (AAC / Opus). Please use Chrome / Edge.'));
   if (signal.aborted) throw abortError();
 
   const canvas = document.createElement('canvas');
@@ -165,7 +166,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
 
     await output.finalize();
     const buffer = target.buffer;
-    if (!buffer) throw new Error('MP4 の生成に失敗しました (出力バッファが空です)');
+    if (!buffer) throw new Error(tr('MP4 を作れませんでした (中身が空です)', 'Could not create the MP4 (output is empty)'));
 
     return {
       blob: new Blob([buffer], { type: 'video/mp4' }),

@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 /**
  * 書き出しジョブの状態管理 (idle / running / done / error / cancelled)。
  *
@@ -59,7 +60,7 @@ export class ExportController {
    * 実行中にもう一度呼ぶと例外を投げる (二重書き出し防止)。
    */
   async start(runner: ExportRunner): Promise<void> {
-    if (this.isRunning) throw new Error('すでに書き出し中です');
+    if (this.isRunning) throw new Error(tr('すでに書き出し中です', 'An export is already running'));
     const abort = new AbortController();
     this.abort = abort;
     const startedAt = this.now();

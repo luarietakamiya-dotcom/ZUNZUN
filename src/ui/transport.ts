@@ -1,5 +1,6 @@
 import { formatTime } from '../core/lyrics';
 import { store } from '../core/store';
+import { onLangChange, tr } from '../core/i18n';
 
 /**
  * ヘッダーに置く共通の再生欄 (どのタブでも使える)。再生/一時停止・−5 秒/+5 秒・シークバー・時刻・曲名。
@@ -35,21 +36,31 @@ export function createTransport(opts: TransportOptions): HTMLElement {
   root.className = 'transport';
   const audio = store.audio;
 
-  const playBtn = button('▶', '再生 / 一時停止 (Space)', () => toggle());
+  const playBtn = button('▶', '', () => toggle());
   playBtn.classList.add('transport-play');
-  const backBtn = button('−5秒', '5 秒戻る', () => audio.seek(Math.max(0, audio.currentTime - SKIP_SEC)));
-  const fwdBtn = button('+5秒', '5 秒進む', () => audio.seek(Math.min(audio.duration, audio.currentTime + SKIP_SEC)));
+  const backBtn = button('', '', () => audio.seek(Math.max(0, audio.currentTime - SKIP_SEC)));
+  const fwdBtn = button('', '', () => audio.seek(Math.min(audio.duration, audio.currentTime + SKIP_SEC)));
   const seek = document.createElement('input');
   seek.type = 'range';
   seek.className = 'transport-seek';
   seek.min = '0';
   seek.step = '0.01';
-  seek.title = 'シーク';
   const time = document.createElement('span');
   time.className = 'transport-time';
   const name = document.createElement('span');
   name.className = 'transport-name';
   root.append(playBtn, backBtn, fwdBtn, seek, time, name);
+
+  // 言語で変わる文字 (切り替えたら付け直し、下の表示の更新もやり直す)
+  const applyTexts = (): void => {
+    playBtn.title = tr('再生 / 一時停止 (Space キー)', 'Play / Pause (Space)');
+    backBtn.textContent = tr('−5秒', '−5s');
+    backBtn.title = tr('5 秒戻る', 'Back 5 seconds');
+    fwdBtn.textContent = tr('+5秒', '+5s');
+    fwdBtn.title = tr('5 秒進む', 'Forward 5 seconds');
+    seek.title = tr('再生する位置 (つまんで動かす)', 'Playback position (drag to seek)');
+  };
+  applyTexts();
 
   function toggle(): void {
     if (!audio.isLoaded) return;
@@ -87,9 +98,9 @@ export function createTransport(opts: TransportOptions): HTMLElement {
       for (const b of [playBtn, backBtn, fwdBtn]) b.disabled = !loaded;
       seek.disabled = !loaded;
       playBtn.textContent = playing ? '❚❚' : '▶';
-      playBtn.setAttribute('aria-label', playing ? '一時停止' : '再生');
+      playBtn.setAttribute('aria-label', playing ? tr('一時停止', 'Pause') : tr('再生', 'Play'));
       time.textContent = loaded ? `${formatTime(t)} / ${formatTime(dur)}` : '--:--';
-      name.textContent = loaded ? audio.fileName : '音源なし (Music タブで読み込む)';
+      name.textContent = loaded ? audio.fileName : tr('曲がまだありません (「音楽」タブで読み込みます)', 'No song yet (load one in the Music tab)');
       name.title = name.textContent;
       if (seek.max !== String(dur)) seek.max = String(dur || 1);
       if (!dragging) seek.value = String(t);
@@ -97,5 +108,9 @@ export function createTransport(opts: TransportOptions): HTMLElement {
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
+  onLangChange(() => {
+    applyTexts();
+    shown = '';
+  });
   return root;
 }

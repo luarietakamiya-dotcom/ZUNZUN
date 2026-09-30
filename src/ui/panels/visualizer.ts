@@ -5,19 +5,68 @@ import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { VisualizerHost } from '../../core/visualizer/host';
 import { visualizerRegistry } from '../../visualizers';
 import { backgroundPaletteNow } from '../../core/render/palette';
+import { t2, tr, type Text2 } from '../../core/i18n';
+import { sliderRow } from './panel-helpers';
 
-const NUMERIC_PARAMS: { key: keyof CommonParams; label: string; min: number; max: number; step: number }[] = [
-  { key: 'intensity', label: 'Intensity', min: 0, max: 1, step: 0.01 },
-  { key: 'sensitivity', label: 'Sensitivity', min: 0, max: 1, step: 0.01 },
-  { key: 'bass', label: 'Bass', min: 0, max: 2, step: 0.01 },
-  { key: 'mid', label: 'Mid', min: 0, max: 2, step: 0.01 },
-  { key: 'high', label: 'High', min: 0, max: 2, step: 0.01 },
-  { key: 'glow', label: 'Glow', min: 0, max: 1, step: 0.01 },
-  { key: 'motion', label: 'Motion', min: 0, max: 1, step: 0.01 },
-  { key: 'cameraMotion', label: 'Camera Motion', min: 0, max: 1, step: 0.01 },
+/** 共通の設定。名前と説明は、誰が見ても何が変わるか分かるように (日本語 / English) */
+const NUMERIC_PARAMS: { key: keyof CommonParams; label: Text2; help: Text2; min: number; max: number; step: number }[] = [
+  {
+    key: 'intensity',
+    label: { ja: '全体の派手さ', en: 'Intensity' },
+    help: { ja: '映像全体の明るさや動きの大きさ。上げるほど派手になります', en: 'Overall brightness and size of the motion. Higher is flashier' },
+    min: 0, max: 1, step: 0.01,
+  },
+  {
+    key: 'sensitivity',
+    label: { ja: '音への反応のしやすさ', en: 'Sensitivity' },
+    help: { ja: '上げるほど、小さな音にも反応して動きます', en: 'Higher reacts to quieter sounds too' },
+    min: 0, max: 1, step: 0.01,
+  },
+  {
+    key: 'bass',
+    label: { ja: '低い音への反応', en: 'Bass' },
+    help: { ja: 'ドラムのキックやベースなど、低い音でどれだけ動くか', en: 'How much kicks and bass move the visuals' },
+    min: 0, max: 2, step: 0.01,
+  },
+  {
+    key: 'mid',
+    label: { ja: '中くらいの音への反応', en: 'Mid' },
+    help: { ja: '声やギター、ピアノなどでどれだけ動くか', en: 'How much vocals, guitars and keys move the visuals' },
+    min: 0, max: 2, step: 0.01,
+  },
+  {
+    key: 'high',
+    label: { ja: '高い音への反応', en: 'High' },
+    help: { ja: 'シンバルやハイハットなど、高い音でどれだけ動くか', en: 'How much cymbals and hi-hats move the visuals' },
+    min: 0, max: 2, step: 0.01,
+  },
+  {
+    key: 'glow',
+    label: { ja: '光の強さ', en: 'Glow' },
+    help: { ja: '明るい部分のまわりが、ふんわり光って見える量', en: 'How much bright areas bloom with a soft halo' },
+    min: 0, max: 1, step: 0.01,
+  },
+  {
+    key: 'motion',
+    label: { ja: '動きの量', en: 'Motion' },
+    help: { ja: '形や光がどれだけ大きく・速く動くか', en: 'How far and fast shapes and lights move' },
+    min: 0, max: 1, step: 0.01,
+  },
+  {
+    key: 'cameraMotion',
+    label: { ja: 'カメラのゆれ', en: 'Camera Motion' },
+    help: { ja: '見ている位置がゆっくり動く量。0 で止まります', en: 'How much the viewpoint drifts. 0 keeps it still' },
+    min: 0, max: 1, step: 0.01,
+  },
 ];
 
-const COLOR_THEMES = ['default', 'gold', 'ice', 'neon', 'mono'];
+const COLOR_THEMES: { id: string; label: Text2 }[] = [
+  { id: 'default', label: { ja: '標準', en: 'Default' } },
+  { id: 'gold', label: { ja: '金色', en: 'Gold' } },
+  { id: 'ice', label: { ja: '氷の青', en: 'Ice' } },
+  { id: 'neon', label: { ja: 'ネオン', en: 'Neon' } },
+  { id: 'mono', label: { ja: 'モノクロ', en: 'Mono' } },
+];
 
 /** 音源未読み込みのとき、プリセットが動いているのを確認できるようにするダミーの AudioFrame。 */
 function syntheticIdleFrame(t: number, prevT: number): AudioFrame {
@@ -44,16 +93,19 @@ export function renderVisualizerPanel(): HTMLElement {
   el.className = 'panel';
 
   const h2 = document.createElement('h2');
-  h2.textContent = 'Visualizer';
+  h2.textContent = tr('ビジュアライザー', 'Visualizer');
   el.appendChild(h2);
 
   const p = document.createElement('p');
-  p.textContent =
-    '完成済みの世界観プリセットをサムネイルから選びます (現在はデバッグ用の帯域表示のみ)。音源が未読み込みの間はダミーの動きを表示します。';
+  p.textContent = tr(
+    '音に合わせて動く映像の種類を選び、下の設定で光や動きを調整します。曲をまだ読み込んでいない間は、見本の動きを表示します。',
+    'Choose the music-reactive visuals and adjust light and motion below. Until a song is loaded, a sample motion is shown.',
+  );
   el.appendChild(p);
 
   const presetSelect = document.createElement('select');
   presetSelect.className = 'select';
+  presetSelect.title = tr('映像の種類', 'Visual preset');
   for (const m of visualizerRegistry.list()) {
     const opt = document.createElement('option');
     opt.value = m.id;
@@ -74,28 +126,15 @@ export function renderVisualizerPanel(): HTMLElement {
   el.appendChild(paramsWrap);
 
   for (const def of NUMERIC_PARAMS) {
-    const row = document.createElement('label');
-    row.className = 'param-row';
-    const labelSpan = document.createElement('span');
-    labelSpan.className = 'param-label';
-    const updateLabel = (v: number): void => {
-      labelSpan.textContent = `${def.label}: ${v.toFixed(2)}`;
-    };
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.min = String(def.min);
-    input.max = String(def.max);
-    input.step = String(def.step);
+    const { row, input, setLabel } = sliderRow(def.label, def.help, def.min, def.max, def.step);
     const initial = store.params[def.key] as number;
     input.value = String(initial);
-    updateLabel(initial);
+    setLabel(initial.toFixed(2));
     input.addEventListener('input', () => {
       const v = parseFloat(input.value);
       store.setParam(def.key, v as CommonParams[typeof def.key]);
-      updateLabel(v);
+      setLabel(v.toFixed(2));
     });
-    row.appendChild(labelSpan);
-    row.appendChild(input);
     paramsWrap.appendChild(row);
   }
 
@@ -103,72 +142,86 @@ export function renderVisualizerPanel(): HTMLElement {
   colorRow.className = 'param-row';
   const colorLabel = document.createElement('span');
   colorLabel.className = 'param-label';
-  colorLabel.textContent = 'Color Theme';
+  colorLabel.textContent = tr('色の組み合わせ', 'Color Theme');
   const colorSelect = document.createElement('select');
   colorSelect.className = 'select';
   for (const theme of COLOR_THEMES) {
     const opt = document.createElement('option');
-    opt.value = theme;
-    opt.textContent = theme;
+    opt.value = theme.id;
+    opt.textContent = t2(theme.label);
     colorSelect.appendChild(opt);
   }
   colorSelect.value = store.params.colorTheme;
   colorSelect.addEventListener('change', () => store.setParam('colorTheme', colorSelect.value));
   colorRow.appendChild(colorLabel);
   colorRow.appendChild(colorSelect);
+  const colorHelp = document.createElement('span');
+  colorHelp.className = 'param-help';
+  colorHelp.textContent = tr('映像の色のまとまり。映像の種類によって色が変わります', 'The color set. Each preset interprets it differently');
+  colorRow.appendChild(colorHelp);
   paramsWrap.appendChild(colorRow);
 
   // 見え方 (どのプリセットにも共通): 拡大して一部だけ使う・ずらす・傾ける (core/render/view.ts)
   const viewTitle = document.createElement('h3');
-  viewTitle.textContent = 'View';
+  viewTitle.textContent = tr('見え方', 'View');
   el.appendChild(viewTitle);
   const viewNote = document.createElement('p');
   viewNote.className = 'param-label';
-  viewNote.textContent = '拡大しても粗くなりません (カメラの見る範囲を狭めて描きます)。1 より小さくすると、見える範囲が広がります。';
+  viewNote.textContent = tr(
+    '映像を拡大して一部だけ使ったり、ずらしたり、傾けたりできます。拡大しても粗くなりません。1 倍より小さくすると、見える範囲が広がります。',
+    'Zoom in to use just part of the visuals, shift or tilt them. Zooming stays sharp. Below 1× you see a wider area.',
+  );
   el.appendChild(viewNote);
   const viewWrap = document.createElement('div');
   viewWrap.className = 'param-grid';
   el.appendChild(viewWrap);
-  const VIEW_PARAMS: { key: keyof ViewSettings; label: string; min: number; max: number; step: number; fmt: (v: number) => string }[] = [
-    { key: 'zoom', label: 'Zoom', min: VIEW_ZOOM_MIN, max: VIEW_ZOOM_MAX, step: 0.01, fmt: (v) => `${v.toFixed(2)}×` },
-    { key: 'x', label: 'Pan X', min: -1, max: 1, step: 0.01, fmt: (v) => v.toFixed(2) },
-    { key: 'y', label: 'Pan Y', min: -1, max: 1, step: 0.01, fmt: (v) => v.toFixed(2) },
-    { key: 'roll', label: 'Roll', min: -180, max: 180, step: 1, fmt: (v) => `${Math.round(v)}°` },
+  const VIEW_PARAMS: { key: keyof ViewSettings; label: Text2; help: Text2; min: number; max: number; step: number; fmt: (v: number) => string }[] = [
+    {
+      key: 'zoom', label: { ja: '拡大', en: 'Zoom' },
+      help: { ja: '大きくして一部だけを見せます。1 倍 = そのまま', en: 'Enlarge to show only a part. 1× = unchanged' },
+      min: VIEW_ZOOM_MIN, max: VIEW_ZOOM_MAX, step: 0.01, fmt: (v) => `${v.toFixed(2)}×`,
+    },
+    {
+      key: 'x', label: { ja: '左右の位置', en: 'Pan X' },
+      help: { ja: '見る場所を左右にずらします。プラス = 右側を見る', en: 'Shift the view sideways. Positive looks to the right' },
+      min: -1, max: 1, step: 0.01, fmt: (v) => v.toFixed(2),
+    },
+    {
+      key: 'y', label: { ja: '上下の位置', en: 'Pan Y' },
+      help: { ja: '見る場所を上下にずらします。プラス = 上側を見る', en: 'Shift the view up or down. Positive looks up' },
+      min: -1, max: 1, step: 0.01, fmt: (v) => v.toFixed(2),
+    },
+    {
+      key: 'roll', label: { ja: '傾き', en: 'Roll' },
+      help: { ja: '映像を回します。プラス = 反時計回り', en: 'Rotate the picture. Positive = counter-clockwise' },
+      min: -180, max: 180, step: 1, fmt: (v) => `${Math.round(v)}°`,
+    },
   ];
-  const viewInputs: { def: (typeof VIEW_PARAMS)[number]; input: HTMLInputElement; label: HTMLSpanElement }[] = [];
+  const viewInputs: { def: (typeof VIEW_PARAMS)[number]; input: HTMLInputElement; setLabel: (v: string) => void }[] = [];
   for (const def of VIEW_PARAMS) {
-    const row = document.createElement('label');
-    row.className = 'param-row';
-    const label = document.createElement('span');
-    label.className = 'param-label';
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.min = String(def.min);
-    input.max = String(def.max);
-    input.step = String(def.step);
+    const { row, input, setLabel } = sliderRow(def.label, def.help, def.min, def.max, def.step);
     input.dataset.view = def.key;
     input.addEventListener('input', () => {
       const v = parseFloat(input.value);
       store.updateView({ [def.key]: v });
-      label.textContent = `${def.label}: ${def.fmt(v)}`;
+      setLabel(def.fmt(v));
     });
-    row.appendChild(label);
-    row.appendChild(input);
     viewWrap.appendChild(row);
-    viewInputs.push({ def, input, label });
+    viewInputs.push({ def, input, setLabel });
   }
   const syncView = (): void => {
-    for (const { def, input, label } of viewInputs) {
+    for (const { def, input, setLabel } of viewInputs) {
       const v = store.view[def.key];
       input.value = String(v);
-      label.textContent = `${def.label}: ${def.fmt(v)}`;
+      setLabel(def.fmt(v));
     }
   };
   syncView();
   const viewReset = document.createElement('button');
   viewReset.type = 'button';
   viewReset.className = 'tab-button';
-  viewReset.textContent = 'Reset View';
+  viewReset.dataset.action = 'reset-view';
+  viewReset.textContent = tr('見え方を元に戻す', 'Reset View');
   viewReset.addEventListener('click', () => {
     store.updateView(defaultView());
     syncView();

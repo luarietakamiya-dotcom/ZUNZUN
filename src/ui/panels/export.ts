@@ -9,20 +9,21 @@ import {
   type ExportStatus,
 } from '../../core/export';
 import { store } from '../../core/store';
+import { t2, tr, type Text2 } from '../../core/i18n';
 import type { CommonParams, ExportSettings, OverlayLayer } from '../../core/types';
 import { visualizerRegistry } from '../../visualizers';
 
-const QUALITY_OPTIONS: { value: ExportSettings['quality']; label: string }[] = [
-  { value: 'draft', label: 'ドラフト (軽量・確認用)' },
-  { value: 'high', label: '高画質 (標準)' },
-  { value: 'max', label: '最高画質 (ファイル大)' },
+const QUALITY_OPTIONS: { value: ExportSettings['quality']; label: Text2 }[] = [
+  { value: 'draft', label: { ja: '下書き (軽い・確認用)', en: 'Draft (small, for checking)' } },
+  { value: 'high', label: { ja: '高画質 (ふつうはこれ)', en: 'High (standard)' } },
+  { value: 'max', label: { ja: '最高画質 (ファイルが大きい)', en: 'Max (large file)' } },
 ];
 
 function formatDuration(ms: number): string {
   const totalSec = Math.max(0, Math.round(ms / 1000));
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
-  return m > 0 ? `${m}分${s}秒` : `${s}秒`;
+  return m > 0 ? tr(`${m}分${s}秒`, `${m}m ${s}s`) : tr(`${s}秒`, `${s}s`);
 }
 
 function formatBytes(bytes: number): string {
@@ -61,11 +62,11 @@ function createRunnerFromStore(): ExportRunner {
   const audio = store.audio;
   const audioBuffer = audio.audioBuffer;
   const timeline = audio.timeline;
-  if (!audioBuffer || !timeline) throw new Error('音源が読み込まれていません (Music タブで読み込んでください)');
+  if (!audioBuffer || !timeline) throw new Error(tr('曲が読み込まれていません (「音楽」タブで読み込んでください)', 'No song loaded (load one in the Music tab)'));
 
   const presetId = store.presetId ?? visualizerRegistry.list()[0]?.id ?? '';
   const preset = visualizerRegistry.get(presetId);
-  if (!preset) throw new Error('プリセットが選ばれていません (Visualizer タブで選んでください)');
+  if (!preset) throw new Error(tr('映像の種類が選ばれていません (「ビジュアライザー」タブで選んでください)', 'No visual preset selected (choose one in the Visualizer tab)'));
 
   const settings = { ...store.exportSettings };
   const params = { ...store.params } as CommonParams & Record<string, unknown>;
@@ -109,13 +110,15 @@ export function renderExportPanel(): HTMLElement {
   el.className = 'panel';
 
   const h2 = document.createElement('h2');
-  h2.textContent = 'Export';
+  h2.textContent = tr('書き出し', 'Export');
   el.appendChild(h2);
 
   const p = document.createElement('p');
   p.textContent =
-    '現在の音源・プリセット・パラメータ・オーバーレイで、曲の頭から最後までを MP4 (H.264 + AAC) に書き出します。' +
-    '処理はすべてこのブラウザの中で行われ、外部には送信されません。書き出し中に別のタブへ移動しても処理は続きます。';
+    tr(
+      '今の曲・映像・設定・歌詞・背景・重ねた画像で、曲の最初から最後までを動画ファイル (MP4、H.264 + AAC) にします。処理はすべてこのブラウザの中で行い、ほかの場所へは送りません。書き出し中に別のタブへ移っても続きます。',
+      'Renders the whole song with the current song, visuals, settings, lyrics, background and overlays to a video file (MP4, H.264 + AAC). Everything runs inside this browser and nothing is uploaded. Switching tabs does not stop the export.',
+    );
   el.appendChild(p);
 
   // --- 設定 -------------------------------------------------------------
@@ -128,7 +131,7 @@ export function renderExportPanel(): HTMLElement {
   for (const preset of EXPORT_SIZE_PRESETS) {
     const opt = document.createElement('option');
     opt.value = preset.id;
-    opt.textContent = preset.label;
+    opt.textContent = t2(preset.label);
     sizeSelect.appendChild(opt);
   }
   const currentSize = EXPORT_SIZE_PRESETS.find(
@@ -138,7 +141,7 @@ export function renderExportPanel(): HTMLElement {
     // プロジェクトから一覧に無いサイズが読み込まれた場合も、そのサイズのまま選べるようにする
     const opt = document.createElement('option');
     opt.value = 'custom';
-    opt.textContent = `${store.exportSettings.width}×${store.exportSettings.height} (プロジェクトの設定)`;
+    opt.textContent = `${store.exportSettings.width}×${store.exportSettings.height} ${tr('(プロジェクトの設定)', '(project setting)')}`;
     sizeSelect.appendChild(opt);
   }
   sizeSelect.value = currentSize?.id ?? 'custom';
@@ -146,7 +149,7 @@ export function renderExportPanel(): HTMLElement {
     const preset = EXPORT_SIZE_PRESETS.find((s) => s.id === sizeSelect.value);
     if (preset) store.setExportSettings({ width: preset.width, height: preset.height });
   });
-  settingsGrid.appendChild(labeledRow('サイズ', sizeSelect));
+  settingsGrid.appendChild(labeledRow(tr('画面の大きさ', 'Size'), sizeSelect));
 
   const fpsSelect = document.createElement('select');
   fpsSelect.className = 'select';
@@ -161,26 +164,26 @@ export function renderExportPanel(): HTMLElement {
   }
   fpsSelect.value = String(store.exportSettings.fps);
   fpsSelect.addEventListener('change', () => store.setExportSettings({ fps: parseInt(fpsSelect.value, 10) }));
-  settingsGrid.appendChild(labeledRow('フレームレート', fpsSelect));
+  settingsGrid.appendChild(labeledRow(tr('なめらかさ (1 秒あたりのコマ数)', 'Frame rate (frames per second)'), fpsSelect));
 
   const qualitySelect = document.createElement('select');
   qualitySelect.className = 'select';
   for (const q of QUALITY_OPTIONS) {
     const opt = document.createElement('option');
     opt.value = q.value;
-    opt.textContent = q.label;
+    opt.textContent = t2(q.label);
     qualitySelect.appendChild(opt);
   }
   qualitySelect.value = store.exportSettings.quality;
   qualitySelect.addEventListener('change', () =>
     store.setExportSettings({ quality: qualitySelect.value as ExportSettings['quality'] }),
   );
-  settingsGrid.appendChild(labeledRow('画質', qualitySelect));
+  settingsGrid.appendChild(labeledRow(tr('画質', 'Quality'), qualitySelect));
 
   const formatInfo = document.createElement('span');
   formatInfo.className = 'select';
   formatInfo.textContent = 'MP4 (H.264 + AAC)';
-  settingsGrid.appendChild(labeledRow('形式 (WebM / PNG連番は今後対応)', formatInfo));
+  settingsGrid.appendChild(labeledRow(tr('ファイルの形式 (WebM・連番の画像は今後対応)', 'Format (WebM / image sequence coming later)'), formatInfo));
 
   // --- 実行・進捗 --------------------------------------------------------
   const prereq = document.createElement('div');
@@ -192,15 +195,15 @@ export function renderExportPanel(): HTMLElement {
   const startBtn = document.createElement('button');
   startBtn.type = 'button';
   startBtn.className = 'tab-button';
-  startBtn.textContent = '書き出し開始';
+  startBtn.textContent = tr('書き出しを始める', 'Start export');
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className = 'tab-button';
-  cancelBtn.textContent = 'キャンセル';
+  cancelBtn.textContent = tr('やめる', 'Cancel');
   const downloadBtn = document.createElement('button');
   downloadBtn.type = 'button';
   downloadBtn.className = 'tab-button';
-  downloadBtn.textContent = 'MP4 をダウンロード';
+  downloadBtn.textContent = tr('MP4 を保存する', 'Download MP4');
   controls.appendChild(startBtn);
   controls.appendChild(cancelBtn);
   controls.appendChild(downloadBtn);
@@ -224,13 +227,13 @@ export function renderExportPanel(): HTMLElement {
 
     if (!audioReady) {
       prereq.style.display = '';
-      prereq.textContent = '音源が読み込まれていません。Music タブで音源を読み込むと書き出せます。';
+      prereq.textContent = tr('曲が読み込まれていません。「音楽」タブで曲を読み込むと書き出せます。', 'No song loaded. Load one in the Music tab to export.');
     } else {
       const missing = store.overlays.filter((o) => !store.getOverlayFile(o.id)).length;
       const bgMissing = store.background != null && store.backgroundFile == null;
       const notes = [
-        missing > 0 ? `画像がまだ選び直されていないオーバーレイが ${missing} 個あります (Overlay タブ)。それらは書き出しに含まれません。` : '',
-        bgMissing ? `背景「${store.background!.ref}」がまだ選び直されていません (Overlay タブ)。背景なしで書き出します。` : '',
+        missing > 0 ? tr(`まだ選び直していない重ねる画像が ${missing} 個あります (「背景と素材」タブ)。それらは書き出しに入りません。`, `${missing} overlay image(s) have not been picked again (Overlay tab) and will be left out.`) : '',
+        bgMissing ? tr(`背景「${store.background!.ref}」をまだ選び直していません (「背景と素材」タブ)。背景なしで書き出します。`, `The background "${store.background!.ref}" has not been picked again (Overlay tab). Exporting without it.`) : '',
       ].filter(Boolean);
       prereq.style.display = notes.length > 0 ? '' : 'none';
       prereq.textContent = notes.join(' ');
@@ -251,14 +254,14 @@ export function renderExportPanel(): HTMLElement {
         progress.max = Math.max(1, status.total);
         progress.value = status.done;
         if (status.total === 0) {
-          statusText.textContent = '準備中… (エンコーダの確認・プリセットの初期化)';
+          statusText.textContent = tr('準備しています… (動画を作る機能の確認・映像の用意)', 'Preparing… (checking the encoder, setting up the visuals)');
         } else {
           const elapsed = performance.now() - status.startedAt;
           const remaining = estimateRemainingMs(elapsed, status.done, status.total);
           const pct = ((status.done / status.total) * 100).toFixed(1);
           statusText.textContent =
-            `${status.done} / ${status.total} フレーム (${pct}%) — 経過 ${formatDuration(elapsed)}` +
-            (remaining != null ? ` / 残り約 ${formatDuration(remaining)}` : '');
+            `${status.done} / ${status.total} ${tr('コマ', 'frames')} (${pct}%) — ${tr('経過', 'elapsed')} ${formatDuration(elapsed)}` +
+            (remaining != null ? ` / ${tr('残り約', 'about')} ${formatDuration(remaining)}${tr('', ' left')}` : '');
         }
         break;
       }
@@ -268,17 +271,17 @@ export function renderExportPanel(): HTMLElement {
         progress.value = 1;
         const { result, elapsedMs } = status;
         statusText.textContent =
-          `書き出し完了: ${result.fileName} (${result.videoCodec} / ${result.audioCodec}, ` +
-          `${result.frames} フレーム, ${formatBytes(result.blob.size)}, ${formatDuration(elapsedMs)})`;
+          `${tr('書き出しが終わりました', 'Export finished')}: ${result.fileName} (${result.videoCodec} / ${result.audioCodec}, ` +
+          `${result.frames} ${tr('コマ', 'frames')}, ${formatBytes(result.blob.size)}, ${formatDuration(elapsedMs)})`;
         break;
       }
       case 'cancelled':
         progress.style.display = 'none';
-        statusText.textContent = '書き出しをキャンセルしました。';
+        statusText.textContent = tr('書き出しをやめました。', 'Export cancelled.');
         break;
       case 'error':
         progress.style.display = 'none';
-        statusText.textContent = `書き出しに失敗しました: ${status.message}`;
+        statusText.textContent = `${tr('書き出しに失敗しました', 'Export failed')}: ${status.message}`;
         break;
     }
   };

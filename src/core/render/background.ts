@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { BackgroundSettings } from '../types';
 import { ExactVideo, PreviewVideo } from './background-video';
+import { tr } from '../i18n';
 
 /**
  * 背景の一枚絵 (のちに動画) と、ビジュアライザーとの合成 (docs/ARCHITECTURE.md「背景」)。
@@ -86,7 +87,7 @@ export async function loadBackgroundImage(file: Blob, blur01: number): Promise<{
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('背景の画像を描けませんでした (2D canvas が使えません)');
+    if (!ctx) throw new Error(tr('背景の画像を描けませんでした (2D canvas が使えません)', 'Could not draw the background image (2D canvas unavailable)'));
     const radius = Math.max(0, Math.min(1, blur01)) * BLUR_MAX * Math.max(w, h);
     if (radius >= 0.5) {
       ctx.filter = `blur(${radius.toFixed(1)}px)`;

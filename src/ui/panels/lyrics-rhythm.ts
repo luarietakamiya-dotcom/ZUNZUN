@@ -1,4 +1,5 @@
 import { formatTime, History, snapTime } from '../../core/lyrics';
+import { tr } from '../../core/i18n';
 import {
   barIndexAt,
   barLengthEstimate,
@@ -130,43 +131,48 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
   enabled.type = 'checkbox';
   enabled.addEventListener('change', () => commit({ ...current(), enabled: enabled.checked }));
   const enabledLabel = h('label', 'row-gap param-label');
-  enabledLabel.append(enabled, '変拍子モード (オンにすると、歌詞モーションは自動検出のビートの代わりに、ここで決めた小節と拍子の拍に合わせて動きます。' +
-      '歌詞モーションのスタイルを「変拍子 (ZUNZUN)」にすると、小節の頭とまとまりに合わせた演出も加わります)');
+  enabledLabel.append(
+    enabled,
+    tr(
+      '変拍子モード (オンにすると、歌詞の動きは自動で見つけた拍の代わりに、ここで決めた小節と拍子に合わせて動きます。歌詞の動きのスタイルを「変拍子 (ZUNZUN)」にすると、小節の頭とまとまりに合わせた演出も加わります)',
+      'Odd-meter mode (when on, lyric motion follows the bars and meters set here instead of the auto-detected beats. With the "変拍子 (ZUNZUN)" style, effects on bar heads and groups are added too)',
+    ),
+  );
 
   // ------------------------------------------------------------ 小節の頭のタップ
   const status = h('div', 'param-label');
-  const tapFirstBtn = btn('最初から叩く', () => startTap('first'), 'lyrics-big-button');
-  const tapHereBtn = btn('再生位置から叩く', () => startTap('here'), 'lyrics-big-button');
-  const tapBtn = h('button', 'lyrics-tap-button', '小節の頭 (Space / Enter)');
+  const tapFirstBtn = btn(tr('最初から叩く', 'Tap from the start'), () => startTap('first'), 'lyrics-big-button');
+  const tapHereBtn = btn(tr('今の位置から叩く', 'Tap from here'), () => startTap('here'), 'lyrics-big-button');
+  const tapBtn = h('button', 'lyrics-tap-button', tr('小節の頭 (Space / Enter)', 'Bar head (Space / Enter)'));
   tapBtn.type = 'button';
   // キーボードで押したときの click (detail = 0) は keydown 側で処理済み
   tapBtn.addEventListener('click', (e) => {
     if (e.detail > 0) doTap(e.shiftKey);
   });
-  const backBtn = btn('1 つ戻る (Backspace)', () => doBack());
-  const stopBtn = btn('終わる (Esc)', () => stopTap(true));
+  const backBtn = btn(tr('1 つ戻る (Backspace)', 'Undo one (Backspace)'), () => doBack());
+  const stopBtn = btn(tr('終わる (Esc)', 'Finish (Esc)'), () => stopTap(true));
   const tapReport = h('div', 'param-label');
   const tapActive = h('div', 'lyrics-tap-active');
   tapActive.append(row(tapBtn, backBtn, stopBtn), tapReport);
 
   // ------------------------------------------------------------ 埋める・消す・取り消し
-  const fillStartBtn = btn('前を同じ長さで埋める', () => doFill('start'));
-  fillStartBtn.title = '最初の数小節の長さで、曲の頭まで小節の頭を足します (頭に残る端数には小節を作りません)';
-  const fillEndBtn = btn('残りを同じ長さで埋める', () => doFill('end'));
-  fillEndBtn.title = '最後の数小節の長さで、曲の終わりまで小節の頭を足します';
-  const fillGapsBtn = btn('間を埋める', () => doFill('gaps'));
-  fillGapsBtn.title = '数小節おきに叩いたとき、間が小節の長さのほぼ整数倍なら等分して埋めます';
-  const clearBtn = btn('小節をすべて消す', () => {
-    if (!window.confirm('小節の頭をすべて消します (この欄の「取り消し」で戻せます)。')) return;
+  const fillStartBtn = btn(tr('前を同じ長さで埋める', 'Fill to the start'), () => doFill('start'));
+  fillStartBtn.title = tr('最初の数小節の長さで、曲の頭まで小節の頭を足します (頭に残る端数には小節を作りません)', 'Adds bar heads back to the start of the song using the first bars\' length (no partial bar at the very start)');
+  const fillEndBtn = btn(tr('残りを同じ長さで埋める', 'Fill to the end'), () => doFill('end'));
+  fillEndBtn.title = tr('最後の数小節の長さで、曲の終わりまで小節の頭を足します', 'Adds bar heads to the end of the song using the last bars\' length');
+  const fillGapsBtn = btn(tr('間を埋める', 'Fill gaps'), () => doFill('gaps'));
+  fillGapsBtn.title = tr('数小節おきに叩いたとき、間が小節の長さのほぼ整数倍なら等分して埋めます', 'If you tapped every few bars, gaps that are about a whole number of bars are split evenly');
+  const clearBtn = btn(tr('小節をすべて消す', 'Clear all bars'), () => {
+    if (!window.confirm(tr('小節の頭をすべて消します (この欄の「取り消し」で戻せます)。', 'Clear all bar heads? (You can undo it in this section.)'))) return;
     commit({ ...current(), bars: [] });
-    editReport.textContent = '小節の頭をすべて消しました。';
+    editReport.textContent = tr('小節の頭をすべて消しました。', 'Cleared all bar heads.');
   });
   // 履歴の値は null (リズムを使っていない状態) もありうるので、戻せるかどうかは canUndo / canRedo で見る
-  const undoBtn = btn('取り消し', () => {
+  const undoBtn = btn(tr('取り消し', 'Undo'), () => {
     syncHistoryWithStore();
     if (history.canUndo) applyState(history.undo());
   });
-  const redoBtn = btn('やり直し', () => {
+  const redoBtn = btn(tr('やり直し', 'Redo'), () => {
     syncHistoryWithStore();
     if (history.canRedo) applyState(history.redo());
   });
@@ -176,7 +182,7 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
   const clickBox = h('input');
   clickBox.type = 'checkbox';
   const clickLabel = h('label', 'row-gap param-label');
-  clickLabel.append(clickBox, 'クリック音で確認 (小節の頭 = 高い音、まとまりの頭 = 低い音。Lyrics タブで再生している間だけ鳴ります)');
+  clickLabel.append(clickBox, tr('クリック音で確かめる (小節の頭 = 高い音、まとまりの頭 = 低い音。「歌詞」タブで再生している間だけ鳴ります)', 'Check with a click (bar head = high, group head = low. Only while playing in the Lyrics tab)'));
   clickBox.addEventListener('change', () => {
     clickOn = clickBox.checked;
     applyClick();
@@ -219,21 +225,21 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
   addBar.step = '1';
   addBar.value = '1';
   const addPattern = patternInput('2+2+3');
-  const addBtn = btn('この小節から', () => {
+  const addBtn = btn(tr('この小節から', 'From this bar'), () => {
     const bar = parseInt(addBar.value, 10) - 1;
     const next = setMeter(current().meters, bar, addPattern.value);
     if (!next) {
-      meterReport.textContent = '拍子を読めませんでした (例: 4、5、2+2+3)。まとまりは 1〜16、合計 32 まで。';
+      meterReport.textContent = tr('拍子を読めませんでした (例: 4、5、2+2+3)。まとまりは 1〜16、合計 32 まで。', 'Could not read the meter (e.g. 4, 5, 2+2+3). Groups 1–16, total up to 32.');
       return;
     }
-    meterReport.textContent = `${bar + 1} 小節目から ${addPattern.value} にしました。`;
+    meterReport.textContent = tr(`${bar + 1} 小節目から ${addPattern.value} にしました。`, `Set ${addPattern.value} from bar ${bar + 1}.`);
     commit({ ...current(), meters: next });
   });
-  const hereBtn = btn('再生位置の小節', () => {
+  const hereBtn = btn(tr('今の位置の小節', 'Bar at playhead'), () => {
     const i = barIndexAt(current().bars, store.audio.heardTime);
     addBar.value = String(Math.max(0, i) + 1);
   });
-  hereBtn.title = '今の再生位置を含む小節の番号を入れます';
+  hereBtn.title = tr('今の再生位置を含む小節の番号を入れます', 'Fill in the bar number at the current playback position');
   const meterReport = h('div', 'param-label');
 
   // ------------------------------------------------------------ 今の位置
@@ -243,12 +249,13 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
   const help = h(
     'p',
     'lyrics-help',
-    '自動のビート検出は一定のテンポしか表せないので、5 拍子・7 拍子・途中で拍子が変わる曲は、小節の頭を叩いて決めます。' +
-      '再生しながら小節の頭 (1 拍目) で Space を叩きます (Shift を押しながらだと吸着しない)。数小節叩いたら「残りを同じ長さで埋める」、' +
-      '数小節おきに叩いたら「間を埋める」が使えます。ずれた小節は、タイムラインの橙の線を波形の段でつかんで左右に動かせます。拍子は「2+2+3」(7 等分を 2・2・3 にまとめる) や「4」(4 等分) のように、小節の番号から区間ごとに書きます。',
+    tr(
+      '自動で見つける拍は一定のテンポしか表せないので、5 拍子・7 拍子・途中で拍子が変わる曲は、小節の頭を叩いて決めます。再生しながら小節の頭 (1 拍目) で Space を叩きます (Shift を押しながらだと吸着しません)。数小節叩いたら「残りを同じ長さで埋める」、数小節おきに叩いたら「間を埋める」が使えます。ずれた小節は、タイムラインの橙の線を波形の段でつかんで左右に動かせます。拍子は「2+2+3」(7 等分を 2・2・3 にまとめる) や「4」(4 等分) のように、小節の番号から区間ごとに書きます。',
+      'Auto-detected beats can only express a steady tempo, so for 5/4, 7/8 or songs that change meter you tap the bar heads. While playing, press Space on each bar head (beat 1) (hold Shift to disable snapping). After a few bars use "Fill to the end"; if you tapped every few bars use "Fill gaps". Drag the orange lines in the waveform row of the timeline to fix bars. Write meters per section from a bar number, e.g. "2+2+3" (7 pulses grouped 2, 2, 3) or "4" (4 pulses).',
+    ),
   );
   root.append(
-    h('h3', 'lyrics-h3', 'リズム (変拍子)'),
+    h('h3', 'lyrics-h3', tr('リズム (変拍子)', 'Rhythm (odd meters)')),
     help,
     enabledLabel,
     status,
@@ -257,11 +264,11 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     row(fillStartBtn, fillEndBtn, fillGapsBtn, clearBtn, undoBtn, redoBtn),
     clickLabel,
     editReport,
-    h('h3', 'lyrics-h3', '拍子 (区間ごと)'),
+    h('h3', 'lyrics-h3', tr('拍子 (区間ごと)', 'Meters (per section)')),
     meterList,
-    row(addBar, h('span', 'param-label', '小節目から'), addPattern, addBtn, hereBtn),
+    row(addBar, h('span', 'param-label', tr('小節目から', '(bar number)')), addPattern, addBtn, hereBtn),
     meterReport,
-    row(h('span', 'param-label', '今の位置:'), posText),
+    row(h('span', 'param-label', tr('今の位置:', 'Now:')), posText),
     posBoxes,
     datalist,
   );
@@ -285,9 +292,9 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     enabled.checked = store.rhythm?.enabled ?? false;
     status.textContent =
       bars.length === 0
-        ? '小節の頭はまだありません。'
-        : `小節の頭 ${bars.length} 個 (${formatTime(bars[0]!)} 〜 ${formatTime(bars[bars.length - 1]!)})` +
-          (len ? ` / 1 小節 およそ ${len.toFixed(2)} 秒` : '');
+        ? tr('小節の頭はまだありません。', 'No bar heads yet.')
+        : tr(`小節の頭 ${bars.length} 個 (${formatTime(bars[0]!)} 〜 ${formatTime(bars[bars.length - 1]!)})`, `${bars.length} bar heads (${formatTime(bars[0]!)} – ${formatTime(bars[bars.length - 1]!)})`) +
+          (len ? tr(` / 1 小節 およそ ${len.toFixed(2)} 秒`, ` / one bar ≈ ${len.toFixed(2)} s`) : '');
     const busy = cb.isBusy();
     tapFirstBtn.disabled = !loaded || session != null || busy;
     tapHereBtn.disabled = !loaded || session != null || busy;
@@ -314,17 +321,17 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
         const next = setMeter(current().meters, m.bar, input.value);
         if (!next) {
           input.value = m.pattern;
-          meterReport.textContent = '拍子を読めませんでした (例: 4、5、2+2+3)。';
+          meterReport.textContent = tr('拍子を読めませんでした (例: 4、5、2+2+3)。', 'Could not read the meter (e.g. 4, 5, 2+2+3).');
           return;
         }
         meterReport.textContent = '';
         commit({ ...current(), meters: next });
       });
       const del = btn('×', () => commit({ ...current(), meters: removeMeter(current().meters, m.bar) }), 'tab-button lyrics-clear');
-      del.title = 'この区間の指定を消す (前の区間の拍子が続きます)';
+      del.title = tr('この区間の指定を消す (前の区間の拍子が続きます)', 'Remove this section (the previous meter continues)');
       del.hidden = m.bar === 0;
       meterList.append(
-        row(h('span', 'param-label lyrics-meter-bar', `${m.bar + 1} 小節目から`), input, h('span', 'param-label', describeGrouping(m.pattern) ?? ''), del),
+        row(h('span', 'param-label lyrics-meter-bar', tr(`${m.bar + 1} 小節目から`, `From bar ${m.bar + 1}`)), input, h('span', 'param-label', describeGrouping(m.pattern) ?? ''), del),
       );
     }
   }
@@ -338,11 +345,11 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     shownPos = key;
     posBoxes.textContent = '';
     if (!pos || !grid) {
-      posText.textContent = grid ? '小節の外' : '—';
+      posText.textContent = grid ? tr('小節の外', 'Outside the bars') : '—';
       return;
     }
     const bar = grid.bars[pos.pulse.bar]!;
-    posText.textContent = `${pos.pulse.bar + 1} 小節目 · ${bar.groups.join('+')} の ${pos.pulse.group + 1} 番目のまとまり`;
+    posText.textContent = tr(`${pos.pulse.bar + 1} 小節目 · ${bar.groups.join('+')} の ${pos.pulse.group + 1} 番目のまとまり`, `Bar ${pos.pulse.bar + 1} · group ${pos.pulse.group + 1} of ${bar.groups.join('+')}`);
     bar.groups.forEach((g, i) => {
       const box = h('span', 'lyrics-rhythm-box', String(g));
       box.style.flexGrow = String(g);
@@ -359,9 +366,11 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     session = new BarTapSession(current().bars, start);
     const removed = normalizeBars(current().bars).length - session.bars.length;
     tapReport.textContent =
-      (from === 'first' ? '曲の頭から' : `${formatTime(start)} から`) +
-      '小節の頭を叩いてください。' +
-      (removed > 0 ? ` (これより後ろの小節の頭 ${removed} 個は、叩き直すので消えます)` : '');
+      tr(
+        (from === 'first' ? '曲の頭から' : `${formatTime(start)} から`) + '小節の頭を叩いてください。',
+        'Tap the bar heads ' + (from === 'first' ? 'from the start of the song.' : `from ${formatTime(start)}.`),
+      ) +
+      (removed > 0 ? tr(` (これより後ろの小節の頭 ${removed} 個は、叩き直すので消えます)`, ` (${removed} later bar heads are removed because you are re-tapping)`) : '');
     if (removed > 0) commit({ ...current(), bars: session.bars });
     store.audio.seek(from === 'first' ? 0 : Math.max(0, start - TAP_PREROLL));
     store.audio.play();
@@ -375,7 +384,7 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     session = null;
     if (pause) store.audio.pause();
     tapReport.textContent = '';
-    editReport.textContent = n > 0 ? `小節の頭を ${n} 個叩きました。` : '';
+    editReport.textContent = n > 0 ? tr(`小節の頭を ${n} 個叩きました。`, `Tapped ${n} bar heads.`) : '';
     refresh();
     cb.onChange();
   }
@@ -389,8 +398,8 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     const bars = session.tap(snapped.t);
     if (session.tapCount === before) return; // 連打は無視
     const how =
-      snapped.kind === 'candidate' ? `音の立ち上がりに吸着 ${sign(snapped.t - raw)}` : snapped.kind === 'beat' ? `ビートに吸着 ${sign(snapped.t - raw)}` : '吸着なし';
-    tapReport.textContent = `${barIndexAt(bars, snapped.t) + 1} 小節目の頭を ${formatTime(snapped.t)} で記録 (${how})`;
+      snapped.kind === 'candidate' ? tr(`音の立ち上がりに吸着 ${sign(snapped.t - raw)}`, `snapped to an onset ${sign(snapped.t - raw)}`) : snapped.kind === 'beat' ? tr(`拍に吸着 ${sign(snapped.t - raw)}`, `snapped to a beat ${sign(snapped.t - raw)}`) : tr('吸着なし', 'no snapping');
+    tapReport.textContent = tr(`${barIndexAt(bars, snapped.t) + 1} 小節目の頭を ${formatTime(snapped.t)} で記録 (${how})`, `Bar ${barIndexAt(bars, snapped.t) + 1} head at ${formatTime(snapped.t)} (${how})`);
     commit({ ...current(), bars });
   }
 
@@ -405,7 +414,7 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     const before = normalizeBars(r.bars);
     const bars = moveBarHead(before, index, t);
     if (bars[index] === before[index]) return;
-    editReport.textContent = `${index + 1} 小節目の頭を ${formatTime(bars[index]!)} に動かしました (取り消しで戻せます)。`;
+    editReport.textContent = tr(`${index + 1} 小節目の頭を ${formatTime(bars[index]!)} に動かしました (取り消しで戻せます)。`, `Moved bar ${index + 1} head to ${formatTime(bars[index]!)} (undo to revert).`);
     commit({ ...r, bars });
   }
 
@@ -416,7 +425,7 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     commit({ ...current(), bars });
     store.audio.seek(Math.max(0, store.audio.currentTime - 3));
     if (!store.audio.isPlaying) store.audio.play();
-    tapReport.textContent = '1 つ戻しました。3 秒前から流します。';
+    tapReport.textContent = tr('1 つ戻しました。3 秒前から流します。', 'Removed one. Playing from 3 seconds earlier.');
   }
 
   function doFill(kind: 'start' | 'end' | 'gaps'): void {
@@ -425,10 +434,10 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     if (kind === 'start') {
       const f = fillToStart(before, r.meters);
       if (f.added <= 0) {
-        editReport.textContent = '足せる小節がありませんでした (小節の頭が 2 つ以上必要です。曲の頭までが 1 小節より短いときは足しません)。';
+        editReport.textContent = tr('足せる小節がありませんでした (小節の頭が 2 つ以上必要です。曲の頭までが 1 小節より短いときは足しません)。', 'No bars could be added (needs at least 2 bar heads; nothing is added if less than one bar remains before them).');
         return;
       }
-      editReport.textContent = `曲の頭の側に小節を ${f.added} 個足しました (拍子の区間の番号も ${f.added} ずらしました。取り消しで戻せます)。`;
+      editReport.textContent = tr(`曲の頭の側に小節を ${f.added} 個足しました (拍子の区間の番号も ${f.added} ずらしました。取り消しで戻せます)。`, `Added ${f.added} bars before (meter sections shifted by ${f.added}; undo to revert).`);
       commit({ ...r, bars: f.bars, meters: f.meters });
       return;
     }
@@ -437,11 +446,11 @@ export function createRhythmEditor(cb: RhythmEditorCallbacks): RhythmEditor {
     if (added <= 0) {
       editReport.textContent =
         kind === 'end'
-          ? '足せる小節がありませんでした (小節の頭が 2 つ以上必要です)。'
-          : '埋められる間がありませんでした (間が小節の長さの 2 倍以上・ほぼ整数倍のところだけ埋めます)。';
+          ? tr('足せる小節がありませんでした (小節の頭が 2 つ以上必要です)。', 'No bars could be added (needs at least 2 bar heads).')
+          : tr('埋められる間がありませんでした (間が小節の長さの 2 倍以上・ほぼ整数倍のところだけ埋めます)。', 'No gaps to fill (only gaps of about 2+ whole bars are filled).');
       return;
     }
-    editReport.textContent = `小節の頭を ${added} 個足しました (取り消しで戻せます)。`;
+    editReport.textContent = tr(`小節の頭を ${added} 個足しました (取り消しで戻せます)。`, `Added ${added} bar heads (undo to revert).`);
     commit({ ...r, bars });
   }
 

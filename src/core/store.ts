@@ -16,6 +16,7 @@ import {
   defaultView,
   type ViewSettings,
 } from './types';
+import { tr } from './i18n';
 
 type Listener = () => void;
 
@@ -88,7 +89,7 @@ class Store {
    */
   async setBackgroundFile(file: File, kind: BackgroundSettings['kind']): Promise<void> {
     // sha256 はファイル全体を読んで計算するので、大きすぎるものは断る (動画は数百 MB でも数秒かかり、メモリも一時的に使う)
-    if (file.size > MAX_BACKGROUND_BYTES) throw new Error(`ファイルが大きすぎます (${(file.size / 2 ** 30).toFixed(1)}GB)。2GB までにしてください`);
+    if (file.size > MAX_BACKGROUND_BYTES) throw new Error(tr(`ファイルが大きすぎます (${(file.size / 2 ** 30).toFixed(1)}GB)。2GB までにしてください`, `The file is too large (${(file.size / 2 ** 30).toFixed(1)} GB). Please keep it under 2 GB`));
     const sha256 = await sha256Hex(await file.arrayBuffer());
     const cur = this._background;
     if (cur && cur.sha256 === sha256) this._background = { ...cur, ref: file.name, kind };

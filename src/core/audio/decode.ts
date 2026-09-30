@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 /**
  * ブラウザの Web Audio API に依存するデコード処理。
  * jsdom には AudioContext が無いため、ここは単体テスト (Vitest) の対象外とし、
@@ -20,7 +21,7 @@ export interface DecodedAudio {
 /** File (音源) をデコードし、再生用の AudioBuffer と解析用のモノラル PCM を返す。 */
 export async function decodeAudioFile(file: File): Promise<DecodedAudio> {
   const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  if (!AC) throw new Error('この環境は Web Audio API (AudioContext) に対応していません');
+  if (!AC) throw new Error(tr('このブラウザは音を扱う機能 (Web Audio API) に対応していません', 'This browser does not support the Web Audio API'));
   const ac = new AC();
   const raw = await file.arrayBuffer();
   let audioBuffer: AudioBuffer;

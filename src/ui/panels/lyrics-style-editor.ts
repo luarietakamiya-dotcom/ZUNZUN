@@ -1,4 +1,5 @@
 import { isDarkText, jizuraFonts, jizuraStyles, type JizuraApi } from '../../core/lyrics/jizura-adapter';
+import { tr } from '../../core/i18n';
 import type { LyricsCustomStyle } from '../../core/types';
 
 /**
@@ -23,26 +24,27 @@ export interface StyleEditor {
   refresh(custom: LyricsCustomStyle | null): void;
 }
 
-const COLOR_FIELDS: { key: keyof LyricsCustomStyle['colors']; label: string }[] = [
-  { key: 'fg', label: '文字' },
-  { key: 'sub', label: '補助 (小さな文字・線)' },
-  { key: 'accent', label: 'アクセント 1' },
-  { key: 'accent2', label: 'アクセント 2' },
-  { key: 'ghostA', label: '色ズレ 1' },
-  { key: 'ghostB', label: '色ズレ 2' },
+// 名前は作るときの言語で (関数にして、言語を切り替えたあとに作り直すと新しい言語になる)
+const COLOR_FIELDS = (): { key: keyof LyricsCustomStyle['colors']; label: string }[] => [
+  { key: 'fg', label: tr('文字', 'Text') },
+  { key: 'sub', label: tr('補助 (小さな文字・線)', 'Secondary (small text, lines)') },
+  { key: 'accent', label: tr('差し色 1', 'Accent 1') },
+  { key: 'accent2', label: tr('差し色 2', 'Accent 2') },
+  { key: 'ghostA', label: tr('色ずれ 1', 'Color fringe 1') },
+  { key: 'ghostB', label: tr('色ずれ 2', 'Color fringe 2') },
 ];
 
-const FONT_FIELDS: { key: keyof LyricsCustomStyle['fonts']; label: string }[] = [
-  { key: 'display', label: '見出し' },
-  { key: 'serif', label: '明朝' },
-  { key: 'body', label: '本文' },
+const FONT_FIELDS = (): { key: keyof LyricsCustomStyle['fonts']; label: string }[] => [
+  { key: 'display', label: tr('見出し', 'Display') },
+  { key: 'serif', label: tr('明朝', 'Serif') },
+  { key: 'body', label: tr('本文', 'Body') },
 ];
 
-const TEXTURE_FIELDS: { key: keyof LyricsCustomStyle['texture']; label: string; max: number }[] = [
-  { key: 'grain', label: 'フィルムの粒', max: 1 },
-  { key: 'scan', label: '走査線', max: 1 },
-  { key: 'ghost', label: '色ズレの強さ', max: 1.5 },
-  { key: 'glow', label: '光のにじみ', max: 1 },
+const TEXTURE_FIELDS = (): { key: keyof LyricsCustomStyle['texture']; label: string; max: number }[] => [
+  { key: 'grain', label: tr('フィルムの粒 (ざらざら感)', 'Film grain'), max: 1 },
+  { key: 'scan', label: tr('走査線 (古いテレビの横線)', 'Scanlines (old TV)'), max: 1 },
+  { key: 'ghost', label: tr('色ずれの強さ', 'Color fringe strength'), max: 1.5 },
+  { key: 'glow', label: tr('光のにじみ', 'Glow'), max: 1 },
 ];
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = ''): HTMLElementTagNameMap[K] {
@@ -66,23 +68,23 @@ export function createStyleEditor(cb: StyleEditorCallbacks): StyleEditor {
   // 名前・元にするスタイル
   const nameInput = h('input', 'lyrics-text-input');
   nameInput.maxLength = 40;
-  nameInput.addEventListener('change', () => emit((c) => ({ ...c, name: nameInput.value.trim().slice(0, 40) || 'マイスタイル' })));
+  nameInput.addEventListener('change', () => emit((c) => ({ ...c, name: nameInput.value.trim().slice(0, 40) || tr('マイスタイル', 'My style') })));
   const baseSelect = h('select', 'select');
   baseSelect.addEventListener('change', () => emit((c) => ({ ...c, base: baseSelect.value })));
-  const resetBtn = h('button', 'tab-button', '元のスタイルの色・書体・質感を読み込む');
+  const resetBtn = h('button', 'tab-button', tr('元のスタイルの色・書体・質感を読み込む', 'Load colors, fonts and texture from the base style'));
   resetBtn.type = 'button';
   resetBtn.addEventListener('click', () => {
     if (current) cb.onResetFromBase(current.base);
   });
-  const deleteBtn = h('button', 'tab-button', 'マイスタイルを削除');
+  const deleteBtn = h('button', 'tab-button', tr('マイスタイルを削除', 'Delete my style'));
   deleteBtn.type = 'button';
   deleteBtn.addEventListener('click', () => {
-    if (window.confirm('マイスタイルを削除して、元のスタイルに戻します。')) cb.onDelete();
+    if (window.confirm(tr('マイスタイルを削除して、元のスタイルに戻します。', 'Delete your style and go back to the base style?'))) cb.onDelete();
   });
 
   // 色
   const colorInputs = new Map<string, HTMLInputElement>();
-  const colorRows = COLOR_FIELDS.map((f) => {
+  const colorRows = COLOR_FIELDS().map((f) => {
     const input = h('input', 'lyrics-color-input');
     input.type = 'color';
     input.addEventListener('input', () => emit((c) => ({ ...c, colors: { ...c.colors, [f.key]: input.value.toLowerCase() } })));
@@ -91,11 +93,11 @@ export function createStyleEditor(cb: StyleEditorCallbacks): StyleEditor {
     row.append(input, h('span', 'param-label', f.label));
     return row;
   });
-  const darkWarning = h('div', 'lyrics-warning', '文字の色が暗いため、映像に重ねると読みにくくなります。明るい色をおすすめします。');
+  const darkWarning = h('div', 'lyrics-warning', tr('文字の色が暗いため、映像に重ねると読みにくくなります。明るい色をおすすめします。', 'The text color is dark and will be hard to read over the visuals. A bright color is recommended.'));
 
   // 書体
   const fontSelects = new Map<string, HTMLSelectElement>();
-  const fontRows = FONT_FIELDS.map((f) => {
+  const fontRows = FONT_FIELDS().map((f) => {
     const select = h('select', 'select');
     select.addEventListener('change', () => emit((c) => ({ ...c, fonts: { ...c.fonts, [f.key]: select.value } })));
     fontSelects.set(f.key, select);
@@ -105,8 +107,8 @@ export function createStyleEditor(cb: StyleEditorCallbacks): StyleEditor {
   });
 
   // 質感
-  const textureInputs = new Map<string, { input: HTMLInputElement; label: HTMLSpanElement; def: (typeof TEXTURE_FIELDS)[number] }>();
-  const textureRows = TEXTURE_FIELDS.map((f) => {
+  const textureInputs = new Map<string, { input: HTMLInputElement; label: HTMLSpanElement; def: ReturnType<typeof TEXTURE_FIELDS>[number] }>();
+  const textureRows = TEXTURE_FIELDS().map((f) => {
     const input = h('input');
     input.type = 'range';
     input.min = '0';
@@ -129,7 +131,7 @@ export function createStyleEditor(cb: StyleEditorCallbacks): StyleEditor {
     return s;
   };
   const nameRow = h('div', 'row-gap lyrics-row-wrap');
-  nameRow.append(h('span', 'param-label', '名前:'), nameInput, h('span', 'param-label', '元にするスタイル (演出の好みを引き継ぐ):'), baseSelect);
+  nameRow.append(h('span', 'param-label', tr('名前:', 'Name:')), nameInput, h('span', 'param-label', tr('元にするスタイル (動きの好みを引き継ぎます):', 'Base style (inherits its motion choices):')), baseSelect);
   const colorGrid = h('div', 'lyrics-color-grid');
   colorGrid.append(...colorRows);
   const fontGrid = h('div', 'param-grid lyrics-motion-grid');
@@ -138,7 +140,7 @@ export function createStyleEditor(cb: StyleEditorCallbacks): StyleEditor {
   textureGrid.append(...textureRows);
   const buttons = h('div', 'row-gap lyrics-row-wrap');
   buttons.append(resetBtn, deleteBtn);
-  root.append(nameRow, section('色', colorGrid, darkWarning), section('書体', fontGrid), section('質感', textureGrid), buttons);
+  root.append(nameRow, section(tr('色', 'Colors'), colorGrid, darkWarning), section(tr('書体', 'Fonts'), fontGrid), section(tr('質感', 'Texture'), textureGrid), buttons);
 
   const fillSelect = (select: HTMLSelectElement, options: [string, string][]): void => {
     select.textContent = '';
@@ -155,9 +157,9 @@ export function createStyleEditor(cb: StyleEditorCallbacks): StyleEditor {
     if (!custom) return;
     if (document.activeElement !== nameInput) nameInput.value = custom.name;
     if (J) baseSelect.value = custom.base;
-    for (const f of COLOR_FIELDS) colorInputs.get(f.key)!.value = custom.colors[f.key];
+    for (const f of COLOR_FIELDS()) colorInputs.get(f.key)!.value = custom.colors[f.key];
     darkWarning.hidden = !J || !isDarkText(custom.colors.fg, (c) => J!.lum(c));
-    for (const f of FONT_FIELDS) {
+    for (const f of FONT_FIELDS()) {
       const select = fontSelects.get(f.key)!;
       select.value = custom.fonts[f.key];
       // 一覧に無いキー (JIZURA の更新で消えたなど) は「元のスタイルのまま」を表示する
@@ -175,7 +177,7 @@ export function createStyleEditor(cb: StyleEditorCallbacks): StyleEditor {
     setJizura(api: JizuraApi): void {
       J = api;
       fillSelect(baseSelect, jizuraStyles(api));
-      const fonts: [string, string][] = [['', '元のスタイルのまま'], ...jizuraFonts(api)];
+      const fonts: [string, string][] = [['', tr('元のスタイルのまま', 'Same as the base style')], ...jizuraFonts(api)];
       for (const select of fontSelects.values()) fillSelect(select, fonts);
       refresh(current);
     },

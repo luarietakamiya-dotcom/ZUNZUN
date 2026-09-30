@@ -1,6 +1,7 @@
 import { peakBetween, type Peaks } from '../../core/audio/peaks';
 import { Viewport, type LineTimeSource, type OnsetCandidate } from '../../core/lyrics';
 import type { RhythmGrid } from '../../core/rhythm';
+import { tr } from '../../core/i18n';
 
 /**
  * Lyrics タブのタイムライン (L4)。canvas 1 枚に、時刻の目盛り・波形・歌声らしさと歌い出し候補・ビート線・
@@ -125,9 +126,9 @@ export class LyricsTimeline {
     this.canvas.className = 'lyrics-timeline-canvas';
     this.canvas.style.height = `${HEIGHT}px`;
     this.ctx = this.canvas.getContext('2d');
-    const zoomOut = this.toolButton('−', '縮小 (Ctrl+ホイールでも)', () => this.zoomCenter(1 / 1.5));
-    const zoomIn = this.toolButton('+', '拡大 (Ctrl+ホイールでも)', () => this.zoomCenter(1.5));
-    const fit = this.toolButton('全体', '曲全体を表示', () => {
+    const zoomOut = this.toolButton('−', tr('縮小 (Ctrl + ホイールでも)', 'Zoom out (or Ctrl + wheel)'), () => this.zoomCenter(1 / 1.5));
+    const zoomIn = this.toolButton('+', tr('拡大 (Ctrl + ホイールでも)', 'Zoom in (or Ctrl + wheel)'), () => this.zoomCenter(1.5));
+    const fit = this.toolButton(tr('全体', 'All'), tr('曲全体を表示', 'Show the whole song'), () => {
       this.vp.pxPerSec = 0;
       this.vp.clamp();
       this.lastUserScroll = performance.now();
@@ -135,7 +136,7 @@ export class LyricsTimeline {
     const legend = document.createElement('span');
     legend.className = 'param-label';
     legend.textContent =
-      '青線 = 歌声らしさ / 緑の目盛り = 歌い出し候補 / 縦の薄い線 = ビート / 橙の線 = 小節 (波形の段でつかんで動かせる)。ブロックの端をドラッグで開始・終了、真ん中で行ごと移動 (Shift を押すと吸着しない)';
+      tr('青い線 = 歌声らしさ / 緑の目盛り = 歌い出しの候補 / 縦の薄い線 = 拍 / 橙の線 = 小節 (波形の段でつかんで動かせます)。ブロックの端をドラッグで始まり・終わり、真ん中で行ごと移動 (Shift を押すと吸着しません)', 'Blue line = voice likelihood / green ticks = possible vocal entries / thin vertical lines = beats / orange lines = bars (drag them in the waveform row). Drag a block edge to set start/end, its middle to move the line (hold Shift to disable snapping)');
     const toolbar = document.createElement('div');
     toolbar.className = 'row-gap lyrics-row-wrap';
     toolbar.append(zoomOut, zoomIn, fit, legend);
@@ -195,7 +196,7 @@ export class LyricsTimeline {
     if (!d || d.duration <= 0) {
       g.fillStyle = COLORS.textDim;
       g.font = '12px system-ui, sans-serif';
-      g.fillText('音源を読み込むと、波形とタイムラインが表示されます', 12, HEIGHT / 2);
+      g.fillText(tr('曲を読み込むと、波形とタイムラインが表示されます', 'Load a song to see the waveform and timeline'), 12, HEIGHT / 2);
       return;
     }
     const t0 = this.vp.start;
@@ -323,7 +324,7 @@ export class LyricsTimeline {
       g.rect(x0 + 4, BLOCK_TOP, Math.max(0, x1 - x0 - 8), BLOCK_H);
       g.clip();
       g.fillStyle = d.source[i] === 'estimate' ? COLORS.textDim : COLORS.text;
-      const label = `${i + 1}. ${d.lines[i]!.interlude ? '〔間奏〕' : d.lines[i]!.text}`;
+      const label = `${i + 1}. ${d.lines[i]!.interlude ? tr('〔間奏〕', '[interlude]') : d.lines[i]!.text}`;
       g.fillText(label, x0 + 6, BLOCK_TOP + BLOCK_H / 2);
       g.restore();
     }

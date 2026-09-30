@@ -1,5 +1,7 @@
 import { store } from '../../core/store';
 import type { BackgroundSettings } from '../../core/types';
+import { t2, tr, type Text2 } from '../../core/i18n';
+import { sliderRow } from './panel-helpers';
 
 /**
  * Overlay タブの「背景」欄。一枚絵か動画を選び、収め方・暗さ・ぼかし (画像だけ)・ビジュアライザーの重ね方と濃さ・
@@ -15,16 +17,16 @@ function kindOf(file: File): 'image' | 'video' {
   return file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(file.name) ? 'video' : 'image';
 }
 
-const BLEND_LABELS: Record<BackgroundSettings['blend'], string> = {
-  screen: 'スクリーン (黒は透けて、光だけが背景に乗る。おすすめ)',
-  add: '加算 (スクリーンより明るく、白飛びしやすい)',
-  over: 'そのまま上に (濃さで背景を透かす。濃さ 1 なら背景は見えない)',
+const BLEND_LABELS: Record<BackgroundSettings['blend'], Text2> = {
+  screen: { ja: 'スクリーン (黒い部分は透けて、光だけが背景に乗る。おすすめ)', en: 'Screen (black becomes see-through, only light is added. Recommended)' },
+  add: { ja: '加算 (スクリーンより明るい。真っ白になりやすい)', en: 'Add (brighter than Screen, blows out to white easily)' },
+  over: { ja: 'そのまま上に (「ビジュアライザーの濃さ」で透かす。1 なら背景は見えない)', en: 'Normal (see through by "Visualizer opacity". At 1 the background is hidden)' },
 };
 
-const SLIDERS: { key: 'dim' | 'blur' | 'visualizerOpacity'; label: string }[] = [
-  { key: 'dim', label: '背景の暗さ (上げるとビジュアライザーが見やすい)' },
-  { key: 'blur', label: '背景のぼかし' },
-  { key: 'visualizerOpacity', label: 'ビジュアライザーの濃さ' },
+const SLIDERS: { key: 'dim' | 'blur' | 'visualizerOpacity'; label: Text2; help: Text2 }[] = [
+  { key: 'dim', label: { ja: '背景の暗さ', en: 'Background dim' }, help: { ja: '上げるほど背景が暗くなり、ビジュアライザーが見やすくなります', en: 'Darkens the background so the visuals stand out' } },
+  { key: 'blur', label: { ja: '背景のぼかし', en: 'Background blur' }, help: { ja: '背景をぼかして、手前を目立たせます', en: 'Blurs the background so the foreground stands out' } },
+  { key: 'visualizerOpacity', label: { ja: 'ビジュアライザーの濃さ', en: 'Visualizer opacity' }, help: { ja: '0 = ビジュアライザーを消す、1 = そのまま', en: '0 = hide the visuals, 1 = full strength' } },
 ];
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = ''): HTMLElementTagNameMap[K] {
@@ -47,21 +49,23 @@ function thumbUrl(file: File): string {
 export function createBackgroundCard(): HTMLElement {
   const root = h('div', 'background-card');
   root.append(
-    h('h3', 'lyrics-h3', '背景 (一枚絵・動画)'),
+    h('h3', 'lyrics-h3', tr('背景 (写真・動画)', 'Background (photo / video)')),
     h(
       'p',
       'lyrics-help',
-      'ビジュアライザーの奥に一枚絵か動画 (MP4 (H.264) / WebM) を敷きます。ビジュアライザーは背景の上に重ねて描きます (スクリーンなら、黒い部分は透けて光だけが乗ります)。' +
-        '背景には Bloom がかかりません。動画の音は使いません。動画は曲と同じ時刻から流れ、曲より短ければくり返すか最後の絵で止めます。見た目は Visualizer タブで確かめてください。',
+      tr(
+        'ビジュアライザーの奥に写真か動画 (MP4 (H.264) / WebM) を敷きます。ビジュアライザーは背景の上に重ねて描きます (スクリーンなら、黒い部分は透けて光だけが乗ります)。背景には光のにじみはかかりません。動画の音は使いません。動画は曲と同じ時刻から流れ、曲より短ければくり返すか最後の絵で止めます。見た目は「ビジュアライザー」タブで確かめてください。',
+        'Place a photo or video (MP4 (H.264) / WebM) behind the visuals. The visuals are drawn on top (with Screen, black is see-through and only light is added). The background gets no glow. Video sound is not used. The video plays from the same time as the song; if shorter it loops or holds the last frame. Check the result in the Visualizer tab.',
+      ),
     ),
   );
   const fileRow = h('div', 'row-gap lyrics-row-wrap');
   const input = h('input');
   input.type = 'file';
   input.accept = ACCEPT;
-  const removeBtn = h('button', 'tab-button', '背景を外す');
+  const removeBtn = h('button', 'tab-button', tr('背景を外す', 'Remove background'));
   removeBtn.type = 'button';
-  fileRow.append(h('span', 'param-label', '画像・動画を選ぶ:'), input, removeBtn);
+  fileRow.append(h('span', 'param-label', tr('写真・動画を選ぶ:', 'Choose a photo / video:')), input, removeBtn);
   const status = h('div', 'param-label');
   const body = h('div', 'background-body');
   root.append(fileRow, status, body);
@@ -69,12 +73,12 @@ export function createBackgroundCard(): HTMLElement {
   input.addEventListener('change', () => {
     const file = input.files?.[0];
     if (!file) return;
-    status.textContent = `「${file.name}」を読み込んでいます…`;
+    status.textContent = tr(`「${file.name}」を読み込んでいます…`, `Loading "${file.name}"…`);
     store
       .setBackgroundFile(file, kindOf(file))
       .then(() => render())
       .catch((err: unknown) => {
-        status.textContent = `読み込めませんでした: ${err instanceof Error ? err.message : String(err)}`;
+        status.textContent = `${tr('読み込めませんでした', 'Could not load')}: ${err instanceof Error ? err.message : String(err)}`;
       })
       .finally(() => {
         input.value = '';
@@ -91,12 +95,12 @@ export function createBackgroundCard(): HTMLElement {
     body.textContent = '';
     removeBtn.disabled = bg == null;
     if (!bg) {
-      status.textContent = '背景はありません。';
+      status.textContent = tr('背景はありません。', 'No background.');
       return;
     }
     status.textContent = file
-      ? `「${bg.ref}」`
-      : `このプロジェクトは背景「${bg.ref}」を使う設定です。同じファイルを選び直してください (選び直すまでは背景なしで描きます)。`;
+      ? tr(`「${bg.ref}」`, `"${bg.ref}"`)
+      : tr(`このプロジェクトは背景に「${bg.ref}」を使います。同じファイルを選び直してください (選び直すまでは背景なしで描きます)。`, `This project uses "${bg.ref}" as its background. Please pick the same file again (until then no background is drawn).`);
     if (file) {
       if (bg.kind === 'video') {
         const v = h('video', 'background-thumb');
@@ -115,7 +119,7 @@ export function createBackgroundCard(): HTMLElement {
     const grid = h('div', 'param-grid');
     // 収め方・重ね方
     const fit = h('select', 'select');
-    for (const [v, label] of [['cover', '画面いっぱい (はみ出しは切る)'], ['contain', '全体を収める (余りは黒)']] as const) {
+    for (const [v, label] of [['cover', tr('画面いっぱい (はみ出した部分は切る)', 'Fill the screen (crop the overflow)')], ['contain', tr('全体を収める (余りは黒)', 'Fit inside (black bars)')]] as const) {
       const o = h('option', '', label);
       o.value = v;
       fit.appendChild(o);
@@ -124,7 +128,7 @@ export function createBackgroundCard(): HTMLElement {
     fit.addEventListener('change', () => store.updateBackground({ fit: fit.value as BackgroundSettings['fit'] }));
     const blend = h('select', 'select');
     for (const [v, label] of Object.entries(BLEND_LABELS)) {
-      const o = h('option', '', label);
+      const o = h('option', '', t2(label));
       o.value = v;
       blend.appendChild(o);
     }
@@ -135,36 +139,26 @@ export function createBackgroundCard(): HTMLElement {
       r.append(h('span', 'param-label', label), el);
       return r;
     };
-    grid.append(selRow('収め方', fit), selRow('ビジュアライザーの重ね方', blend));
+    grid.append(selRow(tr('収め方', 'Fit'), fit), selRow(tr('ビジュアライザーの重ね方', 'How the visuals are layered'), blend));
     if (bg.kind === 'video') {
       const loop = h('input');
       loop.type = 'checkbox';
       loop.checked = bg.loop;
       loop.addEventListener('change', () => store.updateBackground({ loop: loop.checked }));
       const r = h('label', 'row-gap param-label');
-      r.append(loop, '曲より短いときはくり返す (オフなら最後の絵で止める)');
+      r.append(loop, tr('曲より短いときはくり返す (オフなら最後の絵で止める)', 'Loop when shorter than the song (off = hold the last frame)'));
       grid.appendChild(r);
     }
     // ぼかしは画像だけ (動画を毎フレームぼかすのは重いので、今は付けていない)
     for (const def of SLIDERS.filter((d) => d.key !== 'blur' || bg.kind === 'image')) {
-      const r = h('label', 'param-row');
-      const label = h('span', 'param-label');
-      const range = h('input');
-      range.type = 'range';
-      range.min = '0';
-      range.max = '1';
-      range.step = '0.01';
+      const { row: r, input: range, setLabel } = sliderRow(def.label, def.help, 0, 1, 0.01);
       range.value = String(bg[def.key]);
-      const show = (v: number): void => {
-        label.textContent = `${def.label}: ${v.toFixed(2)}`;
-      };
-      show(bg[def.key]);
+      setLabel(bg[def.key].toFixed(2));
       range.addEventListener('input', () => {
         const v = parseFloat(range.value);
         store.updateBackground({ [def.key]: v });
-        show(v);
+        setLabel(v.toFixed(2));
       });
-      r.append(label, range);
       grid.appendChild(r);
     }
     body.appendChild(grid);

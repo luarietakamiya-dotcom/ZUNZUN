@@ -1,19 +1,21 @@
 import { store } from '../../core/store';
 import { createBackgroundCard } from './background-card';
 import type { OverlayLayer } from '../../core/types';
+import { tr, type Text2 } from '../../core/i18n';
+import { sliderRow } from './panel-helpers';
 
 const IMAGE_ACCEPT = 'image/png,image/webp,image/jpeg';
 
 type NumericKey = 'x' | 'y' | 'scale' | 'opacity' | 'glow' | 'float' | 'beat';
 
-const SLIDERS: { key: NumericKey; label: string; min: number; max: number; step: number }[] = [
-  { key: 'x', label: 'X (0=左端, 1=右端)', min: -0.5, max: 1.5, step: 0.01 },
-  { key: 'y', label: 'Y (0=下端, 1=上端)', min: -0.5, max: 1.5, step: 0.01 },
-  { key: 'scale', label: 'Scale (画面の高さに対する比率)', min: 0.02, max: 1.5, step: 0.01 },
-  { key: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.01 },
-  { key: 'glow', label: 'Glow', min: 0, max: 1, step: 0.01 },
-  { key: 'float', label: 'Float (上下浮遊)', min: 0, max: 1, step: 0.01 },
-  { key: 'beat', label: 'Beat反応 (拍で拡大)', min: 0, max: 1, step: 0.01 },
+const SLIDERS: { key: NumericKey; label: Text2; help: Text2; min: number; max: number; step: number }[] = [
+  { key: 'x', label: { ja: '横の位置', en: 'X' }, help: { ja: '0 = 左の端、1 = 右の端', en: '0 = left edge, 1 = right edge' }, min: -0.5, max: 1.5, step: 0.01 },
+  { key: 'y', label: { ja: '縦の位置', en: 'Y' }, help: { ja: '0 = 下の端、1 = 上の端', en: '0 = bottom edge, 1 = top edge' }, min: -0.5, max: 1.5, step: 0.01 },
+  { key: 'scale', label: { ja: '大きさ', en: 'Scale' }, help: { ja: '画面の高さに対する大きさ。1 = 画面の高さと同じ', en: 'Size relative to the screen height. 1 = full height' }, min: 0.02, max: 1.5, step: 0.01 },
+  { key: 'opacity', label: { ja: '濃さ', en: 'Opacity' }, help: { ja: '0 = 見えない、1 = くっきり', en: '0 = invisible, 1 = fully visible' }, min: 0, max: 1, step: 0.01 },
+  { key: 'glow', label: { ja: '光の強さ', en: 'Glow' }, help: { ja: '画像のまわりがふんわり光る量', en: 'Soft halo around the image' }, min: 0, max: 1, step: 0.01 },
+  { key: 'float', label: { ja: 'ふわふわ', en: 'Float' }, help: { ja: 'ゆっくり上下に浮かぶ量', en: 'How much it gently bobs up and down' }, min: 0, max: 1, step: 0.01 },
+  { key: 'beat', label: { ja: '拍で弾む', en: 'Beat' }, help: { ja: '曲の拍に合わせて一瞬大きくなる量', en: 'How much it pulses bigger on each beat' }, min: 0, max: 1, step: 0.01 },
 ];
 
 /**
@@ -27,13 +29,14 @@ export function renderOverlayPanel(): HTMLElement {
   el.className = 'panel';
 
   const h2 = document.createElement('h2');
-  h2.textContent = 'Overlay';
+  h2.textContent = tr('背景と素材', 'Overlay');
   el.appendChild(h2);
 
   const p = document.createElement('p');
-  p.textContent =
-    'ビジュアライザーの上にPNG/WebP/JPGを重ねます (Bloomの影響を受けない前面レイヤーです)。' +
-    '実際の見た目はVisualizerタブのプレビューで確認してください。';
+  p.textContent = tr(
+    '背景の写真・動画と、ビジュアライザーの手前に重ねる画像 (ロゴなど。PNG / WebP / JPG) を設定します。重ねた画像には、ビジュアライザーの光のにじみはかかりません。見た目は「ビジュアライザー」タブの画面で確かめてください。',
+    'Set a background photo/video and images drawn in front of the visuals (logos etc., PNG / WebP / JPG). Overlay images are not affected by the visualizer glow. Check the result in the Visualizer tab.',
+  );
   el.appendChild(p);
 
   // 背景の一枚絵 (ビジュアライザーの奥)。オーバーレイ (前面) とは別の欄
@@ -43,7 +46,7 @@ export function renderOverlayPanel(): HTMLElement {
   addRow.className = 'row-gap';
   const addLabel = document.createElement('span');
   addLabel.className = 'param-label';
-  addLabel.textContent = '画像を追加:';
+  addLabel.textContent = tr('手前に重ねる画像を追加:', 'Add an overlay image:');
   const addInput = document.createElement('input');
   addInput.type = 'file';
   addInput.accept = IMAGE_ACCEPT;
@@ -66,53 +69,27 @@ export function renderOverlayPanel(): HTMLElement {
   const thumbUrls = new Map<string, string>();
 
   function makeSliderRow(layer: OverlayLayer, def: (typeof SLIDERS)[number]): HTMLElement {
-    const row = document.createElement('label');
-    row.className = 'param-row';
-    const labelSpan = document.createElement('span');
-    labelSpan.className = 'param-label';
-    const updateLabel = (v: number): void => {
-      labelSpan.textContent = `${def.label}: ${v.toFixed(2)}`;
-    };
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.min = String(def.min);
-    input.max = String(def.max);
-    input.step = String(def.step);
+    const { row, input, setLabel } = sliderRow(def.label, def.help, def.min, def.max, def.step);
     input.value = String(layer[def.key]);
-    updateLabel(layer[def.key]);
+    setLabel(layer[def.key].toFixed(2));
     input.addEventListener('input', () => {
       const v = parseFloat(input.value);
       store.setOverlayField(layer.id, def.key, v);
-      updateLabel(v);
+      setLabel(v.toFixed(2));
     });
-    row.appendChild(labelSpan);
-    row.appendChild(input);
     return row;
   }
 
   function makeRotationRow(layer: OverlayLayer): HTMLElement {
-    const row = document.createElement('label');
-    row.className = 'param-row';
-    const labelSpan = document.createElement('span');
-    labelSpan.className = 'param-label';
-    const updateLabel = (deg: number): void => {
-      labelSpan.textContent = `Rotation: ${deg.toFixed(0)}°`;
-    };
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.min = '-180';
-    input.max = '180';
-    input.step = '1';
+    const { row, input, setLabel } = sliderRow({ ja: '回転', en: 'Rotation' }, { ja: 'プラス = 反時計回り', en: 'Positive = counter-clockwise' }, -180, 180, 1);
     const initialDeg = (layer.rotation * 180) / Math.PI;
     input.value = String(initialDeg);
-    updateLabel(initialDeg);
+    setLabel(`${initialDeg.toFixed(0)}°`);
     input.addEventListener('input', () => {
       const deg = parseFloat(input.value);
       store.setOverlayField(layer.id, 'rotation', (deg * Math.PI) / 180);
-      updateLabel(deg);
+      setLabel(`${deg.toFixed(0)}°`);
     });
-    row.appendChild(labelSpan);
-    row.appendChild(input);
     return row;
   }
 
@@ -151,7 +128,7 @@ export function renderOverlayPanel(): HTMLElement {
     if (!file) {
       const relinkWrap = document.createElement('div');
       relinkWrap.className = 'placeholder-card';
-      relinkWrap.textContent = `プロジェクトが参照する「${layer.ref}」がまだ読み込まれていません。選び直してください。`;
+      relinkWrap.textContent = tr(`プロジェクトで使っている「${layer.ref}」がまだ読み込まれていません。同じファイルを選び直してください。`, `"${layer.ref}" used by the project is not loaded yet. Please pick the same file again.`);
       const relinkInput = document.createElement('input');
       relinkInput.type = 'file';
       relinkInput.accept = IMAGE_ACCEPT;
@@ -177,7 +154,7 @@ export function renderOverlayPanel(): HTMLElement {
     const frontBtn = document.createElement('button');
     frontBtn.type = 'button';
     frontBtn.className = 'tab-button';
-    frontBtn.textContent = '前面へ';
+    frontBtn.textContent = tr('手前へ', 'Bring forward');
     frontBtn.addEventListener('click', () => {
       store.reorderOverlay(layer.id, 'up');
       refresh();
@@ -186,7 +163,7 @@ export function renderOverlayPanel(): HTMLElement {
     const backBtn = document.createElement('button');
     backBtn.type = 'button';
     backBtn.className = 'tab-button';
-    backBtn.textContent = '背面へ';
+    backBtn.textContent = tr('奥へ', 'Send backward');
     backBtn.addEventListener('click', () => {
       store.reorderOverlay(layer.id, 'down');
       refresh();
@@ -195,7 +172,7 @@ export function renderOverlayPanel(): HTMLElement {
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'tab-button';
-    removeBtn.textContent = '削除';
+    removeBtn.textContent = tr('削除', 'Remove');
     removeBtn.addEventListener('click', () => {
       const url = thumbUrls.get(layer.id);
       if (url) {
@@ -220,7 +197,7 @@ export function renderOverlayPanel(): HTMLElement {
     if (layers.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'placeholder-card';
-      empty.textContent = 'オーバーレイはまだありません。上のボタンから画像を追加してください。';
+      empty.textContent = tr('重ねる画像はまだありません。上の「手前に重ねる画像を追加」から選んでください。', 'No overlay images yet. Add one with "Add an overlay image" above.');
       list.appendChild(empty);
       return;
     }
@@ -237,7 +214,7 @@ export function renderOverlayPanel(): HTMLElement {
       .then(refresh)
       .catch((err: unknown) => {
         errorBox.style.display = '';
-        errorBox.textContent = `追加に失敗しました: ${err instanceof Error ? err.message : String(err)}`;
+        errorBox.textContent = `${tr('追加できませんでした', 'Could not add')}: ${err instanceof Error ? err.message : String(err)}`;
       });
   });
 

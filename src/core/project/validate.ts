@@ -20,6 +20,7 @@ import {
   type ViewSettings,
 } from '../types';
 import { normalizeView } from '../render/view';
+import { tr } from '../i18n';
 
 /**
  * 外部由来 (ファイル読み込み) の JSON は信頼しない前提で検証する。
@@ -316,13 +317,13 @@ function sanitizeFonts(raw: unknown): Record<string, string> {
  */
 export function sanitizeProject(raw: unknown): ProjectFile {
   if (!isPlainObject(raw)) {
-    throw new ProjectParseError('プロジェクトファイルの形式が不正です (JSON オブジェクトではありません)');
+    throw new ProjectParseError(tr('プロジェクトファイルの形が正しくありません (JSON のオブジェクトではありません)', 'Invalid project file (not a JSON object)'));
   }
   if (raw.format !== 'zunzun-project') {
-    throw new ProjectParseError('ZUNZUN のプロジェクトファイルではありません');
+    throw new ProjectParseError(tr('ZUNZUN のプロジェクトファイルではありません', 'Not a ZUNZUN project file'));
   }
   if (raw.version !== 1) {
-    throw new ProjectParseError(`未対応のバージョンです (version: ${String(raw.version)})`);
+    throw new ProjectParseError(tr(`対応していないバージョンです (version: ${String(raw.version)})`, `Unsupported version (version: ${String(raw.version)})`));
   }
 
   const base = defaultProject();

@@ -1,3 +1,4 @@
+import type { Text2 } from '../i18n';
 import type { ExportSettings } from '../types';
 
 /**
@@ -6,11 +7,11 @@ import type { ExportSettings } from '../types';
  */
 
 /** 書き出しサイズの選択肢 (Export パネルのプルダウン)。H.264 は幅・高さとも偶数である必要がある。 */
-export const EXPORT_SIZE_PRESETS: readonly { id: string; label: string; width: number; height: number }[] = [
-  { id: '1920x1080', label: '1920×1080 (横 16:9 フルHD)', width: 1920, height: 1080 },
-  { id: '1280x720', label: '1280×720 (横 16:9 HD・軽め)', width: 1280, height: 720 },
-  { id: '1080x1920', label: '1080×1920 (縦 9:16 ショート動画)', width: 1080, height: 1920 },
-  { id: '1080x1080', label: '1080×1080 (正方形 1:1)', width: 1080, height: 1080 },
+export const EXPORT_SIZE_PRESETS: readonly { id: string; label: Text2; width: number; height: number }[] = [
+  { id: '1920x1080', label: { ja: '1920×1080 (横長 16:9・フル HD)', en: '1920×1080 (landscape 16:9, Full HD)' }, width: 1920, height: 1080 },
+  { id: '1280x720', label: { ja: '1280×720 (横長 16:9・HD・軽め)', en: '1280×720 (landscape 16:9, HD, lighter)' }, width: 1280, height: 720 },
+  { id: '1080x1920', label: { ja: '1080×1920 (縦長 9:16・ショート動画)', en: '1080×1920 (portrait 9:16, shorts)' }, width: 1080, height: 1920 },
+  { id: '1080x1080', label: { ja: '1080×1080 (正方形 1:1)', en: '1080×1080 (square 1:1)' }, width: 1080, height: 1080 },
 ];
 
 export const EXPORT_FPS_OPTIONS: readonly number[] = [30, 60];

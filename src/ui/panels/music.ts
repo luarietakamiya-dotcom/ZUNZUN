@@ -1,15 +1,16 @@
 import { store } from '../../core/store';
+import { tr } from '../../core/i18n';
 
 export function renderMusicPanel(): HTMLElement {
   const el = document.createElement('section');
   el.className = 'panel';
 
   const h2 = document.createElement('h2');
-  h2.textContent = 'Music';
+  h2.textContent = tr('音楽', 'Music');
   el.appendChild(h2);
 
   const p = document.createElement('p');
-  p.textContent = '音源を読み込みます。読み込んだ音は外部には送信されません。';
+  p.textContent = tr('曲のファイルを読み込みます。テンポ (BPM) や音の強さを自動で調べます。読み込んだ曲がほかの場所へ送られることはありません。', 'Load a song file. Tempo (BPM) and loudness are analyzed automatically. The song never leaves your computer.');
   el.appendChild(p);
 
   const fileInput = document.createElement('input');
@@ -27,12 +28,12 @@ export function renderMusicPanel(): HTMLElement {
   const playBtn = document.createElement('button');
   playBtn.type = 'button';
   playBtn.className = 'tab-button';
-  playBtn.textContent = '再生';
+  playBtn.textContent = tr('再生', 'Play');
 
   const pauseBtn = document.createElement('button');
   pauseBtn.type = 'button';
   pauseBtn.className = 'tab-button';
-  pauseBtn.textContent = '一時停止';
+  pauseBtn.textContent = tr('一時停止', 'Pause');
 
   controls.appendChild(playBtn);
   controls.appendChild(pauseBtn);
@@ -42,19 +43,19 @@ export function renderMusicPanel(): HTMLElement {
     const { audio } = store;
     if (!audio.isLoaded) {
       status.textContent = store.expectedAudio
-        ? `音源が読み込まれていません (読み込んだプロジェクトは「${store.expectedAudio.name}」を参照しています)`
-        : '音源が読み込まれていません';
+        ? tr(`曲がまだ読み込まれていません (開いたプロジェクトは「${store.expectedAudio.name}」を使っています。同じファイルを選んでください)`, `No song loaded yet (the opened project uses "${store.expectedAudio.name}" — please pick that file)`)
+        : tr('曲がまだ読み込まれていません', 'No song loaded yet');
       playBtn.disabled = true;
       pauseBtn.disabled = true;
       return;
     }
-    const bpmText = audio.bpm > 0 ? `${audio.bpm} BPM` : 'BPM検出できず';
-    let text = `${audio.fileName} — ${audio.duration.toFixed(1)}秒 / ${bpmText}`;
+    const bpmText = audio.bpm > 0 ? `${audio.bpm} BPM` : tr('テンポ (BPM) を見つけられませんでした', 'Tempo (BPM) not detected');
+    let text = `${audio.fileName} — ${audio.duration.toFixed(1)}${tr('秒', 's')} / ${bpmText}`;
     if (store.expectedAudio) {
       text +=
         store.expectedAudio.sha256 === audio.sha256
-          ? ' (プロジェクトが参照する音源と一致しました)'
-          : ` (注意: プロジェクトが参照する音源「${store.expectedAudio.name}」とは別のファイルです)`;
+          ? tr(' (プロジェクトの曲と同じファイルです)', ' (matches the project\'s song)')
+          : tr(` (注意: プロジェクトの曲「${store.expectedAudio.name}」とは別のファイルです)`, ` (Note: this is not the project's song "${store.expectedAudio.name}")`);
     }
     status.textContent = text;
     playBtn.disabled = false;
@@ -65,14 +66,14 @@ export function renderMusicPanel(): HTMLElement {
   fileInput.addEventListener('change', () => {
     const file = fileInput.files?.[0];
     if (!file) return;
-    status.textContent = '解析中…';
+    status.textContent = tr('曲を調べています…', 'Analyzing the song…');
     playBtn.disabled = true;
     pauseBtn.disabled = true;
     store.audio
       .load(file)
       .then(refreshStatus)
       .catch((err: unknown) => {
-        status.textContent = `読み込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`;
+        status.textContent = `${tr('読み込めませんでした', 'Could not load')}: ${err instanceof Error ? err.message : String(err)}`;
       });
   });
 

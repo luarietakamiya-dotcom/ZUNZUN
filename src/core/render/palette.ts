@@ -1,4 +1,5 @@
 import type { BackgroundSettings } from '../types';
+import { tr } from '../i18n';
 
 /**
  * 背景の画像・動画から色を読み取る (オリジナルの歌詞モーション「動画に寄り添う」が文字の色に使う)。
@@ -139,7 +140,7 @@ async function pixelsOfImage(file: Blob): Promise<Uint8ClampedArray> {
     c.width = SAMPLE_W;
     c.height = SAMPLE_H;
     const g = c.getContext('2d');
-    if (!g) throw new Error('2D canvas が使えません');
+    if (!g) throw new Error(tr('2D canvas が使えません', '2D canvas is not available'));
     g.drawImage(bitmap, 0, 0);
     return g.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
   } finally {
@@ -152,7 +153,7 @@ async function pixelsOfVideo(file: Blob): Promise<Uint8ClampedArray> {
   const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
   try {
     const track = await input.getPrimaryVideoTrack();
-    if (!track || !(await track.canDecode())) throw new Error('動画を読めません');
+    if (!track || !(await track.canDecode())) throw new Error(tr('動画を読めません', 'Cannot read the video'));
     const first = await track.getFirstTimestamp();
     const end = await track.computeDuration();
     const sink = new CanvasSink(track, { width: SAMPLE_W, height: SAMPLE_H, fit: 'fill' });
@@ -163,7 +164,7 @@ async function pixelsOfVideo(file: Blob): Promise<Uint8ClampedArray> {
     c.width = SAMPLE_W;
     c.height = SAMPLE_H;
     const g = c.getContext('2d');
-    if (!g) throw new Error('2D canvas が使えません');
+    if (!g) throw new Error(tr('2D canvas が使えません', '2D canvas is not available'));
     let k = 0;
     for await (const wc of sink.canvasesAtTimestamps(times)) {
       if (wc) {

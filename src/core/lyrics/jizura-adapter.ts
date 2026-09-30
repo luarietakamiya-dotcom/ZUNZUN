@@ -7,6 +7,7 @@ import { applyMotionPack, packStyles, registerMotionPacks } from './packs';
 import type { PackJ, PackPalette } from './packs/types';
 import { lyricsForEngine } from './parse';
 import { applyManualEnds } from './timing';
+import { tr } from '../i18n';
 
 /**
  * ZUNZUN と、同梱した JIZURA の歌詞モーションエンジン (vendor/jizura/jizura-engine.js、window.J) をつなぐ。
@@ -103,7 +104,7 @@ let loading: Promise<JizuraApi> | null = null;
 export function loadJizura(): Promise<JizuraApi> {
   loading ??= import('../../../vendor/jizura/jizura-engine.js').then(() => {
     const J = (globalThis as unknown as { J?: JizuraApi }).J;
-    if (!J || typeof J.plan !== 'function') throw new Error('JIZURA のエンジンを読み込めませんでした');
+    if (!J || typeof J.plan !== 'function') throw new Error(tr('歌詞の動きの仕組み (JIZURA) を読み込めませんでした', 'Could not load the lyric motion engine (JIZURA)'));
     installTimingPatch(J);
     installGlyphIdPatch(J);
     registerOddMeterPack(J as unknown as PackApi);

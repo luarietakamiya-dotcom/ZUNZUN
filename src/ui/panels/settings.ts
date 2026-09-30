@@ -1,4 +1,5 @@
 import { store } from '../../core/store';
+import { tr } from '../../core/i18n';
 import { buildProjectFile, ProjectParseError, readProjectFile, saveProjectToFile, sanitizeProject } from '../../core/project';
 
 /** ファイル名として使える形に整える (拡張子除去 + Project ファイル名に使えない文字を落とす程度の簡易版)。 */
@@ -12,13 +13,15 @@ export function renderSettingsPanel(): HTMLElement {
   el.className = 'panel';
 
   const h2 = document.createElement('h2');
-  h2.textContent = 'Settings';
+  h2.textContent = tr('設定', 'Settings');
   el.appendChild(h2);
 
   const p = document.createElement('p');
   p.textContent =
-    'プロジェクト (seed・選択中のプリセット・パラメータ) を .zunzun.json として保存/読み込みします。' +
-    '音源本体はファイルサイズの都合上プロジェクトに含めないため、読み込み後は Music タブから同じ音源を選び直してください。';
+    tr(
+      '作業の内容 (映像の種類・設定・歌詞・背景など) を「プロジェクト」(.zunzun.json) として保存・読み込みします。曲・画像・動画のファイルそのものは入らないので、開いたあとに同じファイルを選び直してください。',
+      'Save and open your work (visual preset, settings, lyrics, background, ...) as a project (.zunzun.json). Song, image and video files are not included, so pick the same files again after opening.',
+    );
   el.appendChild(p);
 
   const status = document.createElement('div');
@@ -31,12 +34,12 @@ export function renderSettingsPanel(): HTMLElement {
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
   saveBtn.className = 'tab-button';
-  saveBtn.textContent = 'プロジェクトを保存';
+  saveBtn.textContent = tr('プロジェクトを保存', 'Save project');
 
   const loadBtn = document.createElement('button');
   loadBtn.type = 'button';
   loadBtn.className = 'tab-button';
-  loadBtn.textContent = 'プロジェクトを開く';
+  loadBtn.textContent = tr('プロジェクトを開く', 'Open project');
 
   const loadInput = document.createElement('input');
   loadInput.type = 'file';
@@ -49,15 +52,15 @@ export function renderSettingsPanel(): HTMLElement {
   el.appendChild(loadInput);
 
   const refreshStatus = (): void => {
-    const audioText = store.audio.isLoaded ? `音源: ${store.audio.fileName}` : '音源: 未読み込み';
-    status.textContent = `seed: ${store.seed} / preset: ${store.presetId ?? '(未選択)'} / ${audioText}`;
+    const audioText = store.audio.isLoaded ? `${tr('曲', 'Song')}: ${store.audio.fileName}` : tr('曲: まだ読み込んでいません', 'Song: not loaded');
+    status.textContent = `${tr('乱数の種 (seed)', 'Seed')}: ${store.seed} / ${tr('映像', 'Preset')}: ${store.presetId ?? tr('(未選択)', '(none)')} / ${audioText}`;
   };
   refreshStatus();
 
   saveBtn.addEventListener('click', () => {
     const project = buildProjectFile(store);
     saveProjectToFile(project, suggestedProjectName()).catch((err: unknown) => {
-      status.textContent = `保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`;
+      status.textContent = `${tr('保存できませんでした', 'Could not save')}: ${err instanceof Error ? err.message : String(err)}`;
     });
   });
 
@@ -74,14 +77,14 @@ export function renderSettingsPanel(): HTMLElement {
         store.applyProject(project);
         refreshStatus();
         if (project.audio) {
-          status.textContent += ` — 「${project.audio.name}」を Music タブから読み込み直してください`;
+          status.textContent += tr(` — 「${project.audio.name}」を「音楽」タブから読み込み直してください`, ` — please load "${project.audio.name}" again in the Music tab`);
         }
       })
       .catch((err: unknown) => {
         status.textContent =
           err instanceof ProjectParseError
-            ? `読み込めませんでした: ${err.message}`
-            : `読み込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`;
+            ? `${tr('開けませんでした', 'Could not open')}: ${err.message}`
+            : `${tr('開けませんでした', 'Could not open')}: ${err instanceof Error ? err.message : String(err)}`;
       });
   });
 

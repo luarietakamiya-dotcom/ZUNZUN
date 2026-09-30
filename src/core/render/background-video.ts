@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { tr } from '../i18n';
 
 /**
  * 背景の動画 (docs/ARCHITECTURE.md「背景（一枚絵・動画）の方針」)。動画の音は使わない (無音で扱う)。
@@ -49,7 +50,7 @@ export class PreviewVideo {
     try {
       await new Promise<void>((resolve, reject) => {
         el.addEventListener('loadeddata', () => resolve(), { once: true });
-        el.addEventListener('error', () => reject(new Error('この動画はブラウザで再生できません (MP4 (H.264) か WebM を使ってください)')), { once: true });
+        el.addEventListener('error', () => reject(new Error(tr('この動画はブラウザで再生できません (MP4 (H.264) か WebM を使ってください)', 'This video cannot be played in the browser (use MP4 (H.264) or WebM)'))), { once: true });
       });
     } catch (err) {
       URL.revokeObjectURL(url);
@@ -110,7 +111,7 @@ export class ExactVideo {
     this.canvas.width = width;
     this.canvas.height = height;
     const ctx = this.canvas.getContext('2d');
-    if (!ctx) throw new Error('背景の動画を描けませんでした (2D canvas が使えません)');
+    if (!ctx) throw new Error(tr('背景の動画を描けませんでした (2D canvas が使えません)', 'Could not draw the background video (2D canvas unavailable)'));
     this.ctx = ctx;
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.NoColorSpace;
@@ -126,8 +127,8 @@ export class ExactVideo {
     const { Input, BlobSource, ALL_FORMATS, CanvasSink } = await import('mediabunny');
     const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
     const track = await input.getPrimaryVideoTrack();
-    if (!track) throw new Error('動画の映像が見つかりませんでした');
-    if (!(await track.canDecode())) throw new Error('このブラウザではこの動画を読めません (MP4 (H.264) か WebM を使ってください)');
+    if (!track) throw new Error(tr('動画の映像が見つかりませんでした', 'No video track found'));
+    if (!(await track.canDecode())) throw new Error(tr('このブラウザではこの動画を読めません (MP4 (H.264) か WebM を使ってください)', 'This browser cannot read this video (use MP4 (H.264) or WebM)'));
     const first = await track.getFirstTimestamp();
     const end = await track.computeDuration();
     const k = Math.min(1, MAX_EXACT_SIDE / Math.max(track.displayWidth, track.displayHeight));
