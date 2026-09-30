@@ -368,6 +368,7 @@ export function renderVisualizerPanel(): HTMLElement {
     host.view = store.view;
     host.composition = store.composition;
     host.media.setConfigs(store.media);
+    host.media.setMatteView(store.chromaPreviewId);
     if (frame) host.render(frame, renderParams());
     requestAnimationFrame(tick);
   };

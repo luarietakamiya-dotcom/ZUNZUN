@@ -257,6 +257,8 @@ export interface ChromaKey {
   softness: number;
   /** 被写体の縁に残る色 (緑のにじみ) を取る量 (0..1) */
   spill: number;
+  /** 縁を削る量 (0..1)。残る所の縁を少し内側へ削って、被写体のまわりの細い緑の線を消す (1 = 素材の画素で 3 つぶん) */
+  choke: number;
 }
 
 /** 素材レイヤー (画像・動画。レイヤーの順番の中では 'media:<id>')。中身は保存せず、ファイル名と sha256 だけ */
@@ -280,7 +282,8 @@ export interface MediaLayer {
   loop: boolean;
 }
 
-export const defaultChromaKey = (): ChromaKey => ({ enabled: false, color: '#00ff00', tolerance: 0.25, softness: 0.1, spill: 0.5 });
+/** 新しい素材の既定値 (2026-09-30 見直し: 緑が残りやすかったので、範囲とにじみ取りを強めにし、縁を少し削る) */
+export const defaultChromaKey = (): ChromaKey => ({ enabled: false, color: '#00ff00', tolerance: 0.4, softness: 0.12, spill: 0.8, choke: 0.35 });
 
 export const defaultMediaLayer = (id: string, ref: string, sha256: string, kind: MediaLayer['kind']): MediaLayer => ({
   id,

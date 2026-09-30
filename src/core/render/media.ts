@@ -25,12 +25,39 @@ uniform sampler2D map;
 uniform float opacity;
 /** 0 = そのまま上に、1 = スクリーン、2 = 加算 */
 uniform float blendMode;
+/** 素材の 1 画素の大きさ (uv)。縁を削るときに、まわりの画素を見るのに使う */
+uniform vec2 texel;
+/** 縁を削る距離 (素材の画素。0 なら削らない) */
+uniform float chokePx;
+/** 1 = 透け具合を見る (残る所を白、透ける所を黒で描く) */
+uniform float matte;
 varying vec2 vUv;
 ${CHROMA_GLSL}
+float keyedAlpha(vec2 uv) {
+  vec4 t = texture2D(map, uv);
+  return t.a * zzChroma(t.rgb).a;
+}
 void main() {
   vec4 t = texture2D(map, vUv);
   vec4 k = zzChroma(t.rgb);
-  float a = t.a * k.a * opacity;
+  float base = t.a * k.a;
+  if (chromaOn > 0.5 && chokePx > 0.0) {
+    // 縁を削る: まわり 8 方向の透明度のいちばん小さい値 (core/render/chroma.ts の erodeAlpha と同じ)
+    vec2 d = texel * chokePx;
+    base = min(base, keyedAlpha(vUv + vec2(d.x, 0.0)));
+    base = min(base, keyedAlpha(vUv - vec2(d.x, 0.0)));
+    base = min(base, keyedAlpha(vUv + vec2(0.0, d.y)));
+    base = min(base, keyedAlpha(vUv - vec2(0.0, d.y)));
+    base = min(base, keyedAlpha(vUv + d * 0.7071));
+    base = min(base, keyedAlpha(vUv - d * 0.7071));
+    base = min(base, keyedAlpha(vUv + vec2(d.x, -d.y) * 0.7071));
+    base = min(base, keyedAlpha(vUv + vec2(-d.x, d.y) * 0.7071));
+  }
+  if (matte > 0.5) {
+    gl_FragColor = vec4(vec3(base), 1.0);
+    return;
+  }
+  float a = base * opacity;
   gl_FragColor = blendMode < 0.5 ? vec4(k.rgb, a) : vec4(k.rgb * a, 1.0);
 }
 `;
@@ -75,6 +102,13 @@ export class MediaCompositor {
   private readonly geometry = new THREE.PlaneGeometry(1, 1);
   private aspect = 16 / 9;
   private generation = 0;
+  /** 透け具合を見る素材 (プレビューだけ。書き出しでは使わない) */
+  private matteId: string | null = null;
+
+  /** 透け具合を見る素材を決める (null なら見ない)。プレビューだけで使う */
+  setMatteView(id: string | null): void {
+    this.matteId = id;
+  }
 
   /** 素材があって描けるか */
   has(id: string): boolean {
@@ -113,6 +147,9 @@ export class MediaCompositor {
             chromaTol: { value: 0.25 },
             chromaSoft: { value: 0.05 },
             chromaSpill: { value: 0 },
+            texel: { value: new THREE.Vector2(1 / 512, 1 / 512) },
+            chokePx: { value: 0 },
+            matte: { value: 0 },
           },
           depthTest: false,
           depthWrite: false,
@@ -176,12 +213,19 @@ export class MediaCompositor {
     u.chromaTol!.value = ch.tol;
     u.chromaSoft!.value = ch.soft;
     u.chromaSpill!.value = ch.spill;
+    u.chokePx!.value = ch.chokePx;
+    const img = it.texture.image as { width?: number; height?: number; videoWidth?: number; videoHeight?: number } | null;
+    const tw = img?.videoWidth || img?.width || 512;
+    const th = img?.videoHeight || img?.height || 512;
+    (u.texel!.value as THREE.Vector2).set(1 / Math.max(1, tw), 1 / Math.max(1, th));
+    const matte = this.matteId === id && c.chroma.enabled;
+    u.matte!.value = matte ? 1 : 0;
     const m = it.material;
     m.blending = THREE.CustomBlending;
     m.blendEquation = THREE.AddEquation;
     m.blendSrcAlpha = THREE.ZeroFactor;
     m.blendDstAlpha = THREE.OneFactor;
-    if (c.blend === 'normal') {
+    if (c.blend === 'normal' || matte) {
       m.blendSrc = THREE.SrcAlphaFactor;
       m.blendDst = THREE.OneMinusSrcAlphaFactor;
     } else {

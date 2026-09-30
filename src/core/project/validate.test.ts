@@ -299,8 +299,11 @@ describe('media (素材レイヤー)', () => {
     raw.composition = { order: ['background', 'media:gone', 'visualizer', 'lyrics', 'overlays', 'media:c3'] };
     const p = sanitizeProject(raw);
     expect(p.media!.map((m) => m.id)).toEqual(['a1', 'c3']);
-    expect(p.media![0]).toMatchObject({ kind: 'video', x: 2, scale: 0.01, opacity: 0.5, blend: 'screen', loop: false, chroma: { enabled: true, color: '#00ff00', tolerance: 1, softness: 0.1, spill: 0 } });
-    expect(p.media![1]).toMatchObject({ kind: 'image', blend: 'normal', chroma: { enabled: false, color: '#00ff00' } });
+    expect(p.media![0]).toMatchObject({ kind: 'video', x: 2, scale: 0.01, opacity: 0.5, blend: 'screen', loop: false, chroma: { enabled: true, color: '#00ff00', tolerance: 1, softness: 0.12, spill: 0, choke: 0 } });
+    expect(p.media![1]).toMatchObject({ kind: 'image', blend: 'normal', chroma: { enabled: false, color: '#00ff00', choke: 0 } });
+    // 「縁を削る」は前のプロジェクトには無い → 0 (今までと同じ見た目)。保存されていればその値 (0..1 に収める)
+    const withChoke = sanitizeProject({ ...defaultProject(), media: [{ id: 'z', ref: 'z.png', sha256: sha, chroma: { choke: 0.6 } }, { id: 'y', ref: 'y.png', sha256: sha, chroma: { choke: 7 } }] });
+    expect(withChoke.media!.map((m) => m.chroma.choke)).toEqual([0.6, 1]);
     expect(p.composition!.order).toEqual(['background', 'visualizer', 'lyrics', 'overlays', 'media:c3', 'media:a1']);
   });
 });

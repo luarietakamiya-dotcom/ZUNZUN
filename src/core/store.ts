@@ -63,6 +63,7 @@ class Store {
   /** 用意された背景を読むときの fetch (テストで差し替える) */
   fetchFn: typeof fetch = (input, init) => fetch(input, init);
   private libraryRestore: { gen: number; promise: Promise<void> } | null = null;
+  private _chromaPreviewId: string | null = null;
   private _view: ViewSettings = defaultView();
   private _composition: CompositionSettings = defaultComposition();
   private _media: MediaLayer[] = [];
@@ -102,7 +103,20 @@ class Store {
     this.emit();
   }
 
+  /**
+   * 「透け具合を見る」素材 (プレビューで、残る所を白・透ける所を黒で描く)。確かめるためだけのもので、Project JSON には入れない
+   */
+  get chromaPreviewId(): string | null {
+    return this._chromaPreviewId;
+  }
+
+  setChromaPreview(id: string | null): void {
+    this._chromaPreviewId = id;
+    this.emit();
+  }
+
   removeMedia(id: string): void {
+    if (this._chromaPreviewId === id) this._chromaPreviewId = null;
     this._media = this._media.filter((m) => m.id !== id);
     this.mediaFiles.delete(id);
     const key = `media:${id}`;
@@ -395,6 +409,7 @@ class Store {
     this._presetParams = sanitizePresetParamsMap(project.visualizer.params);
     this._view = { ...(project.visualizer.view ?? defaultView()) };
     this._media = (project.media ?? []).map((m) => ({ ...m, chroma: { ...m.chroma } }));
+    this._chromaPreviewId = null;
     this.mediaFiles.clear();
     this._composition = normalizeComposition(project.composition, { mediaIds: this._media.map((m) => m.id) });
     this._expectedAudio = project.audio;

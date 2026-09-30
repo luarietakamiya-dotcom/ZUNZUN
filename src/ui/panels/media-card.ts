@@ -1,4 +1,5 @@
 import { t2, tr, type Text2 } from '../../core/i18n';
+import { autoChroma } from '../../core/render/chroma';
 import { store } from '../../core/store';
 import type { ChromaKey, MediaLayer } from '../../core/types';
 import { sliderRow } from './panel-helpers';
@@ -41,11 +42,31 @@ const TRANSFORM: { key: 'x' | 'y' | 'scale' | 'rotation' | 'opacity'; label: Tex
   { key: 'opacity', label: { ja: '濃さ', en: 'Opacity' }, help: { ja: '0 = 見えない、1 = くっきり', en: '0 = invisible, 1 = fully visible' }, min: 0, max: 1, step: 0.01, fmt: (v) => v.toFixed(2) },
 ];
 
-const CHROMA: { key: 'tolerance' | 'softness' | 'spill'; label: Text2; help: Text2 }[] = [
+const CHROMA: { key: 'tolerance' | 'softness' | 'spill' | 'choke'; label: Text2; help: Text2 }[] = [
   { key: 'tolerance', label: { ja: '透かす範囲', en: 'Tolerance' }, help: { ja: '上げるほど、選んだ色に少し似た色まで透けます。人や物まで透けたら下げてください', en: 'Higher also removes colors that are only similar. Lower it if the subject disappears' } },
   { key: 'softness', label: { ja: '境目のぼかし', en: 'Softness' }, help: { ja: '透ける所と残る所の境目を、なめらかにします', en: 'Smooths the edge between removed and kept areas' } },
   { key: 'spill', label: { ja: '緑のにじみ取り', en: 'Spill removal' }, help: { ja: '人や物の縁に残る、背景の色 (緑など) のにじみを消します', en: 'Removes the background color (e.g. green) bleeding onto edges' } },
+  {
+    key: 'choke',
+    label: { ja: '縁を削る', en: 'Edge choke' },
+    help: { ja: '残る所の縁を少し内側へ削って、人や物のまわりに残る細い緑の線を消します。上げすぎると細い所 (髪など) も削れます', en: 'Trims the kept area slightly inward to remove the thin green outline. Too much also trims thin details (hair, etc.)' },
+  },
 ];
+
+/** サムネイルの絵の画素 (長い辺 200 画素に縮める)。動画は今見えている絵。読めなければ null */
+function thumbPixels(el: HTMLImageElement | HTMLVideoElement): Uint8ClampedArray | null {
+  const w = el instanceof HTMLVideoElement ? el.videoWidth : el.naturalWidth;
+  const hgt = el instanceof HTMLVideoElement ? el.videoHeight : el.naturalHeight;
+  if (!w || !hgt) return null;
+  const k = Math.min(1, 200 / Math.max(w, hgt));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w * k));
+  c.height = Math.max(1, Math.round(hgt * k));
+  const g = c.getContext('2d', { willReadFrequently: true });
+  if (!g) return null;
+  g.drawImage(el, 0, 0, c.width, c.height);
+  return g.getImageData(0, 0, c.width, c.height).data;
+}
 
 const BLENDS: { value: MediaLayer['blend']; label: Text2 }[] = [
   { value: 'normal', label: { ja: 'そのまま上に', en: 'Normal' } },
@@ -84,8 +105,8 @@ export function createMediaCard(onChange: () => void): HTMLElement {
       'p',
       'lyrics-help',
       tr(
-        '画像や動画を好きな位置に置けます。グリーンバックの素材は「色を透かす」をオンにして、サムネイルの緑の所を押すと、その色が透けます。透明な部分がある PNG は、そのまま透けます。重なる順番は上の「レイヤー」で変えられます。',
-        'Place images or videos anywhere. For green-screen footage, turn on "Remove a color" and click the green area of the thumbnail to make it transparent. PNGs with transparency are see-through as-is. Change the stacking order in "Layers" above.',
+        '画像や動画を好きな位置に置けます。グリーンバックの素材は「自動で合わせる」を押すと、背景の緑がほぼ全部透けます (サムネイルの緑の所を押して色を選ぶこともできます)。緑が残るときは「透け具合を見る」で残った所を確かめて、「透かす範囲」「縁を削る」で調整してください。透明な部分がある PNG は、そのまま透けます。重なる順番は上の「レイヤー」で変えられます。',
+        'Place images or videos anywhere. For green-screen footage, press "Auto match" and almost all of the green backdrop disappears (you can also click the green in the thumbnail to pick the color). If green remains, check it with "Show the matte" and adjust "Tolerance" and "Edge choke". PNGs with transparency are see-through as-is. Change the stacking order in "Layers" above.',
       ),
     ),
   );
@@ -134,6 +155,7 @@ export function createMediaCard(onChange: () => void): HTMLElement {
       if (cur) store.updateMedia(m.id, { chroma: { ...cur.chroma, ...patch } });
     };
     let colorInput: HTMLInputElement | null = null;
+    let thumbEl: HTMLImageElement | HTMLVideoElement | null = null;
     if (file) {
       const thumb = m.kind === 'video' ? h('video', 'media-thumb') : h('img', 'media-thumb');
       if (thumb instanceof HTMLVideoElement) {
@@ -152,6 +174,7 @@ export function createMediaCard(onChange: () => void): HTMLElement {
         setChroma({ color: c, enabled: true });
         render();
       });
+      thumbEl = thumb;
       head.appendChild(thumb);
     } else {
       const miss = h('div', 'overlay-thumb overlay-thumb-missing', '?');
@@ -226,6 +249,35 @@ export function createMediaCard(onChange: () => void): HTMLElement {
     ci.addEventListener('input', () => setChroma({ color: ci.value }));
     const colorRow = h('label', 'row-gap param-label');
     colorRow.append(h('span', '', tr('透かす色:', 'Color:')), ci, h('span', 'param-help', tr('サムネイルを押しても選べます', 'or click the thumbnail')));
+    // 自動で合わせる: サムネイルの絵全体から背景の色を見つけ、透かす色・範囲などを決める
+    const autoRow = h('div', 'row-gap lyrics-row-wrap');
+    const autoBtn = h('button', 'tab-button', tr('自動で合わせる', 'Auto match'));
+    autoBtn.type = 'button';
+    autoBtn.dataset.media = 'chroma-auto';
+    autoBtn.disabled = !thumbEl;
+    const autoMsg = h('span', 'param-help', tr('絵全体から背景の緑 (か青) を見つけて、ほぼ全部透けるように合わせます', 'Finds the green (or blue) backdrop in the whole picture and sets it so almost all of it disappears'));
+    autoBtn.addEventListener('click', () => {
+      const px = thumbEl ? thumbPixels(thumbEl) : null;
+      const found = px ? autoChroma(px) : null;
+      if (!found) {
+        autoMsg.textContent = tr('背景の緑や青が見つかりませんでした。サムネイルの背景を押して色を選んでください', 'No green or blue backdrop found. Click the backdrop in the thumbnail to pick the color');
+        return;
+      }
+      setChroma({ ...found, enabled: true });
+      render();
+    });
+    autoRow.append(autoBtn, autoMsg);
+    // 透け具合を見る (プレビューだけ。白 = 残る所、黒 = 透ける所)
+    const matte = h('input');
+    matte.type = 'checkbox';
+    matte.dataset.media = 'chroma-matte';
+    matte.checked = store.chromaPreviewId === m.id;
+    matte.addEventListener('change', () => store.setChromaPreview(matte.checked ? m.id : null));
+    const matteRow = h('label', 'row-gap param-label');
+    matteRow.append(
+      matte,
+      tr('透け具合を見る (「ビジュアライザー」タブで、白 = 残る所・黒 = 透ける所。灰色の点が残った緑)', 'Show the matte (in the Visualizer tab: white = kept, black = removed; gray specks are leftover green)'),
+    );
     const cgrid = h('div', 'param-grid');
     for (const def of CHROMA) {
       const { row, input: r, setLabel } = sliderRow(def.label, def.help, 0, 1, 0.01);
@@ -238,7 +290,7 @@ export function createMediaCard(onChange: () => void): HTMLElement {
       });
       cgrid.appendChild(row);
     }
-    chromaBox.append(onRow, colorRow, cgrid);
+    chromaBox.append(onRow, autoRow, colorRow, cgrid, matteRow);
     item.appendChild(chromaBox);
 
     const remove = h('button', 'tab-button', tr('この素材を外す', 'Remove this media'));

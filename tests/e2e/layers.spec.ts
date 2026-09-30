@@ -283,3 +283,75 @@ test('グリーンバックの素材を 3 枚足せて、3 枚とも緑が透け
   }
   expect(r.green).toBeLessThan(0.01);
 });
+
+test('クロマキーの「自動で合わせる」: むら・影のある緑も透け、「透け具合を見る」で残る所が白・透ける所が黒になる', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('zunzun.lang', 'en'));
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Overlay' }).click();
+  // むらのある緑 (左が明るく右下は影) の真ん中に、赤い四角
+  const dataUrl = await page.evaluate(() => {
+    const cv = document.createElement('canvas');
+    cv.width = 160;
+    cv.height = 90;
+    const g = cv.getContext('2d')!;
+    const grad = g.createLinearGradient(0, 0, 160, 0);
+    grad.addColorStop(0, 'rgb(40, 220, 60)');
+    grad.addColorStop(1, 'rgb(25, 120, 35)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 160, 90);
+    g.fillStyle = 'rgb(18, 80, 25)';
+    g.fillRect(110, 60, 50, 30);
+    g.fillStyle = 'rgb(220, 40, 40)';
+    g.fillRect(65, 25, 30, 40);
+    return cv.toDataURL('image/png');
+  });
+  await page.locator('.media-card input[type="file"]').first().setInputFiles({ name: 'uneven.png', mimeType: 'image/png', buffer: Buffer.from(dataUrl.split(',')[1]!, 'base64') });
+  await expect(page.locator('.media-item')).toHaveCount(1);
+  // サムネイルが読み込まれてから押す
+  await expect.poll(() => page.locator('.media-thumb').evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  await page.locator('button[data-media="chroma-auto"]').click();
+  await expect(page.locator('.media-item input[data-media="chroma"]')).toBeChecked();
+
+  const read = async (): Promise<{ green: number; center: number[]; corner: number[] }> => {
+    await page.getByRole('tab', { name: 'Visualizer' }).click();
+    await page.waitForTimeout(1500);
+    const shot = await page.locator('.visualizer-canvas').screenshot();
+    return page.evaluate(async (b64) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      const g = c.getContext('2d')!;
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      const at = (x: number, y: number): number[] => {
+        const k = (Math.floor(y * c.height) * c.width + Math.floor(x * c.width)) * 4;
+        return [d[k]!, d[k + 1]!, d[k + 2]!];
+      };
+      // 素材は既定で画面の高さの 6 割、真ん中 (画面の 0.2〜0.8)
+      let green = 0;
+      let n = 0;
+      for (let y = Math.floor(0.22 * c.height); y < 0.78 * c.height; y += 2) {
+        for (let x = Math.floor(0.22 * c.width); x < 0.78 * c.width; x += 2) {
+          const k = (y * c.width + x) * 4;
+          n++;
+          if (d[k + 1]! > d[k]! + 40 && d[k + 1]! > d[k + 2]! + 40) green++;
+        }
+      }
+      // 赤い四角の真ん中 (画像の 80/160, 45/90) と、影の緑の所 (画像の 150/160, 85/90)
+      return { green: green / n, center: at(0.2 + 0.6 * 0.5, 0.2 + 0.6 * 0.5), corner: at(0.2 + 0.6 * (145 / 160), 0.2 + 0.6 * (80 / 90)) };
+    }, shot.toString('base64'));
+  };
+  const keyed = await read();
+  expect(keyed.green, JSON.stringify(keyed)).toBeLessThan(0.01);
+  expect(keyed.center[0]!, JSON.stringify(keyed)).toBeGreaterThan(150);
+
+  // 透け具合を見る: 赤い四角は白、影の緑も黒 (透ける)
+  await page.getByRole('tab', { name: 'Overlay' }).click();
+  await page.locator('input[data-media="chroma-matte"]').check();
+  const matte = await read();
+  expect(Math.min(...matte.center), JSON.stringify(matte)).toBeGreaterThan(230);
+  expect(Math.max(...matte.corner), JSON.stringify(matte)).toBeLessThan(25);
+});

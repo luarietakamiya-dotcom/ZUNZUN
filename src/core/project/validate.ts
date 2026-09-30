@@ -263,6 +263,8 @@ function sanitizeMedia(raw: unknown): MediaLayer[] {
         tolerance: unit(ch.tolerance, d.chroma.tolerance),
         softness: unit(ch.softness, d.chroma.softness),
         spill: unit(ch.spill, d.chroma.spill),
+        // 縁を削る量は 2026-09-30 に足した。前のプロジェクトには無いので 0 (今までと同じ見た目)
+        choke: unit(ch.choke, 0),
       },
       loop: typeof item.loop === 'boolean' ? item.loop : d.loop,
     });
