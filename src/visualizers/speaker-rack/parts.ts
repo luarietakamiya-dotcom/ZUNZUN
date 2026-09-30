@@ -144,6 +144,8 @@ export class Driver {
     track: Track,
     dome = false,
     cache: GeometryCache = new GeometryCache(track),
+    /** 枠のねじ (たくさん並べるときは省いて軽くする) */
+    screws = true,
   ) {
     const R = radius;
     const key = (name: string): string => `${name}:${R}`;
@@ -158,7 +160,7 @@ export class Driver {
     ring.position.z = -0.01;
     this.group.add(ring, frame);
     const screw = cache.get(key('screw'), () => new THREE.CylinderGeometry(R * 0.035, R * 0.035, R * 0.05, 10).rotateX(Math.PI / 2));
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < (screws ? 8 : 0); i++) {
       const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
       const s = new THREE.Mesh(screw, m.metal);
       s.position.set(Math.cos(a) * R * 1.19, Math.sin(a) * R * 1.19, 0.02);

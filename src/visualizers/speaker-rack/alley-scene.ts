@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { SpeakerRackPalette } from './palette';
 import { Driver, GeometryCache, LedBars, makeKnob, type Materials, type Track } from './parts';
 
@@ -12,8 +13,10 @@ import { Driver, GeometryCache, LedBars, makeKnob, type Materials, type Track } 
 
 export const ALLEY_ROWS = 7;
 const ROW_DEPTH = 3.4;
-const FIRST_Z = 0.5;
-const CORRIDOR = 2.7;
+const FIRST_Z = -1.5;
+/** 通路の半分の幅 (手前はこれに FLARE だけ広げる) */
+const CORRIDOR = 2.8;
+const FLARE = 0.9;
 /** 1 列奥へ行くごとの遅れ (秒) */
 export const ALLEY_ROW_DELAY = 0.035;
 export const ALLEY_CAMERA = { pos: new THREE.Vector3(0, 2.1, 9.5), look: new THREE.Vector3(0, 2.6, -18), fov: 46 };
@@ -173,6 +176,21 @@ export class AlleyScene {
         return new THREE.ShapeGeometry(s, 48);
       });
 
+    const frameOf = (kind: CabKind, k: number): THREE.BufferGeometry =>
+      cache.get(`frame:${k}`, () => {
+        const parts = (
+          [
+            [0, kind.h / 2 - 0.04, kind.w, 0.08],
+            [0, -kind.h / 2 + 0.04, kind.w, 0.08],
+            [-kind.w / 2 + 0.04, 0, 0.08, kind.h],
+            [kind.w / 2 - 0.04, 0, 0.08, kind.h],
+          ] as const
+        ).map(([bx, by, bw, bh]) => new THREE.BoxGeometry(bw, bh, 0.05).translate(bx, by, 0.02));
+        const merged = mergeGeometries(parts)!;
+        for (const p of parts) p.dispose();
+        return merged;
+      });
+
     // ---- 両側の積み上げ (列ごとに、通路に近い柱と外側の高い柱)
     for (const side of [-1, 1]) {
       for (let row = 0; row < ALLEY_ROWS; row++) {
@@ -185,7 +203,7 @@ export class AlleyScene {
             const k = Math.floor(rng() * KINDS.length) % KINDS.length;
             const kind = KINDS[k]!;
             const cab = new THREE.Group();
-            if (x0 === 0) x0 = CORRIDOR + (col === 0 ? 0 : 2.7) + kind.w / 2 + rng() * 0.3;
+            if (x0 === 0) x0 = CORRIDOR + FLARE * Math.max(0, 1 - row / 3) + (col === 0 ? 0 : 2.7) + kind.w / 2 + rng() * 0.3;
             cab.position.set(side * (x0 + (rng() - 0.5) * 0.25), y + kind.h / 2, z + (rng() - 0.5) * 0.6 - col * 0.8);
             // 通路の方へ少し向ける
             cab.rotation.y = -side * (0.28 + rng() * 0.12);
@@ -195,19 +213,10 @@ export class AlleyScene {
             cab.add(body);
             // 前の面 (スピーカーの所は穴)。縁は金属
             cab.add(new THREE.Mesh(baffleOf(kind, k), m.cabinet));
-            for (const [bx, by, bw, bh] of [
-              [0, kind.h / 2 - 0.04, kind.w, 0.08],
-              [0, -kind.h / 2 + 0.04, kind.w, 0.08],
-              [-kind.w / 2 + 0.04, 0, 0.08, kind.h],
-              [kind.w / 2 - 0.04, 0, 0.08, kind.h],
-            ] as const) {
-              const e = new THREE.Mesh(box, m.darkMetal);
-              e.scale.set(bw, bh, 0.05);
-              e.position.set(bx, by, 0.02);
-              cab.add(e);
-            }
+            // 縁の 4 本は 1 つの形にまとめる (描く回数を減らす)
+            cab.add(new THREE.Mesh(frameOf(kind, k), m.darkMetal));
             for (const d of kind.drivers) {
-              const drv = new Driver(d.r, m, track, false, cache);
+              const drv = new Driver(d.r, m, track, false, cache, false);
               drv.group.position.set(d.x, d.y, 0.01);
               cab.add(drv.group);
               this.rowDrivers[row]!.push(drv);
@@ -326,7 +335,7 @@ export class AlleyScene {
   }
 
   resize(width: number, height: number, pixelRatio: number): void {
-    this.floor.getRenderTarget().setSize(Math.max(1, Math.round(width * pixelRatio * 0.5)), Math.max(1, Math.round(height * pixelRatio * 0.5)));
+    this.floor.getRenderTarget().setSize(Math.max(1, Math.round(width * pixelRatio * 0.35)), Math.max(1, Math.round(height * pixelRatio * 0.35)));
   }
 
   update(a: AlleyAudioView): void {

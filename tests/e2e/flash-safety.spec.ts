@@ -93,6 +93,7 @@ const CASES: [string, Record<string, unknown>][] = [
   ['_debug-bars', {}],
   ['speaker-rack', {}],
   ['speaker-rack', { framing: 'closeup' }],
+  ['speaker-rack', { layout: 'alley' }],
   ['live-stage', {}],
   ['live-stage', { towardCrowd: 1 }],
   ['live-stage', { towardCrowd: 1, cameraSpot: 'front' }],

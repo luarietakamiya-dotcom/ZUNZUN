@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { makeRng } from '../../core/random';
 import { defaultCommonParams, type AudioFrame, type CommonParams } from '../../core/types';
-import { bandsToBars, PeakMeter, stepSpring, vuTarget } from './parts';
+import { bandsToBars, DelayLine, PeakMeter, stepSpring, vuTarget } from './parts';
 import { SpeakerRackPreset } from './preset';
 
 /**
@@ -74,6 +74,18 @@ describe('動きの計算 (parts)', () => {
     expect(m.peak[0]).toBeGreaterThan(0.9);
     for (let i = 0; i < 120; i++) m.update([0], 1 / 60);
     expect(m.peak[0]).toBeLessThan(0.05);
+  });
+
+  it('ディレイは delay 秒前の値を返す (0 なら今の値)。範囲外の delay は端に収める', () => {
+    // 最初の 0.5 秒は 0、あとの 0.5 秒は 1
+    const d = new DelayLine(0.8);
+    for (let i = 0; i < 60; i++) d.push(i < 30 ? 0 : 1, 1 / 60);
+    expect(d.get(0)).toBe(1);
+    expect(d.get(0.25)).toBe(1);
+    expect(d.get(0.7)).toBe(0);
+    // いちばん長い遅れ (0.8 秒) に収める
+    expect(d.get(99)).toBe(0);
+    expect(d.get(Number.NaN)).toBe(1);
   });
 
   it('VU メーターの目標は 0..1 (平方根で振る)', () => {
@@ -172,6 +184,49 @@ describe('SpeakerRackPreset', () => {
     expect(wide.camera.position.z).toBeCloseTo(full, 6);
     wide.dispose();
     tall.dispose();
+  });
+
+  it('並び「スピーカーの通路」: 通路だけが見え、どの列にもスピーカーがある。壊れた値はラック', () => {
+    const p = makePreset();
+    // 実際にそれぞれのまとまりが表示されているか
+    const inner = p as unknown as { rack: { group: THREE.Group }; alley: { group: THREE.Group } };
+    const visible = (): { rack: boolean; alley: boolean } => ({ rack: inner.rack.group.visible, alley: inner.alley.group.visible });
+    p.update(frame(0), params());
+    expect(visible()).toEqual({ rack: true, alley: false });
+    p.update(frame(0), params({ layout: 'alley' }));
+    expect(visible()).toEqual({ rack: false, alley: true });
+    expect(p.scene.fog).not.toBeNull();
+    for (const n of p.alleyCounts()) expect(n).toBeGreaterThan(0);
+    p.update(frame(0), params({ layout: 'nope' }));
+    expect(visible()).toEqual({ rack: true, alley: false });
+    expect(p.inspect().layout).toBe('rack');
+    expect(p.scene.fog).toBeNull();
+    p.dispose();
+  });
+
+  it('通路では、低音の波が手前から奥へ伝わる (奥の列ほど遅れて動く)', () => {
+    const p = makePreset();
+    const pr = params({ layout: 'alley' });
+    run(p, 30, () => ({}), pr);
+    run(p, 3, () => ({ bass: 1 }), pr);
+    const early = p.inspect().alleyRows;
+    // すぐは手前の列だけが動き、いちばん奥はまだ動かない
+    expect(early[0]).toBeGreaterThan(0.1);
+    expect(Math.abs(early[early.length - 1]!)).toBeLessThan(0.02);
+    run(p, 12, () => ({ bass: 1 }), pr);
+    const later = p.inspect().alleyRows;
+    expect(later[later.length - 1]).toBeGreaterThan(0.1);
+    p.dispose();
+  });
+
+  it('並びを途中で変えても、つまみの角度などの見た目は同じ (乱数を引く順番が変わらない)', () => {
+    const a = makePreset(9);
+    const b = makePreset(9, params({ layout: 'alley' }));
+    b.update(frame(0), params({ layout: 'rack' }));
+    a.update(frame(0), params());
+    expect(snapshot(b)).toEqual(snapshot(a));
+    a.dispose();
+    b.dispose();
   });
 
   it('dt=0 や極端な dt・値でも NaN にならない', () => {
