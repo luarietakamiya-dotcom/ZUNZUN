@@ -2,13 +2,15 @@ import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { SpeakerRackPalette } from './palette';
-import { Driver, GeometryCache, LedBars, makeKnob, type Materials, type Track } from './parts';
+import { DriverField, GeometryCache, type Materials, type Track } from './parts';
 
 /**
  * 並び「積み上げたスピーカーの通路」(参考画像③)。奥へ続く通路の両側に、大きさの違うスピーカーを積み上げる。
  * 奥にはスモーク、上からは青白い光の筋、積み上げのあいだに琥珀色の灯り、濡れた床に映り込む。
  * 低音でコーンが動き、手前から奥へ少しずつ遅れて動く (波が奥へ伝わって見える。遅れは preset の DelayLine)。
  * 大きさ・積み方のばらつきは preset から渡される rng (ctx.rng) で決める。
+ * 部品が多い (箱 80 前後・スピーカー 100 前後) ので、同じ種類の部品はまとめて描く (InstancedMesh)。
+ * 1 つずつ描くと 1,500 回ほど描くことになり、ヘッドレスのテストで 1 コマに 1 秒以上かかった。
  */
 
 export const ALLEY_ROWS = 7;
@@ -19,6 +21,11 @@ const CORRIDOR = 2.8;
 const FLARE = 0.9;
 /** 1 列奥へ行くごとの遅れ (秒) */
 export const ALLEY_ROW_DELAY = 0.035;
+/**
+ * 床に映すものの印 (three.js の layers)。濡れた床に映るのは光 (上からの光の筋・灯り・LED・スモーク) だけにする。
+ * 暗いスピーカーは映ってもほとんど見えず、映すと全部をもう一度描くことになって、とても重かった (1 コマの時間が約 4 倍)
+ */
+export const REFLECT_LAYER = 1;
 export const ALLEY_CAMERA = { pos: new THREE.Vector3(0, 2.1, 9.5), look: new THREE.Vector3(0, 2.6, -18), fov: 46 };
 
 /** 箱の種類: 大きさとスピーカー (半径と数) */
@@ -143,9 +150,14 @@ export interface AlleyAudioView {
 
 export class AlleyScene {
   readonly group = new THREE.Group();
-  /** 列ごとのスピーカー (動かすもの) */
-  private readonly rowDrivers: Driver[][] = [];
-  private readonly racks: LedBars[] = [];
+  /** スピーカー (列ごとに同じ動き) */
+  private readonly drivers: DriverField;
+  /** 機材の LED (全部の機材を 1 つにまとめる。1 台 = 8 本 × 3 段) */
+  private readonly leds: THREE.InstancedMesh;
+  private readonly ledCount: number;
+  private readonly led = new THREE.Color();
+  private readonly ledHot = new THREE.Color();
+  private readonly tmpColor = new THREE.Color();
   private readonly floor: Reflector;
   private readonly floorUniforms: Record<string, THREE.IUniform>;
   private readonly hazeMaterials: THREE.ShaderMaterial[] = [];
@@ -154,11 +166,12 @@ export class AlleyScene {
   private readonly accentLights: THREE.PointLight[] = [];
   private readonly accent = new THREE.Color();
   private readonly spectrumBars = new Float32Array(8);
+  private readonly instancedMeshes: THREE.InstancedMesh[] = [];
 
   constructor(m: Materials, track: Track, rng: () => number, haloTexture: THREE.Texture) {
     const cache = new GeometryCache(track);
     const box = cache.get('box', () => new THREE.BoxGeometry(1, 1, 1));
-    for (let r = 0; r < ALLEY_ROWS; r++) this.rowDrivers.push([]);
+    this.drivers = new DriverField(m, cache);
 
     const baffleOf = (kind: CabKind, k: number): THREE.BufferGeometry =>
       cache.get(`baffle:${k}`, () => {
@@ -175,7 +188,6 @@ export class AlleyScene {
         }
         return new THREE.ShapeGeometry(s, 48);
       });
-
     const frameOf = (kind: CabKind, k: number): THREE.BufferGeometry =>
       cache.get(`frame:${k}`, () => {
         const parts = (
@@ -191,7 +203,14 @@ export class AlleyScene {
         return merged;
       });
 
-    // ---- 両側の積み上げ (列ごとに、通路に近い柱と外側の高い柱)
+    // ---- 両側の積み上げ (列ごとに、通路に近い柱と外側の高い柱)。置き場所を集めてから、種類ごとにまとめて描く
+    const bodies: THREE.Matrix4[] = [];
+    const fronts = KINDS.map(() => [] as THREE.Matrix4[]);
+    const ledSpots: THREE.Matrix4[] = [];
+    const cab = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    const tmp = new THREE.Matrix4();
     for (const side of [-1, 1]) {
       for (let row = 0; row < ALLEY_ROWS; row++) {
         const z = FIRST_Z - row * ROW_DEPTH;
@@ -202,42 +221,45 @@ export class AlleyScene {
           while (y < target) {
             const k = Math.floor(rng() * KINDS.length) % KINDS.length;
             const kind = KINDS[k]!;
-            const cab = new THREE.Group();
             if (x0 === 0) x0 = CORRIDOR + FLARE * Math.max(0, 1 - row / 3) + (col === 0 ? 0 : 2.7) + kind.w / 2 + rng() * 0.3;
-            cab.position.set(side * (x0 + (rng() - 0.5) * 0.25), y + kind.h / 2, z + (rng() - 0.5) * 0.6 - col * 0.8);
+            const pos = new THREE.Vector3(side * (x0 + (rng() - 0.5) * 0.25), y + kind.h / 2, z + (rng() - 0.5) * 0.6 - col * 0.8);
             // 通路の方へ少し向ける
-            cab.rotation.y = -side * (0.28 + rng() * 0.12);
-            const body = new THREE.Mesh(box, m.cabinet);
-            body.scale.set(kind.w, kind.h, CAB_DEPTH);
-            body.position.z = -0.35 - CAB_DEPTH / 2;
-            cab.add(body);
-            // 前の面 (スピーカーの所は穴)。縁は金属
-            cab.add(new THREE.Mesh(baffleOf(kind, k), m.cabinet));
-            // 縁の 4 本は 1 つの形にまとめる (描く回数を減らす)
-            cab.add(new THREE.Mesh(frameOf(kind, k), m.darkMetal));
-            for (const d of kind.drivers) {
-              const drv = new Driver(d.r, m, track, false, cache, false);
-              drv.group.position.set(d.x, d.y, 0.01);
-              cab.add(drv.group);
-              this.rowDrivers[row]!.push(drv);
-            }
+            q.setFromAxisAngle(up, -side * (0.28 + rng() * 0.12));
+            cab.compose(pos, q, new THREE.Vector3(1, 1, 1));
+            bodies.push(cab.clone().multiply(tmp.makeTranslation(0, 0, -0.35 - CAB_DEPTH / 2)).multiply(tmp.makeScale(kind.w, kind.h, CAB_DEPTH)));
+            fronts[k]!.push(cab.clone());
+            for (const d of kind.drivers) this.drivers.add(cab.clone().multiply(tmp.makeTranslation(d.x, d.y, 0.01)), d.r, row);
             if (kind.rack) {
-              const leds = new LedBars(8, 3, { w: 0.12, h: 0.06, gapX: 0.05, gapY: 0.03 }, m.glowBasic, track, 0.7);
-              leds.mesh.position.set(-0.35, -0.1, 0.03);
-              cab.add(leds.mesh);
-              this.racks.push(leds);
-              for (const kx of [0.55, 0.82]) {
-                const knob = makeKnob(0.1, (rng() - 0.5) * 4, m, track);
-                knob.position.set(kx, 0, 0.02);
-                cab.add(knob);
-              }
+              for (let b = 0; b < 8; b++) for (let sgm = 0; sgm < 3; sgm++) ledSpots.push(cab.clone().multiply(tmp.makeTranslation(-0.35 + (b - 3.5) * 0.17, -0.1 + sgm * 0.09, 0.03)));
             }
-            this.group.add(cab);
             y += kind.h + 0.02;
           }
         }
       }
     }
+    const instanced = (geo: THREE.BufferGeometry, mat: THREE.Material, list: THREE.Matrix4[]): void => {
+      if (list.length === 0) return;
+      const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+      list.forEach((mm, i) => mesh.setMatrixAt(i, mm));
+      mesh.frustumCulled = false;
+      this.instancedMeshes.push(mesh);
+      this.group.add(mesh);
+    };
+    instanced(box, m.cabinet, bodies);
+    KINDS.forEach((kind, k) => {
+      instanced(baffleOf(kind, k), m.cabinet, fronts[k]!);
+      instanced(frameOf(kind, k), m.darkMetal, fronts[k]!);
+    });
+    this.drivers.build();
+    this.group.add(this.drivers.group);
+    this.ledCount = ledSpots.length;
+    this.leds = new THREE.InstancedMesh(cache.get('led', () => new THREE.BoxGeometry(0.12, 0.06, 0.03)), m.glowBasic, Math.max(1, ledSpots.length));
+    ledSpots.forEach((mm, i) => this.leds.setMatrixAt(i, mm));
+    for (let i = 0; i < Math.max(1, ledSpots.length); i++) this.leds.setColorAt(i, this.tmpColor.setRGB(0, 0, 0));
+    this.leds.count = ledSpots.length;
+    this.leds.frustumCulled = false;
+    this.leds.layers.enable(REFLECT_LAYER);
+    this.group.add(this.leds);
 
     // ---- 濡れた床
     this.floor = new Reflector(cache.get('floor', () => new THREE.PlaneGeometry(40, 70)), {
@@ -249,6 +271,7 @@ export class AlleyScene {
     });
     this.floor.rotation.x = -Math.PI / 2;
     this.floor.position.z = -18;
+    this.floor.camera.layers.set(REFLECT_LAYER);
     this.floorUniforms = (this.floor.material as THREE.ShaderMaterial).uniforms;
     this.group.add(this.floor);
 
@@ -269,6 +292,7 @@ export class AlleyScene {
       const haze = new THREE.Mesh(hazeGeo, hm);
       haze.position.set(0, 3.4, z);
       haze.renderOrder = 1;
+      haze.layers.enable(REFLECT_LAYER);
       this.hazeMaterials.push(hm);
       this.group.add(haze);
     }
@@ -299,11 +323,13 @@ export class AlleyScene {
       // 円錐の -Y を、光の向きへ
       cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), target.clone().sub(pos).normalize());
       cone.renderOrder = 2;
+      cone.layers.enable(REFLECT_LAYER);
       this.coneMaterials.push(cm);
       this.group.add(cone);
       const lamp = new THREE.Sprite(track(new THREE.SpriteMaterial({ map: haloTexture, color: new THREE.Color(2.0, 2.2, 2.6), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })));
       lamp.position.copy(pos);
       lamp.scale.setScalar(0.9);
+      lamp.layers.enable(REFLECT_LAYER);
       this.group.add(lamp);
     }
 
@@ -322,6 +348,7 @@ export class AlleyScene {
       g.position.set(x, y, z);
       g.scale.setScalar(3.2);
       g.renderOrder = 3;
+      g.layers.enable(REFLECT_LAYER);
       this.group.add(l, g);
     }
   }
@@ -329,7 +356,8 @@ export class AlleyScene {
   applyPalette(p: SpeakerRackPalette): void {
     this.accent.copy(p.accent);
     for (const l of this.accentLights) l.color.copy(p.accent);
-    for (const r of this.racks) r.setColors(p.led, p.ledHot);
+    this.led.copy(p.led);
+    this.ledHot.copy(p.ledHot);
     for (const h of this.hazeMaterials) (h.uniforms.color!.value as THREE.Color).setRGB(0.35, 0.4, 0.5);
     (this.floorUniforms.floorColor!.value as THREE.Color).copy(p.background).multiplyScalar(1.5);
   }
@@ -339,13 +367,17 @@ export class AlleyScene {
   }
 
   update(a: AlleyAudioView): void {
-    for (let r = 0; r < ALLEY_ROWS; r++) {
-      const e = a.rows[r] ?? 0;
-      for (const d of this.rowDrivers[r]!) d.setExcursion(e);
-    }
-    // 機材の LED は、スペクトラムを 8 本にまとめたもの
+    this.drivers.setExcursion(a.rows);
+    // 機材の LED は、スペクトラムを 8 本にまとめたもの (1 本 3 段。いちばん上は ledHot)
     for (let i = 0; i < 8; i++) this.spectrumBars[i] = a.spectrum[Math.floor(((i + 0.5) / 8) * a.spectrum.length)] ?? 0;
-    for (const r of this.racks) r.write(this.spectrumBars);
+    for (let i = 0; i < this.ledCount; i++) {
+      const b = Math.floor(i / 3) % 8;
+      const sgm = i % 3;
+      const lit = Math.round(Math.min(1, Math.max(0, this.spectrumBars[b]!)) * 3) > sgm;
+      this.tmpColor.copy(sgm === 2 ? this.ledHot : this.led).multiplyScalar(lit ? 1 : 0.035);
+      this.leds.setColorAt(i, this.tmpColor);
+    }
+    if (this.leds.instanceColor) this.leds.instanceColor.needsUpdate = true;
     const lvl = 0.8 + 0.2 * (Number.isFinite(a.accent) ? Math.min(1, Math.max(0, a.accent)) : 0);
     for (const l of this.accentLights) l.intensity = 5 * lvl;
     this.glowMaterial.color.copy(this.accent).multiplyScalar(0.45 * lvl);
@@ -354,11 +386,20 @@ export class AlleyScene {
 
   /** テスト用: 列ごとのスピーカーの数と、各列の最初のスピーカーの動き */
   inspectRows(): { counts: number[]; excursion: number[] } {
-    return { counts: this.rowDrivers.map((r) => r.length), excursion: this.rowDrivers.map((r) => r[0]?.excursion ?? 0) };
+    return this.drivers.inspect();
+  }
+
+  /** テスト用: 描く回数の目安 (このまとまりの中の物の数) */
+  get objectCount(): number {
+    let n = 0;
+    this.group.traverse(() => n++);
+    return n;
   }
 
   dispose(): void {
-    for (const r of this.racks) r.mesh.dispose();
+    this.drivers.dispose();
+    for (const mesh of this.instancedMeshes) mesh.dispose();
+    this.leds.dispose();
     this.floor.dispose();
     this.group.clear();
   }

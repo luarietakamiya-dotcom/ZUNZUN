@@ -197,6 +197,9 @@ describe('SpeakerRackPreset', () => {
     expect(visible()).toEqual({ rack: false, alley: true });
     expect(p.scene.fog).not.toBeNull();
     for (const n of p.alleyCounts()) expect(n).toBeGreaterThan(0);
+    // 同じ種類の部品はまとめて描く (1 つずつだと 1,500 回ほど描くことになり、とても重かった)
+    const alleyObjects = (p as unknown as { alley: { objectCount: number } }).alley.objectCount;
+    expect(alleyObjects).toBeLessThan(100);
     p.update(frame(0), params({ layout: 'nope' }));
     expect(visible()).toEqual({ rack: true, alley: false });
     expect(p.inspect().layout).toBe('rack');

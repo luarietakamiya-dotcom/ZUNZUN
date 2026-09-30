@@ -130,6 +130,40 @@ export class GeometryCache {
 
 // ---------------------------------------------------------------- ウーファー・ツイーター
 
+/** スピーカーの部品の形 (半径ごとに 1 度だけ作る) */
+export interface DriverGeometry {
+  frame: THREE.BufferGeometry;
+  ring: THREE.BufferGeometry;
+  surround: THREE.BufferGeometry;
+  cone: THREE.BufferGeometry;
+  cap: THREE.BufferGeometry;
+  dome: THREE.BufferGeometry;
+  screw: THREE.BufferGeometry;
+}
+export function driverGeometry(cache: GeometryCache, R: number): DriverGeometry {
+  const key = (name: string): string => `${name}:${R}`;
+  return {
+    frame: cache.get(key('frame'), () => new THREE.TorusGeometry(R * 1.1, R * 0.07, 12, 72)),
+    ring: cache.get(key('ring'), () => new THREE.RingGeometry(R * 1.02, R * 1.26, 72)),
+    surround: cache.get(key('surround'), () => new THREE.TorusGeometry(R * 0.96, R * 0.075, 12, 72)),
+    // コーン: 縁 (半径 0.9R) から中心 (0.32R) へ、奥へ向かってゆるく曲がる面
+    cone: cache.get(key('cone'), () => {
+      const pts: THREE.Vector2[] = [];
+      for (let k = 0; k <= 12; k++) {
+        const f = k / 12;
+        pts.push(new THREE.Vector2(R * (0.9 - 0.58 * f), -R * 0.36 * Math.pow(f, 0.8)));
+      }
+      return new THREE.LatheGeometry(pts, 72).rotateX(Math.PI / 2);
+    }),
+    cap: cache.get(key('cap'), () => new THREE.SphereGeometry(R * 0.33, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2)),
+    dome: cache.get(key('dome'), () => new THREE.SphereGeometry(R * 0.85, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2)),
+    screw: cache.get(key('screw'), () => new THREE.CylinderGeometry(R * 0.035, R * 0.035, R * 0.05, 10).rotateX(Math.PI / 2)),
+  };
+}
+
+/** 前後の動き (−1.2..1.2) を収める */
+const clampExcursion = (e: number): number => (Number.isFinite(e) ? Math.min(1.2, Math.max(-1.2, e)) : 0);
+
 /**
  * スピーカー 1 つ (枠・ねじ・ふちのゴム・コーン・中央のキャップ)。コーンとキャップは excursion (−1..1) で前後に動き、
  * ふちのゴムはたわむ。dome = true ならツイーター (コーンの代わりに丸いドーム)
@@ -144,52 +178,28 @@ export class Driver {
     track: Track,
     dome = false,
     cache: GeometryCache = new GeometryCache(track),
-    /** 枠のねじ (たくさん並べるときは省いて軽くする) */
-    screws = true,
   ) {
     const R = radius;
-    const key = (name: string): string => `${name}:${R}`;
-    const frame = new THREE.Mesh(
-      cache.get(key('frame'), () => new THREE.TorusGeometry(R * 1.1, R * 0.07, 12, 72)),
-      m.metal,
-    );
-    const ring = new THREE.Mesh(
-      cache.get(key('ring'), () => new THREE.RingGeometry(R * 1.02, R * 1.26, 72)),
-      m.darkMetal,
-    );
+    const g = driverGeometry(cache, R);
+    const frame = new THREE.Mesh(g.frame, m.metal);
+    const ring = new THREE.Mesh(g.ring, m.darkMetal);
     ring.position.z = -0.01;
     this.group.add(ring, frame);
-    const screw = cache.get(key('screw'), () => new THREE.CylinderGeometry(R * 0.035, R * 0.035, R * 0.05, 10).rotateX(Math.PI / 2));
-    for (let i = 0; i < (screws ? 8 : 0); i++) {
+    for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-      const s = new THREE.Mesh(screw, m.metal);
+      const s = new THREE.Mesh(g.screw, m.metal);
       s.position.set(Math.cos(a) * R * 1.19, Math.sin(a) * R * 1.19, 0.02);
       this.group.add(s);
     }
-    this.surround = new THREE.Mesh(
-      cache.get(key('surround'), () => new THREE.TorusGeometry(R * 0.96, R * 0.075, 12, 72)),
-      m.rubber,
-    );
+    this.surround = new THREE.Mesh(g.surround, m.rubber);
     this.group.add(this.surround);
     if (dome) {
-      const d = cache.get(key('dome'), () => new THREE.SphereGeometry(R * 0.85, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2));
-      const dm = new THREE.Mesh(d, m.cone);
+      const dm = new THREE.Mesh(g.dome, m.cone);
       dm.scale.z = 0.45;
       this.moving.add(dm);
     } else {
-      // コーン: 縁 (半径 0.9R) から中心 (0.32R) へ、奥へ向かってゆるく曲がる面
-      const cone = cache.get(key('cone'), () => {
-        const pts: THREE.Vector2[] = [];
-        for (let k = 0; k <= 12; k++) {
-          const f = k / 12;
-          pts.push(new THREE.Vector2(R * (0.9 - 0.58 * f), -R * 0.36 * Math.pow(f, 0.8)));
-        }
-        return new THREE.LatheGeometry(pts, 72).rotateX(Math.PI / 2);
-      });
-      const cm = new THREE.Mesh(cone, m.cone);
-      this.moving.add(cm);
-      const cap = cache.get(key('cap'), () => new THREE.SphereGeometry(R * 0.33, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2));
-      const capMesh = new THREE.Mesh(cap, m.darkMetal);
+      this.moving.add(new THREE.Mesh(g.cone, m.cone));
+      const capMesh = new THREE.Mesh(g.cap, m.darkMetal);
       capMesh.position.z = -R * 0.33;
       capMesh.scale.z = 0.55;
       this.moving.add(capMesh);
@@ -199,7 +209,7 @@ export class Driver {
 
   /** 前後の動き (−1..1)。1 = いちばん前 (半径の 12%) */
   setExcursion(e: number): void {
-    const x = Number.isFinite(e) ? Math.min(1.2, Math.max(-1.2, e)) : 0;
+    const x = clampExcursion(e);
     this.moving.position.z = x * this.radius * 0.12;
     this.surround.scale.z = 1 + Math.max(0, x) * 0.9;
     this.surround.position.z = x * this.radius * 0.04;
@@ -207,6 +217,94 @@ export class Driver {
 
   get excursion(): number {
     return this.moving.position.z / (this.radius * 0.12);
+  }
+}
+
+/**
+ * たくさんのスピーカー (通路の積み上げ) を、部品ごとにまとめて描く (InstancedMesh。描く回数を部品の種類の数まで減らす)。
+ * ねじは省く。スピーカーはグループ (通路の列) ごとに同じ動きをする
+ */
+export class DriverField {
+  readonly group = new THREE.Group();
+  private readonly items: { base: THREE.Matrix4; R: number; group: number }[] = [];
+  private readonly meshes = new Map<number, { ring: THREE.InstancedMesh; frame: THREE.InstancedMesh; surround: THREE.InstancedMesh; cone: THREE.InstancedMesh; cap: THREE.InstancedMesh; ids: number[] }>();
+  private readonly excursion: number[] = [];
+  private readonly m = new THREE.Matrix4();
+  private readonly t = new THREE.Matrix4();
+  constructor(
+    private readonly materials: Materials,
+    private readonly cache: GeometryCache,
+  ) {}
+
+  /** スピーカーを 1 つ置く (base = 置き場所の行列、group = 同じ動きをするまとまりの番号) */
+  add(base: THREE.Matrix4, R: number, group: number): void {
+    this.items.push({ base: base.clone(), R, group });
+    while (this.excursion.length <= group) this.excursion.push(0);
+  }
+
+  /** 置き終わったら 1 度だけ呼ぶ */
+  build(): void {
+    const byR = new Map<number, number[]>();
+    this.items.forEach((it, i) => byR.set(it.R, [...(byR.get(it.R) ?? []), i]));
+    const m = this.materials;
+    for (const [R, ids] of byR) {
+      const g = driverGeometry(this.cache, R);
+      const make = (geo: THREE.BufferGeometry, mat: THREE.Material): THREE.InstancedMesh => {
+        const mesh = new THREE.InstancedMesh(geo, mat, ids.length);
+        mesh.frustumCulled = false;
+        this.group.add(mesh);
+        return mesh;
+      };
+      const set = { ring: make(g.ring, m.darkMetal), frame: make(g.frame, m.metal), surround: make(g.surround, m.rubber), cone: make(g.cone, m.cone), cap: make(g.cap, m.darkMetal), ids };
+      ids.forEach((id, k) => {
+        const it = this.items[id]!;
+        set.frame.setMatrixAt(k, it.base);
+        set.ring.setMatrixAt(k, this.m.copy(it.base).multiply(this.t.makeTranslation(0, 0, -0.01)));
+      });
+      set.frame.instanceMatrix.needsUpdate = true;
+      set.ring.instanceMatrix.needsUpdate = true;
+      this.meshes.set(R, set);
+    }
+    this.write();
+  }
+
+  /** グループごとの前後の動き */
+  setExcursion(values: ArrayLike<number>): void {
+    for (let g = 0; g < this.excursion.length; g++) this.excursion[g] = clampExcursion(values[g] ?? 0);
+    this.write();
+  }
+
+  /** テスト用: グループごとのスピーカーの数と動き */
+  inspect(): { counts: number[]; excursion: number[] } {
+    const counts = this.excursion.map(() => 0);
+    for (const it of this.items) counts[it.group]!++;
+    return { counts, excursion: [...this.excursion] };
+  }
+
+  /** 描く回数 (まとめた InstancedMesh の数) */
+  get drawCalls(): number {
+    return this.group.children.length;
+  }
+
+  dispose(): void {
+    for (const set of this.meshes.values()) for (const mesh of [set.ring, set.frame, set.surround, set.cone, set.cap]) mesh.dispose();
+    this.group.clear();
+  }
+
+  private write(): void {
+    for (const [R, set] of this.meshes) {
+      set.ids.forEach((id, k) => {
+        const it = this.items[id]!;
+        const e = this.excursion[it.group] ?? 0;
+        const off = e * R * 0.12;
+        set.cone.setMatrixAt(k, this.m.copy(it.base).multiply(this.t.makeTranslation(0, 0, off)));
+        set.cap.setMatrixAt(k, this.m.copy(it.base).multiply(this.t.makeTranslation(0, 0, off - R * 0.33)).multiply(this.t.makeScale(1, 1, 0.55)));
+        set.surround.setMatrixAt(k, this.m.copy(it.base).multiply(this.t.makeTranslation(0, 0, e * R * 0.04)).multiply(this.t.makeScale(1, 1, 1 + Math.max(0, e) * 0.9)));
+      });
+      set.cone.instanceMatrix.needsUpdate = true;
+      set.cap.instanceMatrix.needsUpdate = true;
+      set.surround.instanceMatrix.needsUpdate = true;
+    }
   }
 }
 

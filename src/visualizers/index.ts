@@ -2,6 +2,7 @@ import { visualizerRegistry } from '../core/visualizer/registry';
 import { debugBarsModule } from './_debug';
 import { liveStageModule } from './live-stage';
 import { milkyWayModule } from './milky-way';
+import { photoMotionModule } from './photo-motion';
 import { solarGateModule } from './solar-gate';
 import { speakerRackModule } from './speaker-rack';
 
@@ -14,6 +15,7 @@ visualizerRegistry.register(solarGateModule);
 visualizerRegistry.register(milkyWayModule);
 visualizerRegistry.register(liveStageModule);
 visualizerRegistry.register(speakerRackModule);
+visualizerRegistry.register(photoMotionModule);
 visualizerRegistry.register(debugBarsModule);
 
 export { visualizerRegistry };
