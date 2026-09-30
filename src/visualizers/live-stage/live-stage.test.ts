@@ -338,6 +338,45 @@ describe('ステージの機材 (stageSet)', () => {
     b.dispose();
   });
 
+  type Gear = { kickPush: number; conePush: number; ledsLit: number; sparkle: number; drumsVisible: boolean };
+  const gearOf = (p: LiveStagePreset): Gear => (p as unknown as { stageSet: { inspect(): { gear: Gear } } }).stageSet.inspect().gear;
+  const band = (o: Partial<CommonParams> & Record<string, unknown> = {}): Params => params({ stageSet: 'band', ...o } as never);
+
+  it('機材は音で動く: bass でバスドラムの面とコーンが押し出され、high でシンバルが光り、音量で LED が伸びる。音が無ければ止まる', () => {
+    const p = makePreset(5, band());
+    run(p, 60, () => ({}), band());
+    const quiet = gearOf(p);
+    expect(quiet.kickPush).toBeLessThan(1e-6);
+    expect(quiet.conePush).toBeLessThan(1e-6);
+    expect(quiet.ledsLit).toBe(0);
+    expect(quiet.sparkle).toBeLessThan(1e-6);
+    run(p, 20, () => ({ bass: 1, high: 1, rms: 0.8 }), band());
+    const loud = gearOf(p);
+    expect(loud.kickPush).toBeGreaterThan(0.03);
+    expect(loud.conePush).toBeGreaterThan(0.02);
+    expect(loud.ledsLit).toBeGreaterThanOrEqual(6);
+    expect(loud.sparkle).toBeGreaterThan(0.4);
+    // 音が止むと戻る
+    run(p, 120, () => ({}), band());
+    expect(gearOf(p).kickPush).toBeLessThan(0.002);
+    expect(gearOf(p).ledsLit).toBe(0);
+    // Intensity 0 なら動かない
+    run(p, 30, () => ({ bass: 1, high: 1 }), band({ intensity: 0 }));
+    expect(gearOf(p).kickPush).toBeLessThan(0.002);
+    p.dispose();
+  });
+
+  it('ステージの奥からのカメラではドラムを隠す (シンバルが目の前を覆わない)。ほかの場所では見える', () => {
+    const p = makePreset(5, band());
+    for (const spot of ['back', 'front', 'side', 'top'] as const) {
+      p.update(frame(0), band({ cameraSpot: spot, cameraMotion: 0 }));
+      expect(gearOf(p).drumsVisible, spot).toBe(true);
+    }
+    p.update(frame(0), band({ cameraSpot: 'stage', cameraMotion: 0 }));
+    expect(gearOf(p).drumsVisible).toBe(false);
+    p.dispose();
+  });
+
   it('縦長にすると幕が内側へ寄るが、トラスの部材の数は変わらない。dispose で落ちない', () => {
     const p = makePreset(3, params({ stageSet: 'band' } as never));
     p.update(frame(0), params({ stageSet: 'band' } as never));

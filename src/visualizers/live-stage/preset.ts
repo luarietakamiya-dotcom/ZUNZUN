@@ -229,7 +229,7 @@ export class LiveStagePreset implements VisualizerPreset {
     this.buildLasers();
     this.buildWash();
     // 舞台の機材 (rng は使わない。stage-set.ts の説明)
-    this.stageSet = new StageSet({ trussY: TRUSS_Y, trussZ: TRUSS_Z, span: FIXTURE_COUNT * FIXTURE_SPACING + 1, wallZ: WALL_Z });
+    this.stageSet = new StageSet({ trussY: TRUSS_Y, trussZ: TRUSS_Z, span: FIXTURE_COUNT * FIXTURE_SPACING + 1, wallZ: WALL_Z }, this.track(makeRadialTexture()));
     this.scene.add(this.stageSet.group);
     this.applyStageSet(ctx.params);
 
@@ -289,7 +289,7 @@ export class LiveStagePreset implements VisualizerPreset {
     for (const m of this.beamMaterials) m.uniforms.time!.value = (m.uniforms.time!.value as number) + dt * flowSpeed;
     this.wallMaterial.uniforms.glow!.value = 0.1 + (this.smoke * 0.4 + a.beat * 0.15) * intensity;
     this.applyStageSet(params);
-    this.stageSet?.update(this.wallMaterial.uniforms.glow!.value as number);
+    this.stageSet?.update(dt, { bass: a.bass, high: a.high, rms: finite01(shaped.rms) }, intensity, this.wallMaterial.uniforms.glow!.value as number, this.camera.position);
 
     // high → レーザーのストロボ
     this.updateStrobe(dt, a.high, intensity, motion);

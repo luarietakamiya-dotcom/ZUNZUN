@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { BandGear, type GearAudio } from './band-gear';
 import type { LiveStagePalette } from './palette';
 
 /**
  * Live Stage の舞台の機材 (このプリセットだけの設定 stageSet。既定 'none' = 今までどおり照明だけ)。
- * 'band' のとき: 格子のトラスと左右の柱 (門の形)、左右の黒い幕、奥のドラムの台。
+ * 'band' のとき: 格子のトラスと左右の柱 (門の形)、左右の黒い幕、奥のドラムの台、ドラム・アンプ・マイクスタンド (band-gear.ts)。
  * 機材は暗いシルエットにして、主役は照明のままにする。
  *
  * 形のばらつきに ctx.rng は使わない (rng を 1 回でも多く引くと、そのあとに選ばれるライトのパターンがずれて、
@@ -117,9 +118,14 @@ export class StageSet {
   private readonly drapes: THREE.Mesh[] = [];
   private readonly riser: THREE.Mesh;
   private readonly box: THREE.BoxGeometry;
+  private readonly gear: BandGear;
   private name: StageSetName = 'none';
 
-  constructor(private readonly dims: StageDims) {
+  /** sparkleTexture = シンバルのきらめきに使う丸い光 (preset の灯体と同じもの。片づけは preset 側) */
+  constructor(
+    private readonly dims: StageDims,
+    sparkleTexture: THREE.Texture,
+  ) {
     this.metal = this.track(new THREE.MeshBasicMaterial({ color: 0x000000 }));
     this.riserMaterial = this.track(new THREE.MeshBasicMaterial({ color: 0x000000 }));
     this.drapeMaterial = this.track(
@@ -145,6 +151,8 @@ export class StageSet {
     }
     this.riser = new THREE.Mesh(this.box, this.riserMaterial);
     this.group.add(this.riser);
+    this.gear = new BandGear({ riserTop: RISER.h, riserZ: dims.wallZ + RISER.fromWall }, (o) => this.track(o), sparkleTexture);
+    this.group.add(this.gear.group);
     this.group.visible = false;
     this.layout(1);
   }
@@ -174,6 +182,7 @@ export class StageSet {
     this.drapes[1]!.position.set(DRAPE_X * scale, DRAPE_H / 2, zMid);
     this.riser.scale.set(RISER.w * Math.max(0.6, scale), RISER.h, RISER.d);
     this.riser.position.set(0, RISER.h / 2, wallZ + RISER.fromWall);
+    this.gear?.layout(scale);
   }
 
   applyPalette(p: LiveStagePalette): void {
@@ -182,16 +191,21 @@ export class StageSet {
     this.riserMaterial.color.copy(p.fixture).multiplyScalar(1.6);
     (this.drapeMaterial.uniforms.baseColor!.value as THREE.Color).copy(p.wall);
     (this.drapeMaterial.uniforms.glowColor!.value as THREE.Color).copy(p.wallGlow);
+    this.gear.applyPalette(p);
   }
 
-  /** 毎フレーム: 幕の照り返しを壁と同じ明るさにする */
-  update(wallGlow: number): void {
-    this.drapeMaterial.uniforms.glow!.value = Number.isFinite(wallGlow) ? wallGlow : 0;
+  /** 毎フレーム: 幕の照り返しを壁と同じ明るさにし、機材を音で動かす (機材なしのときは何もしない) */
+  update(dt: number, audio: GearAudio, intensity: number, wallGlow: number, camera: THREE.Vector3): void {
+    if (this.name === 'none') return;
+    const glow = Number.isFinite(wallGlow) ? wallGlow : 0;
+    this.drapeMaterial.uniforms.glow!.value = glow;
+    this.gear.update(dt, audio, intensity, glow, camera);
   }
 
   /** テスト用: 部材の数・幕の位置など */
-  inspect(): { visible: boolean; trussParts: number; drapeX: number[]; riserTop: number } {
+  inspect(): { visible: boolean; trussParts: number; drapeX: number[]; riserTop: number; gear: ReturnType<BandGear['inspect']> } {
     return {
+      gear: this.gear.inspect(),
       visible: this.group.visible,
       trussParts: this.truss.count,
       drapeX: this.drapes.map((d) => d.position.x),
@@ -203,6 +217,7 @@ export class StageSet {
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;
     this.truss.dispose();
+    this.gear.dispose();
     this.group.clear();
   }
 
