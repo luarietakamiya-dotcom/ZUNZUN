@@ -1,6 +1,7 @@
 import { store } from '../../core/store';
 import type { BackgroundSettings } from '../../core/types';
-import { tr, type Text2 } from '../../core/i18n';
+import { t2, tr, type Text2 } from '../../core/i18n';
+import { findLibraryItem, LIBRARY, libraryRef } from '../../core/library';
 import { sliderRow } from './panel-helpers';
 
 /**
@@ -59,9 +60,33 @@ export function createBackgroundCard(): HTMLElement {
   const removeBtn = h('button', 'tab-button', tr('背景を外す', 'Remove background'));
   removeBtn.type = 'button';
   fileRow.append(h('span', 'param-label', tr('写真・動画を選ぶ:', 'Choose a photo / video:')), input, removeBtn);
+  // 用意された背景 (core/library.ts)。押すとすぐ背景になる
+  const libRow = h('div', 'library-row');
+  const libButtons: HTMLButtonElement[] = [];
+  for (const item of LIBRARY) {
+    const b = h('button', 'library-thumb');
+    b.type = 'button';
+    b.dataset.library = item.id;
+    const img = h('img');
+    img.src = item.url;
+    img.alt = t2(item.name);
+    img.loading = 'lazy';
+    b.append(img, h('span', '', t2(item.name)));
+    b.addEventListener('click', () => {
+      status.textContent = tr(`「${t2(item.name)}」を読み込んでいます…`, `Loading "${t2(item.name)}"…`);
+      store
+        .setBackgroundFromLibrary(item.id)
+        .then(() => render())
+        .catch((err: unknown) => {
+          status.textContent = `${tr('読み込めませんでした', 'Could not load')}: ${err instanceof Error ? err.message : String(err)}`;
+        });
+    });
+    libButtons.push(b);
+    libRow.appendChild(b);
+  }
   const status = h('div', 'param-label');
   const body = h('div', 'background-body');
-  root.append(fileRow, status, body);
+  root.append(fileRow, h('span', 'param-label', tr('用意された背景から選ぶ:', 'Or pick a built-in background:')), libRow, status, body);
 
   input.addEventListener('change', () => {
     const file = input.files?.[0];
@@ -87,12 +112,28 @@ export function createBackgroundCard(): HTMLElement {
     const file = store.backgroundFile;
     body.textContent = '';
     removeBtn.disabled = bg == null;
+    const lib = bg ? findLibraryItem(bg.ref, bg.sha256) : null;
+    for (const b of libButtons) b.setAttribute('aria-pressed', String(lib != null && bg?.ref === libraryRef(lib) && b.dataset.library === lib.id));
     if (!bg) {
       status.textContent = tr('背景はありません。', 'No background.');
       return;
     }
+    if (lib && !file) {
+      // プロジェクトを開いた直後: 用意された背景は自動で読み込む
+      status.textContent = tr(`「${t2(lib.name)}」を読み込んでいます…`, `Loading "${t2(lib.name)}"…`);
+      store
+        .restoreLibraryBackground()
+        .then(() => {
+          if (root.isConnected && store.backgroundFile) render();
+        })
+        .catch((err: unknown) => {
+          status.textContent = `${tr('読み込めませんでした', 'Could not load')}: ${err instanceof Error ? err.message : String(err)}`;
+        });
+      return;
+    }
+    const shownName = lib ? t2(lib.name) : bg.ref;
     status.textContent = file
-      ? tr(`「${bg.ref}」`, `"${bg.ref}"`)
+      ? tr(`「${shownName}」`, `"${shownName}"`)
       : tr(`このプロジェクトは背景に「${bg.ref}」を使います。同じファイルを選び直してください (選び直すまでは背景なしで描きます)。`, `This project uses "${bg.ref}" as its background. Please pick the same file again (until then no background is drawn).`);
     if (file) {
       if (bg.kind === 'video') {

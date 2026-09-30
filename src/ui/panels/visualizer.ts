@@ -246,6 +246,15 @@ export function renderVisualizerPanel(): HTMLElement {
   void host.overlay.loadFrom(overlayEntries);
   // 背景 (Overlay タブで設定)。ファイルがまだ選び直されていなければ背景なし
   void host.background.load(store.background, store.backgroundFile).catch(() => {});
+  // 用意された背景 (core/library.ts) をプロジェクトを開いたあとに読み込み中なら、読めたところで当てる
+  if (store.background && !store.backgroundFile) {
+    store
+      .restoreLibraryBackground()
+      .then(() => {
+        if (canvas.isConnected && store.backgroundFile) void host.background.load(store.background, store.backgroundFile).catch(() => {});
+      })
+      .catch(() => {});
+  }
   // 素材レイヤー (「背景と素材」タブで足したもの)。ファイルをまだ選び直していないものは飛ばす
   void host.media.load(
     store.media.flatMap((m) => {

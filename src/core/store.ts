@@ -23,6 +23,7 @@ import {
   type MediaLayer,
 } from './types';
 import { tr } from './i18n';
+import { fetchLibraryFile, findLibraryItem, LIBRARY, libraryRef } from './library';
 
 type Listener = () => void;
 
@@ -57,6 +58,11 @@ class Store {
   private _background: BackgroundSettings | null = null;
   /** 背景の元のファイル (メモリ上だけ。Project JSON には ref/sha256 だけを保存する) */
   private _backgroundFile: File | null = null;
+  /** 背景を選び直すたびに増える (用意された背景の読み込みが、あとから選んだ背景を上書きしないように) */
+  private backgroundGeneration = 0;
+  /** 用意された背景を読むときの fetch (テストで差し替える) */
+  fetchFn: typeof fetch = (input, init) => fetch(input, init);
+  private libraryRestore: { gen: number; promise: Promise<void> } | null = null;
   private _view: ViewSettings = defaultView();
   private _composition: CompositionSettings = defaultComposition();
   private _media: MediaLayer[] = [];
@@ -161,16 +167,46 @@ class Store {
    * 背景のファイルを選ぶ。同じファイル (sha256 が同じ) を選び直したときは設定をそのまま使い、別のファイルなら
    * 既定の設定で始める (種類が変わったとき以外は、見た目の調整値は引き継ぐ)。
    */
-  async setBackgroundFile(file: File, kind: BackgroundSettings['kind']): Promise<void> {
+  async setBackgroundFile(file: File, kind: BackgroundSettings['kind'], ref: string = file.name): Promise<void> {
     // sha256 はファイル全体を読んで計算するので、大きすぎるものは断る (動画は数百 MB でも数秒かかり、メモリも一時的に使う)
     if (file.size > MAX_BACKGROUND_BYTES) throw new Error(tr(`ファイルが大きすぎます (${(file.size / 2 ** 30).toFixed(1)}GB)。2GB までにしてください`, `The file is too large (${(file.size / 2 ** 30).toFixed(1)} GB). Please keep it under 2 GB`));
     const sha256 = await sha256Hex(await file.arrayBuffer());
     const cur = this._background;
-    if (cur && cur.sha256 === sha256) this._background = { ...cur, ref: file.name, kind };
-    else if (cur && cur.kind === kind) this._background = { ...cur, ref: file.name, sha256 };
-    else this._background = defaultBackground(file.name, sha256, kind);
+    if (cur && cur.sha256 === sha256) this._background = { ...cur, ref, kind };
+    else if (cur && cur.kind === kind) this._background = { ...cur, ref, sha256 };
+    else this._background = defaultBackground(ref, sha256, kind);
     this._backgroundFile = file;
+    this.backgroundGeneration++;
     this.emit();
+  }
+
+  /** 用意された背景 (core/library.ts) を選ぶ。ref は `library:<id>` になる */
+  async setBackgroundFromLibrary(id: string): Promise<void> {
+    const item = LIBRARY.find((it) => it.id === id);
+    if (!item) throw new Error(tr(`用意された背景「${id}」が見つかりません`, `Built-in background "${id}" not found`));
+    const file = await fetchLibraryFile(item, this.fetchFn);
+    await this.setBackgroundFile(file, 'image', libraryRef(item));
+  }
+
+  /**
+   * いまの背景が用意された背景 (ref と sha256 が一覧と合う) で、まだファイルが無ければ読み込む。
+   * プロジェクトを開いたときに呼ぶ (選び直さなくてよいように)。途中で背景が変わったら何もしない
+   */
+  restoreLibraryBackground(): Promise<void> {
+    const bg = this._background;
+    if (!bg || this._backgroundFile) return Promise.resolve();
+    const item = findLibraryItem(bg.ref, bg.sha256);
+    if (!item) return Promise.resolve();
+    const gen = this.backgroundGeneration;
+    // 同じ背景を読んでいる途中なら、その読み込みを待つ (いくつかのパネルから呼ばれる)
+    if (this.libraryRestore?.gen === gen) return this.libraryRestore.promise;
+    const promise = fetchLibraryFile(item, this.fetchFn).then((file) => {
+      if (gen !== this.backgroundGeneration || this._background !== bg) return;
+      this._backgroundFile = file;
+      this.emit();
+    });
+    this.libraryRestore = { gen, promise };
+    return promise;
   }
 
   updateBackground(patch: Partial<Omit<BackgroundSettings, 'ref' | 'sha256' | 'kind'>>): void {
@@ -182,6 +218,7 @@ class Store {
   removeBackground(): void {
     this._background = null;
     this._backgroundFile = null;
+    this.backgroundGeneration++;
     this.emit();
   }
 
@@ -368,7 +405,10 @@ class Store {
     this._rhythm = project.rhythm;
     this._background = project.background;
     this._backgroundFile = null;
+    this.backgroundGeneration++;
     this.emit();
+    // 用意された背景なら、選び直さなくても読み込む (読めなくてもほかには影響させない。今までどおり選び直せる)
+    this.restoreLibraryBackground().catch(() => undefined);
   }
 
   /** state が変わるたびに呼ばれる。戻り値の関数で購読解除する。 */
