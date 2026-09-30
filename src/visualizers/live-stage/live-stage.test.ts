@@ -338,7 +338,7 @@ describe('ステージの機材 (stageSet)', () => {
     b.dispose();
   });
 
-  type Gear = { kickPush: number; conePush: number; ledsLit: number; sparkle: number; drumsVisible: boolean };
+  type Gear = { kickPush: number; conePush: number; ledsLit: number; sparkle: number; drumsVisible: boolean; backLights: number; lightLevel: number };
   const gearOf = (p: LiveStagePreset): Gear => (p as unknown as { stageSet: { inspect(): { gear: Gear } } }).stageSet.inspect().gear;
   const band = (o: Partial<CommonParams> & Record<string, unknown> = {}): Params => params({ stageSet: 'band', ...o } as never);
 
@@ -363,6 +363,18 @@ describe('ステージの機材 (stageSet)', () => {
     // Intensity 0 なら動かない
     run(p, 30, () => ({ bass: 1, high: 1 }), band({ intensity: 0 }));
     expect(gearOf(p).kickPush).toBeLessThan(0.002);
+    p.dispose();
+  });
+
+  it('機材の後ろの床の灯りは beat で少しだけ強まる (0.7〜1.0 倍。光過敏への配慮で幅は控えめ)', () => {
+    const p = makePreset(5, band());
+    run(p, 60, () => ({}), band());
+    const calm = gearOf(p);
+    expect(calm.backLights).toBe(4);
+    run(p, 10, () => ({ beat: 1 }), band());
+    const hit = gearOf(p);
+    expect(hit.lightLevel).toBeGreaterThan(calm.lightLevel);
+    expect(hit.lightLevel / calm.lightLevel).toBeLessThanOrEqual(1 / 0.7 + 1e-9);
     p.dispose();
   });
 

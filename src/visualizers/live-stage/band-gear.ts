@@ -6,7 +6,8 @@ import type { LiveStagePalette } from './palette';
  * - bass: バスドラムの面とスピーカーのコーンが前へ押し出される (立ち上がりは速く、引きは少しゆっくり)
  * - high: シンバルの縁がきらっと光り、少し揺れる
  * - rms (音量): アンプの上の LED のメーターが伸びる (緑 → 黄 → 赤)
- * 機材は照明の邪魔をしない暗いシルエット。光るのは LED とシンバルのきらめきだけ (小さいので画面全体は明るくしない)。
+ * 機材は照明の邪魔をしない暗いシルエット。光るのは LED とシンバルのきらめきと、機材の後ろの床の灯り (後ろから照らして
+ * 機材の形を浮かび上がらせる) とマイクの足もとの灯りだけ。どれも小さく、beat での明滅も控えめ (画面全体は明るくしない)。
  * ctx.rng は使わない (stage-set.ts の説明)。
  */
 
@@ -38,7 +39,7 @@ void main() {
 `;
 
 /** 縁の光の強さ: 壁の照り返し (スモーク・ビートで変わる) に合わせる */
-const RIM_BASE = 0.12;
+const RIM_BASE = 0.18;
 const RIM_GLOW = 0.4;
 /** カメラがドラムにこれより近いと、ドラムを隠す (ステージの奥からのカメラで、シンバルが目の前を覆わないように) */
 const DRUM_HIDE_DIST = 2.5;
@@ -47,6 +48,7 @@ export interface GearAudio {
   bass: number;
   high: number;
   rms: number;
+  beat: number;
 }
 
 /** 奥の台 (ドラムを置く) の上面の高さと奥行きの中心 */
@@ -67,6 +69,15 @@ const LEDS_PER_AMP = 10;
 /** マイクスタンドの x (layoutScale を掛ける) と奥行き */
 const MIC_X = [-3.2, 0, 3.2];
 const MIC_Z = -2.4;
+/** 機材の後ろの床の灯り: 灯体の玉の大きさ、後ろのにじみの大きさと濃さ */
+const BACK_LAMP = 0.45;
+const BACK_GLOW = 5.5;
+const BACK_GLOW_OPACITY = 0.5;
+/** マイクの足もとの灯りの半径と濃さ */
+const MIC_POOL_R = 0.95;
+const MIC_POOL_OPACITY = 0.35;
+/** 灯りの色: 暖かい琥珀色に、照明の 2 色を少し混ぜる */
+const WARM = new THREE.Color(1.0, 0.55, 0.2);
 /** 押し出す量 (バスドラムの面・コーン) */
 const KICK_PUSH = 0.06;
 const CONE_PUSH = 0.05;
@@ -102,6 +113,14 @@ export class BandGear {
   private readonly leds: THREE.InstancedMesh;
   private readonly mics: THREE.Group[] = [];
   private readonly drums = new THREE.Group();
+  /** 機材の後ろの床の灯り (玉とにじみ) とマイクの足もとの灯り */
+  private readonly lampMaterial: THREE.SpriteMaterial;
+  private readonly glowMaterial: THREE.SpriteMaterial;
+  private readonly poolMaterial: THREE.MeshBasicMaterial;
+  private readonly backLights: { lamp: THREE.Sprite; glow: THREE.Sprite; place: (scale: number) => [number, number, number] }[] = [];
+  private readonly pools: THREE.Mesh[] = [];
+  private pulse = 0;
+  private readonly warm = new THREE.Color();
   /** コーンの置き場所 (アンプの中の位置。押し出す前) */
   private readonly conePlaces: THREE.Vector3[] = [];
   private kick = 0;
@@ -135,6 +154,11 @@ export class BandGear {
     this.bronze = track(new THREE.MeshBasicMaterial({ color: 0x000000 }));
     this.sparkleMaterial = track(
       new THREE.SpriteMaterial({ map: sparkleTexture, color: 0xffd9a0, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }),
+    );
+    this.lampMaterial = track(new THREE.SpriteMaterial({ map: sparkleTexture, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    this.glowMaterial = track(new THREE.SpriteMaterial({ map: sparkleTexture, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: BACK_GLOW_OPACITY }));
+    this.poolMaterial = track(
+      new THREE.MeshBasicMaterial({ alphaMap: sparkleTexture, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: MIC_POOL_OPACITY }),
     );
     const box = track(new THREE.BoxGeometry(1, 1, 1));
     const cyl = track(new THREE.CylinderGeometry(1, 1, 1, 28));
@@ -226,13 +250,39 @@ export class BandGear {
       };
       for (let k = 0; k < 3; k++) {
         const a = (k / 3) * Math.PI * 2;
-        add(box, [Math.sin(a) * 0.14, 0.03, Math.cos(a) * 0.14], [0.02, 0.02, 0.3], [0, a, 0]);
+        add(box, [Math.sin(a) * 0.16, 0.03, Math.cos(a) * 0.16], [0.04, 0.04, 0.34], [0, a, 0]);
       }
-      add(cyl, [0, 0.78, 0], [0.012, 1.5, 0.012]);
-      add(cyl, [0, 1.55, 0.12], [0.009, 0.3, 0.009], [1.0, 0, 0]);
-      add(cyl, [0, 1.62, 0.26], [0.03, 0.17, 0.03], [1.0, 0, 0]);
+      add(cyl, [0, 0.78, 0], [0.024, 1.5, 0.024]);
+      add(cyl, [0, 1.55, 0.12], [0.016, 0.32, 0.016], [1.0, 0, 0]);
+      add(cyl, [0, 1.63, 0.27], [0.045, 0.2, 0.045], [1.0, 0, 0]);
+      // 足もとの灯り (床に置いた丸い光。スタンドの影絵が浮かぶ)
+      const pool = new THREE.Mesh(disc, this.poolMaterial);
+      pool.rotation.x = -Math.PI / 2;
+      pool.position.set(0, 0.012, 0.1);
+      pool.scale.set(MIC_POOL_R, MIC_POOL_R, 1);
+      pool.renderOrder = 1;
+      mic.add(pool);
+      this.pools.push(pool);
       this.mics.push(mic);
       this.group.add(mic);
+    }
+
+    // ---- 機材の後ろの床の灯り (ドラムの台の後ろの左右と、アンプの後ろ)。機材が手前にあるので、形が影絵になって浮かぶ
+    const places: ((scale: number) => [number, number, number])[] = [
+      () => [-1.9, dims.riserTop + 0.25, dims.riserZ - 1.3],
+      () => [1.9, dims.riserTop + 0.25, dims.riserZ - 1.3],
+      (sc) => [-AMP_X * sc, 0.25, AMP_Z - 0.9],
+      (sc) => [AMP_X * sc, 0.25, AMP_Z - 0.9],
+    ];
+    for (const place of places) {
+      const lamp = new THREE.Sprite(this.lampMaterial);
+      lamp.scale.setScalar(BACK_LAMP);
+      lamp.renderOrder = 3;
+      const glow = new THREE.Sprite(this.glowMaterial);
+      glow.scale.setScalar(BACK_GLOW);
+      glow.renderOrder = 1;
+      this.backLights.push({ lamp, glow, place });
+      this.group.add(glow, lamp);
     }
     this.layout(1);
     this.writeInstances();
@@ -244,6 +294,12 @@ export class BandGear {
     this.drums.position.set(0, riserTop, riserZ + 0.2);
     for (const amp of this.amps) amp.position.set((amp.userData.side as number) * AMP_X * scale, 0, AMP_Z);
     for (let i = 0; i < this.mics.length; i++) this.mics[i]!.position.set(MIC_X[i]! * scale, 0, MIC_Z);
+    for (const b of this.backLights) {
+      const [x, y, z] = b.place(scale);
+      b.lamp.position.set(x, y, z);
+      // にじみは少し上 (玉の光が上へ広がって見える)
+      b.glow.position.set(x, y + 0.9, z - 0.05);
+    }
     this.writeInstances();
   }
 
@@ -256,6 +312,8 @@ export class BandGear {
     // 縁の光は 2 色のライトの間の色
     const rimColor = this.c.copy(p.beamA).lerp(p.beamB, 0.5).multiplyScalar(0.6);
     for (const m of [this.shell, this.face]) (m.uniforms.rimColor!.value as THREE.Color).copy(rimColor);
+    this.warm.copy(WARM).lerp(this.c.copy(p.beamA).lerp(p.beamB, 0.5), 0.3);
+    this.writeLights();
   }
 
   /** camera = いまのカメラの位置 (近すぎるときドラムを隠す)、glow = 壁の照り返し (縁の光の強さ) */
@@ -267,6 +325,7 @@ export class BandGear {
     this.cone = follow(this.cone, audio.bass * k, step, 24, 7);
     this.level = follow(this.level, audio.rms * (0.4 + 0.6 * k), step, 18, 3);
     this.sparkle = follow(this.sparkle, audio.high * k, step, 20, 5);
+    this.pulse = follow(this.pulse, audio.beat, step, 25, 6);
 
     const push = this.kick * KICK_PUSH;
     this.kickHead.position.z = 0.215 + push;
@@ -280,12 +339,32 @@ export class BandGear {
     const rimStrength = RIM_BASE + RIM_GLOW * (Number.isFinite(glow) ? Math.min(1, Math.max(0, glow)) : 0);
     for (const m of [this.shell, this.face]) m.uniforms.rimStrength!.value = rimStrength;
     this.drums.visible = this.drums.getWorldPosition(this.v).distanceTo(camera) > DRUM_HIDE_DIST;
+    this.lightLevel = (0.35 + 0.65 * k) * (0.7 + 0.3 * this.pulse);
+    this.writeLights();
     this.writeInstances();
   }
 
+  private lightLevel = 0.35 * 0.7;
+
+  /** 床の灯りの色と明るさ (beat で少しだけ強まる。明滅の幅は 0.7〜1.0 倍) */
+  private writeLights(): void {
+    const l = this.lightLevel;
+    this.lampMaterial.color.copy(this.warm).multiplyScalar(2.2 * l);
+    this.glowMaterial.color.copy(this.warm).multiplyScalar(l);
+    this.poolMaterial.color.copy(this.warm).multiplyScalar(l);
+  }
+
   /** テスト用 */
-  inspect(): { kickPush: number; conePush: number; ledsLit: number; sparkle: number; drumsVisible: boolean } {
-    return { kickPush: this.kick * KICK_PUSH, conePush: this.cone * CONE_PUSH, ledsLit: this.litLeds(), sparkle: this.sparkleMaterial.opacity, drumsVisible: this.drums.visible };
+  inspect(): { kickPush: number; conePush: number; ledsLit: number; sparkle: number; drumsVisible: boolean; backLights: number; lightLevel: number } {
+    return {
+      kickPush: this.kick * KICK_PUSH,
+      conePush: this.cone * CONE_PUSH,
+      ledsLit: this.litLeds(),
+      sparkle: this.sparkleMaterial.opacity,
+      drumsVisible: this.drums.visible,
+      backLights: this.backLights.length,
+      lightLevel: this.lightLevel,
+    };
   }
 
   dispose(): void {
