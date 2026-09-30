@@ -183,6 +183,12 @@ MVPへの影響
 - **JIZURA は改変しません。** 変拍子向けの演出は、JIZURA が用意している拡張の仕組み `J.register` で ZUNZUN 独自の演出として追加し、それを選びやすくする変拍子用スタイルを作ります（独自の演出は JIZURA の「部品セット」に入れ、変拍子モードがオンで変拍子用スタイルのときだけ候補に入れる。既存のスタイルでは候補の一覧にも入らないので、カット割りは 1 つも変わらない。R4 の実装時に、重み 0 だけでは JIZURA の抽選の誤差で選ばれうると分かったためこうした）。JIZURA の中の「4 拍でひと回り」前提の演出は、変拍子用スタイルでは選ばないようにします。本家の更新はこれまでどおり取り込めます。
 - 進め方: R1 データと計算 → R2 画面（タップ・拍子の指定・タイムラインの小節線）→ R3 JIZURA とつなぐ → R4 変拍子パック（独自の演出と変拍子用スタイル）。
 
+## ビジュアライザーごとの設定（2026-09-30 ユーザー承認、`core/visualizer/preset-params.ts`）
+- プリセットは manifest の `controls`（`PresetControl`: つまみ `range` か選択 `select`。名前と説明は日英）で自分だけの設定を宣言できる。Visualizer タブの「このビジュアライザーの設定」に出る。
+- 値は Project JSON の `visualizer.params` に **プリセットの id ごと**に保存する（別のプリセットに切り替えて戻っても残る）。使うときは `resolvePresetParams` でその一覧に合わせて直す（知らない名前は捨て、範囲に収め、選べない値は既定）。
+- 描くときは、共通の設定と合わせて update() の params に同じ名前で入る（プレビューも書き出しも）。
+- 最初の利用: Live Stage のカメラ（場所 5 つ: 客席の後ろ / 最前列 / 真横 / 上から / ステージの奥から、高さ・距離・左右の向き）。
+
 ## レイヤー（画面の重なる順番）（2026-09-30 ユーザー承認、`core/render/composition.ts`・`screen-capture.ts`・Host の render）
 - `CompositionSettings { order, hidden, visualizerBlend, visualizerOpacity, lyricsOpacity }` を Project JSON の `composition` に保存する。順番は奥 → 手前。決まったレイヤーは `background` / `visualizer` / `lyrics` / `overlays`、素材は `media:<id>`（次の段階）。
 - ビジュアライザーの重ね方・濃さは、以前は `background.blend` / `visualizerOpacity` にあった。背景が無くても下に素材を置けば要るので composition に移した。古いプロジェクトは読み込むときに移す（`normalizeComposition` の legacy）。

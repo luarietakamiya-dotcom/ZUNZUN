@@ -7,6 +7,7 @@ import { visualizerRegistry } from '../../visualizers';
 import { backgroundPaletteNow } from '../../core/render/palette';
 import { t2, tr, type Text2 } from '../../core/i18n';
 import { sliderRow } from './panel-helpers';
+import { resolvePresetParams } from '../../core/visualizer/preset-params';
 
 /** 共通の設定。名前と説明は、誰が見ても何が変わるか分かるように (日本語 / English) */
 const NUMERIC_PARAMS: { key: keyof CommonParams; label: Text2; help: Text2; min: number; max: number; step: number }[] = [
@@ -120,6 +121,11 @@ export function renderVisualizerPanel(): HTMLElement {
   canvas.className = 'visualizer-canvas';
   canvasWrap.appendChild(canvas);
   el.appendChild(canvasWrap);
+
+  // このビジュアライザーだけの設定 (manifest.controls)。映像の種類を変えるたびに作り直す
+  const presetBox = document.createElement('div');
+  presetBox.className = 'preset-controls';
+  el.appendChild(presetBox);
 
   const paramsWrap = document.createElement('div');
   paramsWrap.className = 'param-grid';
@@ -248,11 +254,66 @@ export function renderVisualizerPanel(): HTMLElement {
     }),
   );
 
+  /** 共通の設定 + 今のビジュアライザーだけの設定 (プリセットの update() に渡す) */
+  const renderParams = (): CommonParams & Record<string, unknown> => {
+    const id = store.presetId ?? '';
+    return { ...store.params, ...resolvePresetParams(visualizerRegistry.get(id)?.manifest.controls, store.presetParams(id)) };
+  };
+
+  const buildPresetControls = (id: string): void => {
+    presetBox.textContent = '';
+    const controls = visualizerRegistry.get(id)?.manifest.controls ?? [];
+    if (controls.length === 0) return;
+    const title = document.createElement('h3');
+    title.textContent = tr('このビジュアライザーの設定', 'Settings for this visualizer');
+    const grid = document.createElement('div');
+    grid.className = 'param-grid';
+    const values = resolvePresetParams(controls, store.presetParams(id));
+    for (const c of controls) {
+      if (c.type === 'range') {
+        const { row, input, setLabel } = sliderRow(c.label, c.help, c.min, c.max, c.step);
+        input.dataset.presetParam = c.key;
+        input.value = String(values[c.key]);
+        setLabel(Number(values[c.key]).toFixed(2));
+        input.addEventListener('input', () => {
+          const v = parseFloat(input.value);
+          store.setPresetParam(id, c.key, v);
+          setLabel(v.toFixed(2));
+        });
+        grid.appendChild(row);
+      } else {
+        const row = document.createElement('label');
+        row.className = 'param-row';
+        const label = document.createElement('span');
+        label.className = 'param-label';
+        label.textContent = t2(c.label);
+        const select = document.createElement('select');
+        select.className = 'select';
+        select.dataset.presetParam = c.key;
+        for (const o of c.options) {
+          const opt = document.createElement('option');
+          opt.value = o.value;
+          opt.textContent = t2(o.label);
+          select.appendChild(opt);
+        }
+        select.value = String(values[c.key]);
+        select.addEventListener('change', () => store.setPresetParam(id, c.key, select.value));
+        const help = document.createElement('span');
+        help.className = 'param-help';
+        help.textContent = t2(c.help);
+        row.append(label, select, help);
+        grid.appendChild(row);
+      }
+    }
+    presetBox.append(title, grid);
+  };
+
   const applyPreset = (id: string): void => {
     const mod = visualizerRegistry.get(id);
     if (!mod) return;
     store.setPresetId(id);
-    void host.setPreset(mod, store.seed, store.params as CommonParams & Record<string, unknown>);
+    buildPresetControls(id);
+    void host.setPreset(mod, store.seed, renderParams());
   };
 
   const firstId = visualizerRegistry.list()[0]?.id;
@@ -298,7 +359,7 @@ export function renderVisualizerPanel(): HTMLElement {
     host.view = store.view;
     host.composition = store.composition;
     host.media.setConfigs(store.media);
-    if (frame) host.render(frame, store.params as CommonParams & Record<string, unknown>);
+    if (frame) host.render(frame, renderParams());
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);

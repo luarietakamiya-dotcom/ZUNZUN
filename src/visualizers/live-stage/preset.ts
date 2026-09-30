@@ -44,8 +44,21 @@ const HIGH_THRESHOLD = 0.3;
 /** パターンを選び直す間隔 (ビート数) */
 export const PHRASE_BEATS = 8;
 const CAMERA_FOV = 50;
-const CAMERA_POS = new THREE.Vector3(0, 2.0, 12);
-const LOOK_AT = new THREE.Vector3(0, 3.6, -3);
+
+/**
+ * カメラの場所 (このプリセットだけの設定 cameraSpot。manifest.controls)。位置と見る点。
+ * back = 客席の後ろ (今まで)、front = 最前列から見上げる、side = 真横、top = 見下ろす、stage = ステージの奥から客席側を見る
+ */
+export const CAMERA_SPOTS = {
+  back: { pos: new THREE.Vector3(0, 2.0, 12), look: new THREE.Vector3(0, 3.6, -3) },
+  front: { pos: new THREE.Vector3(0, 0.9, 4.2), look: new THREE.Vector3(0, 5.8, -3) },
+  side: { pos: new THREE.Vector3(12.5, 2.6, 2.5), look: new THREE.Vector3(0, 3.4, -3.5) },
+  top: { pos: new THREE.Vector3(0, 12.5, 8), look: new THREE.Vector3(0, 1.5, -3) },
+  stage: { pos: new THREE.Vector3(0, 2.2, -8.2), look: new THREE.Vector3(0, 3.4, 8) },
+} as const;
+export type CameraSpot = keyof typeof CAMERA_SPOTS;
+/** 左右の向き (cameraYaw = ±1) で回る角度 (度) */
+const CAMERA_YAW_MAX = 40;
 const DOWN = new THREE.Vector3(0, -1, 0);
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -551,14 +564,27 @@ export class LiveStagePreset implements VisualizerPreset {
     if (this.lasers.instanceColor) this.lasers.instanceColor.needsUpdate = true;
   }
 
-  private updateCamera(params: CommonParams): void {
+  /**
+   * カメラ: 場所 (cameraSpot) の位置から、見る点のまわりを左右の向き (cameraYaw) の分だけ回し、距離 (cameraDistance) を掛け、
+   * 高さ (cameraHeight) を足す。Camera Motion のゆっくりした揺れはその上に足す。設定が無ければ今まで (客席の後ろ) と同じ
+   */
+  private updateCamera(params: CommonParams & Record<string, unknown>): void {
     const cm = finite01(params.cameraMotion);
+    const spotName = typeof params.cameraSpot === 'string' && params.cameraSpot in CAMERA_SPOTS ? (params.cameraSpot as CameraSpot) : 'back';
+    const spot = CAMERA_SPOTS[spotName];
+    const num = (v: unknown, d: number, a: number, b: number): number => (typeof v === 'number' && Number.isFinite(v) ? THREE.MathUtils.clamp(v, a, b) : d);
+    const yaw = THREE.MathUtils.degToRad(num(params.cameraYaw, 0, -1, 1) * CAMERA_YAW_MAX);
+    const dist = num(params.cameraDistance, 1, 0.5, 2);
+    const height = num(params.cameraHeight, 0, -1, 1);
+    const offset = this.tmpVec.copy(spot.pos).sub(spot.look).applyAxisAngle(UP, yaw).multiplyScalar(dist);
+    const pos = offset.add(spot.look);
+    pos.y = Math.max(0.3, pos.y + height * 3);
     this.camera.position.set(
-      CAMERA_POS.x + Math.sin(this.t * 0.09) * 1.4 * cm * this.layoutScale,
-      CAMERA_POS.y + Math.sin(this.t * 0.07) * 0.35 * cm,
-      CAMERA_POS.z,
+      pos.x + Math.sin(this.t * 0.09) * 1.4 * cm * this.layoutScale,
+      pos.y + Math.sin(this.t * 0.07) * 0.35 * cm,
+      pos.z,
     );
-    this.camera.lookAt(LOOK_AT);
+    this.camera.lookAt(spot.look);
   }
 }
 

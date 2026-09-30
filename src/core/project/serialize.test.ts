@@ -106,6 +106,14 @@ describe('buildProjectFile', () => {
     expect(back.composition).toEqual(composition);
   });
 
+  it('プリセットだけの設定 (visualizer.params) をプリセットごとに保存し、保存 → 読み込みで同じ内容に戻る', () => {
+    expect(buildProjectFile(state()).visualizer.params).toEqual({});
+    const allPresetParams = { 'live-stage': { camera: 'front', height: 3.5 }, 'solar-gate': { rings: 2 } };
+    const project = buildProjectFile(state({ allPresetParams }));
+    expect(project.visualizer.params).toEqual(allPresetParams);
+    expect(sanitizeProject(JSON.parse(JSON.stringify(project))).visualizer.params).toEqual(allPresetParams);
+  });
+
   it('背景 (background) を複製して保存し、保存 → 読み込みで同じ内容に戻る', () => {
     expect(buildProjectFile(state()).background).toBeNull();
     const background = { ...defaultBackground('sky.jpg', 'e'.repeat(64), 'image'), dim: 0.5 };

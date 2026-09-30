@@ -10,6 +10,52 @@ export const manifest: VisualizerManifest = {
   defaults: {},
   // 光の筋は加算で重なるので、Bloom はレンズとレーザー (HDR) だけが拾うようにしきい値を高めにする
   post: { bloomStrength: 0.8, bloomRadius: 0.28, bloomThreshold: 0.6 },
+  controls: [
+    {
+      type: 'select',
+      key: 'cameraSpot',
+      label: { ja: 'カメラの場所', en: 'Camera position' },
+      help: { ja: 'どこからステージを見るか', en: 'Where the stage is seen from' },
+      options: [
+        { value: 'back', label: { ja: '客席の後ろ', en: 'Back of the crowd' } },
+        { value: 'front', label: { ja: '最前列 (見上げる)', en: 'Front row (looking up)' } },
+        { value: 'side', label: { ja: '真横', en: 'Side' } },
+        { value: 'top', label: { ja: '上から見下ろす', en: 'From above' } },
+        { value: 'stage', label: { ja: 'ステージの奥から客席側を見る', en: 'From the stage toward the crowd' } },
+      ],
+      default: 'back',
+    },
+    {
+      type: 'range',
+      key: 'cameraHeight',
+      label: { ja: 'カメラの高さ', en: 'Camera height' },
+      help: { ja: 'マイナス = 低く、プラス = 高く', en: 'Negative = lower, positive = higher' },
+      min: -1,
+      max: 1,
+      step: 0.01,
+      default: 0,
+    },
+    {
+      type: 'range',
+      key: 'cameraDistance',
+      label: { ja: 'カメラの距離', en: 'Camera distance' },
+      help: { ja: '1 より小さい = 近づく、大きい = 離れる', en: 'Below 1 = closer, above 1 = farther' },
+      min: 0.5,
+      max: 2,
+      step: 0.01,
+      default: 1,
+    },
+    {
+      type: 'range',
+      key: 'cameraYaw',
+      label: { ja: 'カメラの向き (左右)', en: 'Camera angle (left / right)' },
+      help: { ja: 'ステージのまわりを左右に回り込みます', en: 'Orbits around the stage to the left or right' },
+      min: -1,
+      max: 1,
+      step: 0.01,
+      default: 0,
+    },
+  ],
 };
 
 export const liveStageModule: VisualizerModule = {

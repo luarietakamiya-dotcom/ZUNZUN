@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { makeRng } from '../../core/random';
 import { defaultCommonParams, type AudioFrame, type CommonParams } from '../../core/types';
-import { LiveStagePreset, MAX_STROBE_HZ, PHRASE_BEATS } from './preset';
+import { CAMERA_SPOTS, LiveStagePreset, MAX_STROBE_HZ, PHRASE_BEATS } from './preset';
 
 /**
  * WebGL を使わずに (three.js のシーングラフだけで) Live Stage を動かし、
@@ -173,5 +173,40 @@ describe('LiveStagePreset', () => {
     }
     expect(p.stageSnapshot().every((v) => Number.isFinite(v))).toBe(true);
     expect(() => p.dispose()).not.toThrow();
+  });
+});
+
+describe('カメラ (このプリセットだけの設定)', () => {
+  const still = (o: Record<string, unknown> = {}): Params => ({ ...params({ cameraMotion: 0 }), ...o }) as Params;
+
+  it('設定が無ければ今までどおり客席の後ろ (0, 2, 12)。場所を選ぶとそこへ動く', () => {
+    const p = makePreset(1, still());
+    p.update(frame(0), still());
+    expect(p.camera.position.toArray()).toEqual([0, 2, 12]);
+    for (const spot of ['front', 'side', 'top', 'stage'] as const) {
+      p.update(frame(0), still({ cameraSpot: spot }));
+      expect(p.camera.position.distanceTo(CAMERA_SPOTS[spot].pos), spot).toBeLessThan(1e-9);
+    }
+    // 最前列は低く (見上げる)、上からは高い
+    p.update(frame(0), still({ cameraSpot: 'front' }));
+    const front = p.camera.position.y;
+    p.update(frame(0), still({ cameraSpot: 'top' }));
+    expect(p.camera.position.y).toBeGreaterThan(front + 5);
+    p.dispose();
+  });
+
+  it('高さ・距離・左右の向きが効き、見る点は変わらない。壊れた値は既定、床の下には行かない', () => {
+    const p = makePreset(1, still());
+    p.update(frame(0), still({ cameraHeight: 1 }));
+    expect(p.camera.position.y).toBeCloseTo(5, 5);
+    p.update(frame(0), still({ cameraDistance: 0.5 }));
+    expect(p.camera.position.z).toBeCloseTo(-3 + 15 * 0.5, 5);
+    p.update(frame(0), still({ cameraYaw: 1 }));
+    expect(p.camera.position.x).toBeGreaterThan(5);
+    p.update(frame(0), still({ cameraSpot: 'front', cameraHeight: -1 }));
+    expect(p.camera.position.y).toBeGreaterThanOrEqual(0.3);
+    p.update(frame(0), still({ cameraSpot: 'nowhere', cameraHeight: NaN, cameraYaw: 'x' }));
+    expect(p.camera.position.toArray()).toEqual([0, 2, 12]);
+    p.dispose();
   });
 });

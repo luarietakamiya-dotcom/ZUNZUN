@@ -1,3 +1,4 @@
+import type { Text2 } from './i18n';
 /**
  * ZUNZUN の中核となる共有型。
  * docs/ARCHITECTURE.md の「Visualizer 共通インターフェース」「Project JSON」に対応する。
@@ -113,7 +114,17 @@ export interface VisualizerManifest {
   defaults: Record<string, unknown>;
   /** このプリセットの Bloom/Light Rays 基準値。省略時は PostFxStack の既定値を使う (core/render/postfx.ts) */
   post?: Partial<PostFxConfig>;
+  /**
+   * このプリセットだけの設定 (Visualizer タブの「このビジュアライザーの設定」に出る)。値は update() の params に
+   * key の名前で入る (core/visualizer/preset-params.ts)。Project JSON の visualizer.params にプリセットごとに保存される
+   */
+  controls?: PresetControl[];
 }
+
+/** プリセットだけの設定 1 つ。名前と説明は日本語 / English (誰が見ても分かるように) */
+export type PresetControl =
+  | { type: 'range'; key: string; label: Text2; help: Text2; min: number; max: number; step: number; default: number }
+  | { type: 'select'; key: string; label: Text2; help: Text2; options: { value: string; label: Text2 }[]; default: string };
 
 /** Bloom/Light Rays の基準値。core/render/postfx.ts の PostFxStack が実装を持つ。 */
 export interface PostFxConfig {

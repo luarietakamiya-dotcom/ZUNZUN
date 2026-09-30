@@ -72,3 +72,17 @@ test('表記の言語: 日本語に切り替えるとタブ名・設定の名前
   await page.getByRole('tab', { name: 'Visualizer' }).click();
   await expect(page.getByText(/^Glow: /)).toBeVisible();
 });
+
+test('このビジュアライザーの設定: Live Stage のカメラの場所を選ぶと残り、ほかのビジュアライザーには出ない', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Visualizer' }).click();
+  await page.locator('.visualizer-panel select, section.panel > select').first().selectOption('live-stage');
+  const spot = page.locator('select[data-preset-param="cameraSpot"]');
+  await expect(spot).toHaveValue('back');
+  await spot.selectOption('front');
+  await page.locator('section.panel > select').first().selectOption('solar-gate');
+  await expect(page.locator('select[data-preset-param="cameraSpot"]')).toHaveCount(0);
+  await page.locator('section.panel > select').first().selectOption('live-stage');
+  await expect(page.locator('select[data-preset-param="cameraSpot"]')).toHaveValue('front');
+  await expect(page.locator('input[data-preset-param="cameraHeight"]')).toHaveValue('0');
+});

@@ -44,7 +44,7 @@ npm run test:e2e   # Playwright
 ## コードの約束事
 
 - **プリセットは `src/visualizers/<id>/` に閉じる。** 追加は `src/visualizers/index.ts` に import + `register()` の 2 行だけ。Host/Registry/他プリセットは触らない。
-- プリセットが使ってよいのは `AudioFrame` / `CommonParams`（`src/core/types.ts`）と `src/core/visualizer/response.ts`（Sensitivity/Bass/Mid/High の適用）だけ。
+- プリセットが使ってよいのは `AudioFrame` / `CommonParams`（`src/core/types.ts`）と `src/core/visualizer/response.ts`（Sensitivity/Bass/Mid/High の適用）、それと自分の manifest の `controls` で宣言した設定（update() の params に同じ名前で入る。2026-09-30 追加）だけ。
 - **決定論**: 乱数は `init()` で渡される `ctx.rng`（`project.seed` 由来）だけ。描画系で `Math.random()` を使わない（同じプロジェクト → 同じ書き出し映像）。
 - `dispose()` で作ったジオメトリ・マテリアル・テクスチャ・Reflector をすべて解放する。
 - 各プリセットに、WebGL なしで three.js のシーングラフだけを動かす Vitest スペックを付ける（型: `src/visualizers/solar-gate/solar-gate.test.ts`）。反応設計・seed の再現性・NaN 耐性・dispose を確認する。

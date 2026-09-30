@@ -23,6 +23,7 @@ import {
 } from '../types';
 import { normalizeView } from '../render/view';
 import { normalizeComposition } from '../render/composition';
+import { sanitizePresetParamsMap } from '../visualizer/preset-params';
 import { tr } from '../i18n';
 
 /**
@@ -380,7 +381,7 @@ export function sanitizeProject(raw: unknown): ProjectFile {
       preset: typeof presetCandidate === 'string' && ID_PATTERN.test(presetCandidate) ? presetCandidate : base.visualizer.preset,
       presetVersion: isFiniteNumber(presetVersionCandidate) ? Math.round(presetVersionCandidate) : base.visualizer.presetVersion,
       common: sanitizeCommonParams(visualizerRaw.common),
-      params: isPlainObject(visualizerRaw.params) ? { ...visualizerRaw.params } : {},
+      params: sanitizePresetParamsMap(visualizerRaw.params),
       view: normalizeView(isPlainObject(visualizerRaw.view) ? (visualizerRaw.view as Partial<ViewSettings>) : null),
     },
     overlays: sanitizeOverlays(raw.overlays),

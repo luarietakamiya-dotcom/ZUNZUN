@@ -1,6 +1,7 @@
 import { AudioEngine } from './audio';
 import { sha256Hex } from './hash';
 import { moveLayer, normalizeComposition } from './render/composition';
+import { sanitizePresetParamsMap, type PresetParamValues } from './visualizer/preset-params';
 import {
   defaultCommonParams,
   defaultLyrics,
@@ -45,6 +46,8 @@ class Store {
   private _seed: number = defaultProject().seed;
   private _presetId: string | null = null;
   private _params: CommonParams = defaultCommonParams();
+  /** プリセットだけの設定の値 (プリセットの id ごと)。Project JSON の visualizer.params に保存される */
+  private _presetParams: Record<string, PresetParamValues> = {};
   private _expectedAudio: ProjectFile['audio'] = null;
   private _overlays: OverlayLayer[] = [];
   private readonly overlayFiles = new Map<string, File>();
@@ -220,6 +223,20 @@ class Store {
     this.emit();
   }
 
+  /** プリセットだけの設定の、保存されている値 (直す前。使うときは resolvePresetParams で直す) */
+  presetParams(presetId: string): PresetParamValues {
+    return this._presetParams[presetId] ?? {};
+  }
+
+  get allPresetParams(): Record<string, PresetParamValues> {
+    return this._presetParams;
+  }
+
+  setPresetParam(presetId: string, key: string, value: number | string): void {
+    this._presetParams = { ...this._presetParams, [presetId]: { ...(this._presetParams[presetId] ?? {}), [key]: value } };
+    this.emit();
+  }
+
   get params(): CommonParams {
     return this._params;
   }
@@ -338,6 +355,7 @@ class Store {
     this._seed = project.seed >>> 0;
     this._presetId = project.visualizer.preset;
     this._params = { ...project.visualizer.common };
+    this._presetParams = sanitizePresetParamsMap(project.visualizer.params);
     this._view = { ...(project.visualizer.view ?? defaultView()) };
     this._media = (project.media ?? []).map((m) => ({ ...m, chroma: { ...m.chroma } }));
     this.mediaFiles.clear();

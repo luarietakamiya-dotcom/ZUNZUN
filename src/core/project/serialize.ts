@@ -29,6 +29,8 @@ export interface ProjectSourceState {
   seed: number;
   presetId: string | null;
   params: CommonParams;
+  /** プリセットだけの設定の値 (プリセットの id ごと。省略可) */
+  allPresetParams?: Record<string, Record<string, number | string>>;
   audio: ProjectAudioSource;
   overlays: OverlayLayer[];
   /** 歌詞を使わない場合は null */
@@ -72,7 +74,7 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
       preset: state.presetId ?? base.visualizer.preset,
       presetVersion: base.visualizer.presetVersion,
       common: { ...state.params },
-      params: {},
+      params: JSON.parse(JSON.stringify(state.allPresetParams ?? {})) as Record<string, unknown>,
       view: { ...(state.view ?? defaultView()) },
     },
     overlays: state.overlays.map((o) => ({ ...o })),

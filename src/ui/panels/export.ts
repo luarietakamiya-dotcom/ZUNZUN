@@ -9,6 +9,7 @@ import {
   type ExportStatus,
 } from '../../core/export';
 import { store } from '../../core/store';
+import { resolvePresetParams } from '../../core/visualizer/preset-params';
 import { t2, tr, type Text2 } from '../../core/i18n';
 import type { CommonParams, ExportSettings, OverlayLayer } from '../../core/types';
 import { visualizerRegistry } from '../../visualizers';
@@ -69,7 +70,8 @@ function createRunnerFromStore(): ExportRunner {
   if (!preset) throw new Error(tr('映像の種類が選ばれていません (「ビジュアライザー」タブで選んでください)', 'No visual preset selected (choose one in the Visualizer tab)'));
 
   const settings = { ...store.exportSettings };
-  const params = { ...store.params } as CommonParams & Record<string, unknown>;
+  // 共通の設定 + このビジュアライザーだけの設定
+  const params = { ...store.params, ...resolvePresetParams(preset.manifest.controls, store.presetParams(preset.manifest.id)) } as CommonParams & Record<string, unknown>;
   const overlays = store.overlays
     .map((config) => ({ config: { ...config }, file: store.getOverlayFile(config.id) }))
     .filter((e): e is { config: OverlayLayer; file: File } => e.file != null);
