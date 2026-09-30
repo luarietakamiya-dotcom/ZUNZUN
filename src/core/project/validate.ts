@@ -17,7 +17,9 @@ import {
   type ProjectFile,
   type BackgroundSettings,
   type RhythmSettings,
+  type ViewSettings,
 } from '../types';
+import { normalizeView } from '../render/view';
 
 /**
  * 外部由来 (ファイル読み込み) の JSON は信頼しない前提で検証する。
@@ -339,6 +341,7 @@ export function sanitizeProject(raw: unknown): ProjectFile {
       presetVersion: isFiniteNumber(presetVersionCandidate) ? Math.round(presetVersionCandidate) : base.visualizer.presetVersion,
       common: sanitizeCommonParams(visualizerRaw.common),
       params: isPlainObject(visualizerRaw.params) ? { ...visualizerRaw.params } : {},
+      view: normalizeView(isPlainObject(visualizerRaw.view) ? (visualizerRaw.view as Partial<ViewSettings>) : null),
     },
     overlays: sanitizeOverlays(raw.overlays),
     lyrics: sanitizeLyrics(raw.lyrics),

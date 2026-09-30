@@ -4,7 +4,8 @@ import { OverlayManager } from '../overlay/manager';
 import { deriveSeed, makeRng } from '../random';
 import { BackgroundCompositor } from '../render/background';
 import { PostFxStack } from '../render/postfx';
-import type { AudioFrame, CommonParams, VisualizerPreset } from '../types';
+import { applyView, normalizeView } from '../render/view';
+import { type AudioFrame, type CommonParams, defaultView, type ViewSettings, type VisualizerPreset } from '../types';
 import type { VisualizerModule } from './registry';
 
 export interface VisualizerHostOptions {
@@ -48,6 +49,14 @@ export class VisualizerHost {
    * ビジュアライザーを画面に描いたあと、その上からスクリーン合成などで重ねる (ビジュアライザーの見た目を変えないため)
    */
   readonly background = new BackgroundCompositor();
+  private _view: ViewSettings = defaultView();
+  /** ビジュアライザーの見え方 (拡大・位置・傾き)。描くたびにカメラへ当てて戻す (core/render/view.ts) */
+  get view(): ViewSettings {
+    return this._view;
+  }
+  set view(v: ViewSettings) {
+    this._view = normalizeView(v);
+  }
   private current: { preset: VisualizerPreset; moduleId: string } | null = null;
   private width = 1;
   private height = 1;
@@ -132,7 +141,12 @@ export class VisualizerHost {
       const { preset } = this.current;
       preset.update(frame, params);
       this.postfx.setGlow(params.glow);
-      this.postfx.render();
+      const restoreView = applyView(preset.camera, this._view, this.width, this.height);
+      try {
+        this.postfx.render();
+      } finally {
+        restoreView();
+      }
     } else if (this.background.active) {
       this.renderer.setRenderTarget(null);
       this.renderer.clear();

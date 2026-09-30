@@ -182,6 +182,14 @@ describe('sanitizeProject', () => {
     expect(Object.keys(m.custom!)).toEqual(['name', 'base', 'colors', 'fonts', 'texture']);
   });
 
+  it('visualizer.view: 無い (古いプロジェクト) なら既定、壊れた値は範囲に収める', () => {
+    const raw = JSON.parse(JSON.stringify(validRaw())) as { visualizer: Record<string, unknown> };
+    delete raw.visualizer.view;
+    expect(sanitizeProject(raw).visualizer.view).toEqual({ zoom: 1, x: 0, y: 0, roll: 0 });
+    raw.visualizer.view = { zoom: 'big', x: 3, y: -0.5, roll: -720 };
+    expect(sanitizeProject(raw).visualizer.view).toEqual({ zoom: 1, x: 1, y: -0.5, roll: -180 });
+  });
+
   it('background: ファイル名と sha256 があるときだけ残し、値は範囲に収め、知らない選択肢は既定に戻す', () => {
     const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
     expect(sanitizeProject(raw).background).toBeNull();

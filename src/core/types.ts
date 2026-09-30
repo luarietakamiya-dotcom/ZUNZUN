@@ -58,6 +58,25 @@ export const defaultCommonParams = (): CommonParams => ({
   cameraMotion: 0.4,
 });
 
+/**
+ * ビジュアライザーの見え方 (どのプリセットにも共通。Host がカメラの「見る窓」と傾きで反映する。プリセットは知らない)。
+ * 拡大はカメラの見る範囲を狭めて描くので、拡大しても粗くならない。1 より小さくすると、見える範囲が広がる。
+ */
+export interface ViewSettings {
+  /** 拡大 (0.5..4、1 = そのまま) */
+  zoom: number;
+  /** 見る位置を横にずらす (-1..1、1 = 画面の半分だけ右を見る) */
+  x: number;
+  /** 見る位置を縦にずらす (-1..1、1 = 画面の半分だけ上を見る) */
+  y: number;
+  /** 傾き (度、-180..180。正 = 映る絵が反時計回り) */
+  roll: number;
+}
+
+export const defaultView = (): ViewSettings => ({ zoom: 1, x: 0, y: 0, roll: 0 });
+export const VIEW_ZOOM_MIN = 0.5;
+export const VIEW_ZOOM_MAX = 4;
+
 /** Visualizer プリセットが初期化時に受け取るコンテキスト。 */
 export interface VisualizerInitContext {
   renderer: THREE.WebGLRenderer;
@@ -124,6 +143,8 @@ export interface ProjectFile {
     presetVersion: number;
     common: CommonParams;
     params: Record<string, unknown>;
+    /** 見え方 (拡大・位置・傾き)。古いプロジェクトには無い (読み込むと既定になる) */
+    view?: ViewSettings;
   };
   overlays: OverlayLayer[];
   /** 歌詞と、その同期タイミング・歌詞モーションの設定。歌詞を使わないプロジェクトは null */

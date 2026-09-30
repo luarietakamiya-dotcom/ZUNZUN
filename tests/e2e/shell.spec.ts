@@ -26,3 +26,21 @@ test('ヘッダーに共通の再生欄があり、音源が無い間は押せ�
   await page.getByRole('tab', { name: 'Overlay' }).click();
   await expect(page.locator('.app-header .transport')).toBeVisible();
 });
+
+test('Visualizer タブの見え方 (View): 拡大を変えると表示が変わり、Reset View で元に戻る', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Visualizer' }).click();
+  const zoom = page.locator('input[data-view="zoom"]');
+  await expect(zoom).toHaveValue('1');
+  await zoom.fill('2');
+  await expect(page.getByText('Zoom: 2.00×')).toBeVisible();
+  await page.locator('input[data-view="roll"]').fill('-30');
+  await expect(page.getByText('Roll: -30°')).toBeVisible();
+  // タブを切り替えても設定は残る (store に保存している)
+  await page.getByRole('tab', { name: 'Music' }).click();
+  await page.getByRole('tab', { name: 'Visualizer' }).click();
+  await expect(page.locator('input[data-view="zoom"]')).toHaveValue('2');
+  await page.getByRole('button', { name: 'Reset View' }).click();
+  await expect(page.getByText('Zoom: 1.00×')).toBeVisible();
+  await expect(page.getByText('Roll: 0°')).toBeVisible();
+});

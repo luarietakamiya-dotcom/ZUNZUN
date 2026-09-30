@@ -77,6 +77,15 @@ describe('buildProjectFile', () => {
     expect(project.export).not.toBe(exportSettings);
   });
 
+  it('見え方 (visualizer.view) を保存し、保存 → 読み込みで同じ内容に戻る。省略すると既定', () => {
+    expect(buildProjectFile(state()).visualizer.view).toEqual({ zoom: 1, x: 0, y: 0, roll: 0 });
+    const view = { zoom: 2.5, x: -0.3, y: 0.4, roll: -15 };
+    const project = buildProjectFile(state({ view }));
+    expect(project.visualizer.view).toEqual(view);
+    expect(project.visualizer.view).not.toBe(view);
+    expect(sanitizeProject(JSON.parse(JSON.stringify(project))).visualizer.view).toEqual(view);
+  });
+
   it('背景 (background) を複製して保存し、保存 → 読み込みで同じ内容に戻る', () => {
     expect(buildProjectFile(state()).background).toBeNull();
     const background = { ...defaultBackground('sky.jpg', 'e'.repeat(64), 'image'), dim: 0.5, blend: 'add' as const };

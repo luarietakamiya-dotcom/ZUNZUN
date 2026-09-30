@@ -1,5 +1,5 @@
 import { store } from '../../core/store';
-import type { AudioFrame, CommonParams, OverlayLayer } from '../../core/types';
+import { type AudioFrame, type CommonParams, defaultView, type OverlayLayer, VIEW_ZOOM_MAX, VIEW_ZOOM_MIN, type ViewSettings } from '../../core/types';
 import { BAND_COUNT } from '../../core/audio';
 import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { VisualizerHost } from '../../core/visualizer/host';
@@ -118,6 +118,63 @@ export function renderVisualizerPanel(): HTMLElement {
   colorRow.appendChild(colorSelect);
   paramsWrap.appendChild(colorRow);
 
+  // 見え方 (どのプリセットにも共通): 拡大して一部だけ使う・ずらす・傾ける (core/render/view.ts)
+  const viewTitle = document.createElement('h3');
+  viewTitle.textContent = 'View';
+  el.appendChild(viewTitle);
+  const viewNote = document.createElement('p');
+  viewNote.className = 'param-label';
+  viewNote.textContent = '拡大しても粗くなりません (カメラの見る範囲を狭めて描きます)。1 より小さくすると、見える範囲が広がります。';
+  el.appendChild(viewNote);
+  const viewWrap = document.createElement('div');
+  viewWrap.className = 'param-grid';
+  el.appendChild(viewWrap);
+  const VIEW_PARAMS: { key: keyof ViewSettings; label: string; min: number; max: number; step: number; fmt: (v: number) => string }[] = [
+    { key: 'zoom', label: 'Zoom', min: VIEW_ZOOM_MIN, max: VIEW_ZOOM_MAX, step: 0.01, fmt: (v) => `${v.toFixed(2)}×` },
+    { key: 'x', label: 'Pan X', min: -1, max: 1, step: 0.01, fmt: (v) => v.toFixed(2) },
+    { key: 'y', label: 'Pan Y', min: -1, max: 1, step: 0.01, fmt: (v) => v.toFixed(2) },
+    { key: 'roll', label: 'Roll', min: -180, max: 180, step: 1, fmt: (v) => `${Math.round(v)}°` },
+  ];
+  const viewInputs: { def: (typeof VIEW_PARAMS)[number]; input: HTMLInputElement; label: HTMLSpanElement }[] = [];
+  for (const def of VIEW_PARAMS) {
+    const row = document.createElement('label');
+    row.className = 'param-row';
+    const label = document.createElement('span');
+    label.className = 'param-label';
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = String(def.min);
+    input.max = String(def.max);
+    input.step = String(def.step);
+    input.dataset.view = def.key;
+    input.addEventListener('input', () => {
+      const v = parseFloat(input.value);
+      store.updateView({ [def.key]: v });
+      label.textContent = `${def.label}: ${def.fmt(v)}`;
+    });
+    row.appendChild(label);
+    row.appendChild(input);
+    viewWrap.appendChild(row);
+    viewInputs.push({ def, input, label });
+  }
+  const syncView = (): void => {
+    for (const { def, input, label } of viewInputs) {
+      const v = store.view[def.key];
+      input.value = String(v);
+      label.textContent = `${def.label}: ${def.fmt(v)}`;
+    }
+  };
+  syncView();
+  const viewReset = document.createElement('button');
+  viewReset.type = 'button';
+  viewReset.className = 'tab-button';
+  viewReset.textContent = 'Reset View';
+  viewReset.addEventListener('click', () => {
+    store.updateView(defaultView());
+    syncView();
+  });
+  el.appendChild(viewReset);
+
   // 歌詞モーションはプレビューでは軽く描く (書き出しでは全部描く)
   const host = new VisualizerHost(canvas, { fastLyrics: true });
 
@@ -178,6 +235,7 @@ export function renderVisualizerPanel(): HTMLElement {
           })
         : null,
     );
+    host.view = store.view;
     if (frame) host.render(frame, store.params as CommonParams & Record<string, unknown>);
     requestAnimationFrame(tick);
   };

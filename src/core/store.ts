@@ -13,6 +13,8 @@ import {
   type RhythmSettings,
   type BackgroundSettings,
   defaultBackground,
+  defaultView,
+  type ViewSettings,
 } from './types';
 
 type Listener = () => void;
@@ -46,7 +48,18 @@ class Store {
   private _background: BackgroundSettings | null = null;
   /** 背景の元のファイル (メモリ上だけ。Project JSON には ref/sha256 だけを保存する) */
   private _backgroundFile: File | null = null;
+  private _view: ViewSettings = defaultView();
   private readonly listeners = new Set<Listener>();
+
+  /** ビジュアライザーの見え方 (拡大・位置・傾き)。Project JSON の visualizer.view に保存される */
+  get view(): ViewSettings {
+    return this._view;
+  }
+
+  updateView(patch: Partial<ViewSettings>): void {
+    this._view = { ...this._view, ...patch };
+    this.emit();
+  }
 
   /** 小節と拍子 (変拍子モード)。使っていない間は null。Project JSON の rhythm に保存される。 */
   get rhythm(): RhythmSettings | null {
@@ -253,6 +266,7 @@ class Store {
     this._seed = project.seed >>> 0;
     this._presetId = project.visualizer.preset;
     this._params = { ...project.visualizer.common };
+    this._view = { ...(project.visualizer.view ?? defaultView()) };
     this._expectedAudio = project.audio;
     this._overlays = project.overlays;
     this.overlayFiles.clear();

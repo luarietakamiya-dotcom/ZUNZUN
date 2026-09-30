@@ -7,6 +7,8 @@ import {
   type ProjectFile,
   type BackgroundSettings,
   type RhythmSettings,
+  defaultView,
+  type ViewSettings,
 } from '../types';
 
 /** buildProjectFile が必要とする AudioEngine の最小の形 (実体は core/audio/engine.ts の AudioEngine)。 */
@@ -32,6 +34,8 @@ export interface ProjectSourceState {
   rhythm: RhythmSettings | null;
   /** 背景の一枚絵・動画。使わない場合は null (省略可: 古い呼び出し側・テストのため) */
   background?: BackgroundSettings | null;
+  /** ビジュアライザーの見え方 (省略可: 古い呼び出し側・テストのため。省略すると既定) */
+  view?: ViewSettings;
   exportSettings: ExportSettings;
 }
 
@@ -62,6 +66,7 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
       presetVersion: base.visualizer.presetVersion,
       common: { ...state.params },
       params: {},
+      view: { ...(state.view ?? defaultView()) },
     },
     overlays: state.overlays.map((o) => ({ ...o })),
     lyrics: state.lyrics

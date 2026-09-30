@@ -97,6 +97,7 @@ function createRunnerFromStore(): ExportRunner {
         analysis,
         rhythm,
         background,
+        view: { ...store.view },
         fileName,
       },
       ctx,

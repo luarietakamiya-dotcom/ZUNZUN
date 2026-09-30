@@ -15,7 +15,7 @@ import type { AudioTimeline } from '../audio/timeline';
 import { buildJizuraAudio, LyricMotion, motionRhythmGrid } from '../lyrics/jizura-adapter';
 import { backgroundPalette } from '../render/palette';
 import { wantsMotion } from '../lyrics/motion-provider';
-import type { BackgroundSettings, CommonParams, ExportSettings, LyricsSettings, OverlayLayer, RhythmSettings } from '../types';
+import type { BackgroundSettings, CommonParams, ExportSettings, LyricsSettings, OverlayLayer, RhythmSettings, ViewSettings } from '../types';
 import { VisualizerHost } from '../visualizer/host';
 import type { VisualizerModule } from '../visualizer/registry';
 import { prepareAudioForEncode, sliceAudioBuffer } from './audio-prep';
@@ -42,6 +42,8 @@ export interface Mp4ExportJob {
   rhythm?: RhythmSettings | null;
   /** 背景の一枚絵・動画 (設定と元のファイル)。省略 = 背景なし */
   background?: { config: BackgroundSettings; file: File } | null;
+  /** ビジュアライザーの見え方 (拡大・位置・傾き)。省略 = そのまま */
+  view?: ViewSettings;
   fileName: string;
 }
 
@@ -104,6 +106,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
   try {
     host.resize(width, height);
     await host.setPreset(job.preset, job.seed, job.params);
+    if (job.view) host.view = job.view;
     await host.overlay.loadFrom(job.overlays);
     // 背景の動画は、書き出す各フレームの時刻ちょうどの絵を取り出す (exact)
     await host.background.load(job.background?.config ?? null, job.background?.file ?? null, { exact: true });
