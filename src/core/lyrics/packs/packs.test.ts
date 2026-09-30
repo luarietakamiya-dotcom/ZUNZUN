@@ -142,11 +142,11 @@ describe('演出パック (本物の JIZURA)', () => {
       expect(c.decor ?? []).toEqual([]);
       expect([undefined, 'none']).toContain((c as Cut & { bg?: string }).bg);
     }
-    // 10 行 40 カットほどなので、12 個のうちほとんどが使われる (全部は保証しない)
-    const all = ['zzPeekWindow', 'zzGridFill', 'zzRepeatStack', 'zzPoster', 'zzBandRun', 'zzCrossType', 'zzGiantChar', 'zzCutPieces', 'zzCirclePunch', 'zzSplitInvert', 'zzTimeline', 'zzTelop'];
+    // 10 行 40 カットほどなので、18 個のうち多くが使われる (全部は保証しない)
+    const all = ['zzPeekWindow', 'zzGridFill', 'zzRepeatStack', 'zzPoster', 'zzBandRun', 'zzCrossType', 'zzGiantChar', 'zzCutPieces', 'zzCirclePunch', 'zzSplitInvert', 'zzTimeline', 'zzTelop', 'zzManuscript', 'zzNewspaper', 'zzScoreboard', 'zzStaff', 'zzNeonSign', 'zzMapPins'];
     const usedLayouts = new Set(lyricCuts.map((c) => c.layout));
     for (const k of usedLayouts) expect(all).toContain(k);
-    expect(usedLayouts.size).toBeGreaterThanOrEqual(9);
+    expect(usedLayouts.size).toBeGreaterThanOrEqual(12);
     for (const bad of ['strobe', 'invert', 'whiteFrame', 'negativeRing', 'bloomFlash', 'flashCross', 'flashBox']) expect(used).not.toContain(`"${bad}"`);
   });
 

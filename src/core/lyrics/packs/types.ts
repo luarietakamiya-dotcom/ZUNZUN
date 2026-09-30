@@ -32,6 +32,10 @@ export interface PackJ {
   measure(item: Record<string, unknown>): { w: number; h: number; lay: { ch: string; x: number; y: number; w: number; h: number }[] };
   /** 度 → ラジアン */
   DEG: number;
+  /** 書体の一覧 (キー → 情報)。使ってよい書体か確かめるのに使う */
+  FONTS?: Record<string, unknown>;
+  /** 縦書きで小さく右上に寄せる文字 (ゃ・っ など) か */
+  isSmallKana?(ch: string): boolean;
 }
 
 /** 背景から読み取った色 (core/render/palette.ts の BgPalette と同じ形) */
@@ -81,6 +85,8 @@ export interface PackScheme {
   accent: string;
   accent2?: string;
   bg: string;
+  /** 背景より少し明るい色 (板・升の地) */
+  dim?: string;
 }
 
 /** JIZURA が演出に渡す描画の環境 (makeEnv) のうち使う分。座標は plan の設計サイズ (例: 1920×1080) */

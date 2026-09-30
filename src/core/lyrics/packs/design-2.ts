@@ -1,4 +1,4 @@
-import { clean, DESIGN_SET, type DrawItem, fontsOf, isMain, type LayoutEnv, type Rng, shown, union, wordsOf } from './design-kit';
+import { clean, DESIGN_SET, type DrawItem, fontsOf, isMain, type LayoutEnv, piecesOf, type Rng, shown, staggerOf, union } from './design-kit';
 import type { PackBox, PackEffect, PackJ } from './types';
 import { beatOf, easeIn, easeInOut, easeOut, easeOutBack } from './util';
 
@@ -6,27 +6,6 @@ import { beatOf, easeIn, easeInOut, easeOut, easeOutBack } from './util';
  * 図案 (ZUNZUN) のオリジナルのレイアウト、2 つめの組 (大きな一文字・切り取り線・円の打ち抜き・二分割・タイムライン・テロップ)。
  * 書き方は design.ts の先頭のコメントと同じ。
  */
-
-/** 語が多すぎるときは、隣どうしをつないで max 個までにする */
-function mergeWords(words: string[], max: number): string[] {
-  const out = [...words];
-  while (out.length > max) {
-    // いちばん短い隣どうしをつなぐ
-    let best = 0;
-    for (let i = 1; i < out.length - 1; i++) if (out[i]!.length + out[i + 1]!.length < out[best]!.length + out[best + 1]!.length) best = i;
-    out.splice(best, 2, out[best]! + out[best + 1]!);
-  }
-  return out;
-}
-
-/** 語に分ける。1 語しか無ければ文字ごとに分けてから、max 個までにつなぐ (1 つの紙片・1 つの点だけにならないように) */
-function piecesOf(cut: LayoutEnv['cut'], max: number): string[] {
-  const w = wordsOf(cut);
-  const base = w.length >= 2 ? w : [...clean(cut.text)].filter((c) => c.trim());
-  return mergeWords(base, max);
-}
-
-const staggerOf = (env: LayoutEnv): number => (env.cut as { stagger?: number }).stagger ?? 0.04;
 
 export function designEffects2(J: PackJ): PackEffect[] {
   const set = DESIGN_SET;

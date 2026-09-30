@@ -30,6 +30,8 @@ export interface LayoutEnv extends PackEnv {
   rect(x: number, y: number, w: number, h: number, c: string, a?: number, ghost?: boolean): void;
   rrect(x: number, y: number, w: number, h: number, r: number, fill: string | null, a?: number, ghost?: boolean, stroke?: string, lw?: number): void;
   poly(pts: [number, number][], c: string, a?: number, ghost?: boolean): void;
+  /** 折れ線の最初から e (0..1) の割合だけを描く */
+  polyPartial(pts: [number, number][], e: number, c: string, lw?: number, a?: number, ghost?: boolean): void;
 }
 
 export const fontsOf = (st: LayoutEnv['st'], roles: string[]): string[] =>
@@ -59,3 +61,24 @@ export function wordsOf(cut: { words?: unknown; text: string }): string[] {
 }
 
 export const isMain = (env: { pass: string }): boolean => env.pass === 'main';
+
+/** 語が多すぎるときは、隣どうしをつないで max 個までにする */
+export function mergeWords(words: string[], max: number): string[] {
+  const out = [...words];
+  while (out.length > max) {
+    // いちばん短い隣どうしをつなぐ
+    let best = 0;
+    for (let i = 1; i < out.length - 1; i++) if (out[i]!.length + out[i + 1]!.length < out[best]!.length + out[best + 1]!.length) best = i;
+    out.splice(best, 2, out[best]! + out[best + 1]!);
+  }
+  return out;
+}
+
+/** 語に分ける。1 語しか無ければ文字ごとに分けてから、max 個までにつなぐ (1 つの紙片・1 つの点だけにならないように) */
+export function piecesOf(cut: LayoutEnv['cut'], max: number): string[] {
+  const w = wordsOf(cut);
+  const base = w.length >= 2 ? w : [...clean(cut.text)].filter((c) => c.trim());
+  return mergeWords(base, max);
+}
+
+export const staggerOf = (env: LayoutEnv): number => (env.cut as { stagger?: number }).stagger ?? 0.04;

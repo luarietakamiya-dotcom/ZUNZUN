@@ -1,4 +1,5 @@
 import { designEffects2 } from './design-2';
+import { designEffects3 } from './design-3';
 import { clean, DESIGN_SET, type DrawItem, fontsOf, glyphs, isMain, type LayoutEnv, pad, type Rng, shown, timecode, union } from './design-kit';
 import type { MotionPack, PackBox, PackEffect, PackJ } from './types';
 import { allowOnlyTagged, beatOf, disable, easeIn, easeOut } from './util';
@@ -366,6 +367,7 @@ export function designEffects(J: PackJ): PackEffect[] {
       },
     },
     ...designEffects2(J),
+    ...designEffects3(J),
   ];
 }
 
@@ -393,12 +395,13 @@ export const designPack: MotionPack = {
       layout: {
         zzPeekWindow: 1, zzGridFill: 1, zzRepeatStack: 1, zzPoster: 1.2, zzBandRun: 1, zzCrossType: 1,
         zzGiantChar: 1, zzCutPieces: 1, zzCirclePunch: 1, zzSplitInvert: 1, zzTimeline: 1, zzTelop: 1.2,
+        zzManuscript: 1, zzNewspaper: 0.9, zzScoreboard: 0.9, zzStaff: 1, zzNeonSign: 1, zzMapPins: 1,
       },
       fx: {},
     };
     st.decor = {};
     st.name = '図案 (ZUNZUN)';
-    st.desc = '画面の組み方をオリジナルで。のぞき窓・升目・反復・ポスター・走る帯・縦と横・大きな一文字・切り取り線・円の打ち抜き・二分割・タイムライン・テロップ';
+    st.desc = '画面の組み方をオリジナルで。のぞき窓・升目・反復・ポスター・走る帯・縦と横・大きな一文字・切り取り線・円の打ち抜き・二分割・タイムライン・テロップ・原稿用紙・新聞の見出し・スコア表示・楽譜・ネオン看板・地図のピン';
     return st;
   },
   effects: designEffects,
