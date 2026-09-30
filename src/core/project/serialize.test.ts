@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultBackground, defaultCommonParams, defaultLyrics, defaultProject, type OverlayLayer } from '../types';
+import { defaultBackground, defaultChromaKey, defaultCommonParams, defaultComposition, defaultLyrics, defaultMediaLayer, defaultProject, type OverlayLayer } from '../types';
 import { buildProjectFile, type ProjectSourceState } from './serialize';
 import { sanitizeProject } from './validate';
 
@@ -93,6 +93,17 @@ describe('buildProjectFile', () => {
     expect(project.composition).toEqual(composition);
     expect(project.composition!.order).not.toBe(composition.order);
     expect(sanitizeProject(JSON.parse(JSON.stringify(project))).composition).toEqual(composition);
+  });
+
+  it('素材 (media) を複製して保存し、保存 → 読み込みで同じ内容に戻る', () => {
+    const m = { ...defaultMediaLayer('m1', 'gs.png', 'f'.repeat(64), 'image'), x: 0.2, chroma: { ...defaultChromaKey(), enabled: true, color: '#11ee22' } };
+    const composition = { ...defaultComposition(), order: ['background', 'visualizer', 'lyrics', 'overlays', 'media:m1'] };
+    const project = buildProjectFile(state({ media: [m], composition }));
+    expect(project.media).toEqual([m]);
+    expect(project.media![0]!.chroma).not.toBe(m.chroma);
+    const back = sanitizeProject(JSON.parse(JSON.stringify(project)));
+    expect(back.media).toEqual([m]);
+    expect(back.composition).toEqual(composition);
   });
 
   it('背景 (background) を複製して保存し、保存 → 読み込みで同じ内容に戻る', () => {

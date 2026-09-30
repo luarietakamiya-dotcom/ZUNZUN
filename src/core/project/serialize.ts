@@ -11,6 +11,7 @@ import {
   type ViewSettings,
   defaultComposition,
   type CompositionSettings,
+  type MediaLayer,
 } from '../types';
 
 /** buildProjectFile が必要とする AudioEngine の最小の形 (実体は core/audio/engine.ts の AudioEngine)。 */
@@ -40,6 +41,8 @@ export interface ProjectSourceState {
   view?: ViewSettings;
   /** レイヤーの順番と重ね方 (省略可。省略すると既定) */
   composition?: CompositionSettings;
+  /** 素材レイヤー (省略可) */
+  media?: MediaLayer[];
   exportSettings: ExportSettings;
 }
 
@@ -91,6 +94,7 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
       : null,
     background: state.background ? { ...state.background } : null,
     composition: JSON.parse(JSON.stringify(state.composition ?? defaultComposition())) as CompositionSettings,
+    media: (state.media ?? []).map((m) => ({ ...m, chroma: { ...m.chroma } })),
     colors: {},
     fonts: {},
     export: { ...state.exportSettings },

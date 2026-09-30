@@ -30,7 +30,9 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text =
 
 export function layerName(id: string): string {
   const n = NAMES[id];
-  return n ? t2(n) : id;
+  if (n) return t2(n);
+  const m = id.startsWith('media:') ? store.media.find((x) => `media:${x.id}` === id) : undefined;
+  return m ? `${tr('素材', 'Media')}: ${m.ref}` : id;
 }
 
 export function createLayersCard(): HTMLElement {

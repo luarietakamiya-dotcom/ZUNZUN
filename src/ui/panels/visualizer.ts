@@ -240,6 +240,13 @@ export function renderVisualizerPanel(): HTMLElement {
   void host.overlay.loadFrom(overlayEntries);
   // 背景 (Overlay タブで設定)。ファイルがまだ選び直されていなければ背景なし
   void host.background.load(store.background, store.backgroundFile).catch(() => {});
+  // 素材レイヤー (「背景と素材」タブで足したもの)。ファイルをまだ選び直していないものは飛ばす
+  void host.media.load(
+    store.media.flatMap((m) => {
+      const file = store.getMediaFile(m.id);
+      return file ? [{ config: m, file }] : [];
+    }),
+  );
 
   const applyPreset = (id: string): void => {
     const mod = visualizerRegistry.get(id);
@@ -290,6 +297,7 @@ export function renderVisualizerPanel(): HTMLElement {
     );
     host.view = store.view;
     host.composition = store.composition;
+    host.media.setConfigs(store.media);
     if (frame) host.render(frame, store.params as CommonParams & Record<string, unknown>);
     requestAnimationFrame(tick);
   };

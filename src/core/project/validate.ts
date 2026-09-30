@@ -18,6 +18,8 @@ import {
   type BackgroundSettings,
   type RhythmSettings,
   type ViewSettings,
+  type MediaLayer,
+  defaultMediaLayer,
 } from '../types';
 import { normalizeView } from '../render/view';
 import { normalizeComposition } from '../render/composition';
@@ -230,6 +232,43 @@ function sanitizeBackground(raw: unknown): BackgroundSettings | null {
   };
 }
 
+const MAX_MEDIA = 64;
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+/** 素材レイヤー。ファイル名と sha256 と id が無いもの、id が重複するもの (後の方) は捨てる */
+function sanitizeMedia(raw: unknown): MediaLayer[] {
+  if (!Array.isArray(raw)) return [];
+  const out: MediaLayer[] = [];
+  const unit = (v: unknown, d: number): number => (isFiniteNumber(v) ? clamp(v, 0, 1) : d);
+  for (const item of raw.slice(0, MAX_MEDIA)) {
+    if (!isPlainObject(item)) continue;
+    const { id, ref, sha256 } = item;
+    if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(id) || out.some((m) => m.id === id)) continue;
+    if (typeof ref !== 'string' || ref === '' || typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256)) continue;
+    const kind = item.kind === 'video' ? 'video' : 'image';
+    const d = defaultMediaLayer(id, ref.slice(0, 512), sha256, kind);
+    const ch = isPlainObject(item.chroma) ? item.chroma : {};
+    out.push({
+      ...d,
+      x: isFiniteNumber(item.x) ? clamp(item.x, -1, 2) : d.x,
+      y: isFiniteNumber(item.y) ? clamp(item.y, -1, 2) : d.y,
+      scale: isFiniteNumber(item.scale) ? clamp(item.scale, 0.01, 4) : d.scale,
+      rotation: isFiniteNumber(item.rotation) ? clamp(item.rotation, -180, 180) : d.rotation,
+      opacity: unit(item.opacity, d.opacity),
+      blend: item.blend === 'screen' || item.blend === 'add' ? item.blend : 'normal',
+      chroma: {
+        enabled: typeof ch.enabled === 'boolean' ? ch.enabled : d.chroma.enabled,
+        color: typeof ch.color === 'string' && HEX_COLOR.test(ch.color) ? ch.color.toLowerCase() : d.chroma.color,
+        tolerance: unit(ch.tolerance, d.chroma.tolerance),
+        softness: unit(ch.softness, d.chroma.softness),
+        spill: unit(ch.spill, d.chroma.spill),
+      },
+      loop: typeof item.loop === 'boolean' ? item.loop : d.loop,
+    });
+  }
+  return out;
+}
+
 const MAX_BARS = 10_000;
 const MAX_METERS = 500;
 
@@ -326,6 +365,7 @@ export function sanitizeProject(raw: unknown): ProjectFile {
   }
 
   const base = defaultProject();
+  const media = sanitizeMedia(raw.media);
   const visualizerRaw = isPlainObject(raw.visualizer) ? raw.visualizer : {};
   const presetCandidate = visualizerRaw.preset;
   const presetVersionCandidate = visualizerRaw.presetVersion;
@@ -348,7 +388,8 @@ export function sanitizeProject(raw: unknown): ProjectFile {
     rhythm: sanitizeRhythm(raw.rhythm),
     background: sanitizeBackground(raw.background),
     // 古いプロジェクトは、ビジュアライザーの重ね方を背景の設定 (blend / visualizerOpacity) に持っていたので、そこから移す
-    composition: normalizeComposition(raw.composition, { legacy: isPlainObject(raw.background) ? raw.background : null }),
+    media,
+    composition: normalizeComposition(raw.composition, { legacy: isPlainObject(raw.background) ? raw.background : null, mediaIds: media.map((m) => m.id) }),
     colors: sanitizeColors(raw.colors),
     fonts: sanitizeFonts(raw.fonts),
     export: sanitizeExport(raw.export, base.export),

@@ -123,7 +123,8 @@ export class ExactVideo {
     return this.canvas.width / this.canvas.height;
   }
 
-  static async open(file: Blob, loop: boolean): Promise<ExactVideo> {
+  /** alpha = true なら透明な部分を残す (透明な WebM の素材用。背景は黒地のまま) */
+  static async open(file: Blob, loop: boolean, opts: { alpha?: boolean } = {}): Promise<ExactVideo> {
     const { Input, BlobSource, ALL_FORMATS, CanvasSink } = await import('mediabunny');
     const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
     const track = await input.getPrimaryVideoTrack();
@@ -134,7 +135,7 @@ export class ExactVideo {
     const k = Math.min(1, MAX_EXACT_SIDE / Math.max(track.displayWidth, track.displayHeight));
     const width = Math.max(1, Math.round(track.displayWidth * k));
     const height = Math.max(1, Math.round(track.displayHeight * k));
-    const sink = new CanvasSink(track, { width, height, fit: 'fill', poolSize: 2 });
+    const sink = new CanvasSink(track, { width, height, fit: 'fill', poolSize: 2, alpha: opts.alpha ?? false });
     return new ExactVideo(sink, () => input.dispose(), width, height, first, Math.max(0, end - first), loop);
   }
 
@@ -150,6 +151,8 @@ export class ExactVideo {
     const r = await this.frames.next();
     const c = r.done ? null : r.value;
     if (c) {
+      // 透明な部分がある動画は、前のフレームの絵が残らないように消してから描く
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.ctx.drawImage(c.canvas, 0, 0, this.canvas.width, this.canvas.height);
       this.texture.needsUpdate = true;
     }

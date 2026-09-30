@@ -7,6 +7,8 @@ import { PostFxStack } from '../render/postfx';
 import { applyView, normalizeView } from '../render/view';
 import { framePlan, normalizeComposition } from '../render/composition';
 import { ScreenCapture } from '../render/screen-capture';
+import { MediaCompositor } from '../render/media';
+import { isMediaLayer } from '../render/composition';
 import { type AudioFrame, type CommonParams, type CompositionSettings, defaultComposition, defaultView, type ViewSettings, type VisualizerPreset } from '../types';
 import type { VisualizerModule } from './registry';
 
@@ -51,6 +53,8 @@ export class VisualizerHost {
    * ビジュアライザーを画面に描いたあと、その上からスクリーン合成などで重ねる (ビジュアライザーの見た目を変えないため)
    */
   readonly background = new BackgroundCompositor();
+  /** 素材レイヤー (画像・動画、グリーンバックの素材など)。読み込むのは呼び出し側 (media.load)、設定は毎フレーム media.setConfigs */
+  readonly media = new MediaCompositor();
   private _view: ViewSettings = defaultView();
   private _composition: CompositionSettings = defaultComposition();
   /** レイヤーの順番を組み替えたときに、ビジュアライザーの絵を写し取っておく所 */
@@ -104,6 +108,7 @@ export class VisualizerHost {
     this.postfx.resize(this.width, this.height);
     this.overlay.resize(this.width, this.height);
     this.background.resize(this.width, this.height);
+    this.media.resize(this.width, this.height);
     // 歌詞の 2D canvas は実際の描画ピクセル数に合わせる (にじまないように)
     const pr = this.renderer.getPixelRatio();
     this.lyrics.resize(this.width * pr, this.height * pr);
@@ -154,6 +159,7 @@ export class VisualizerHost {
   render(frame: AudioFrame, params: CommonParams & Record<string, unknown>): void {
     const comp = this._composition;
     this.background.update(frame.t);
+    this.media.update(frame.t);
     this.background.setVisualizerBlend(comp.visualizerBlend, comp.visualizerOpacity);
     this.lyrics.setOpacity(comp.lyricsOpacity);
     this.overlay.animate(frame);
@@ -161,7 +167,7 @@ export class VisualizerHost {
       if (id === 'background') return this.background.active;
       if (id === 'visualizer') return this.current != null;
       if (id === 'lyrics' || id === 'overlays') return true;
-      return false;
+      return isMediaLayer(id) && this.media.has(id.slice(6));
     });
     const drawVisualizer = (): void => {
       const { preset } = this.current!;
@@ -195,6 +201,7 @@ export class VisualizerHost {
       else if (id === 'visualizer') this.capture.draw(this.renderer, comp.visualizerBlend, comp.visualizerOpacity);
       else if (id === 'lyrics') this.lyrics.render(this.renderer, frame.t);
       else if (id === 'overlays') this.overlay.render(this.renderer);
+      else if (isMediaLayer(id)) this.media.draw(this.renderer, id.slice(6));
     }
   }
 
@@ -207,6 +214,7 @@ export class VisualizerHost {
     this.overlay.dispose();
     this.background.dispose();
     this.capture.dispose();
+    this.media.dispose();
     this.renderer.dispose();
     // WebGL コンテキストは GC 任せだとしばらく残り、ブラウザの同時コンテキスト数上限 (Chrome は 16) に
     // 近づく。タブ切り替えや書き出しのたびに Host を作り直すので、ここで明示的に手放す。

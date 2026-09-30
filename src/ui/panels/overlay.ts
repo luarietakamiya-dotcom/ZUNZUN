@@ -1,6 +1,7 @@
 import { store } from '../../core/store';
 import { createBackgroundCard } from './background-card';
 import { createLayersCard } from './layers-card';
+import { createMediaCard } from './media-card';
 import type { OverlayLayer } from '../../core/types';
 import { tr, type Text2 } from '../../core/i18n';
 import { sliderRow } from './panel-helpers';
@@ -35,15 +36,19 @@ export function renderOverlayPanel(): HTMLElement {
 
   const p = document.createElement('p');
   p.textContent = tr(
-    '背景の写真・動画と、ビジュアライザーの手前に重ねる画像 (ロゴなど。PNG / WebP / JPG) を設定します。重ねた画像には、ビジュアライザーの光のにじみはかかりません。見た目は「ビジュアライザー」タブの画面で確かめてください。',
-    'Set a background photo/video and images drawn in front of the visuals (logos etc., PNG / WebP / JPG). Overlay images are not affected by the visualizer glow. Check the result in the Visualizer tab.',
+    '画面に重なるもの (レイヤー) の順番、背景の写真・動画、好きな位置に置く素材 (画像・動画、グリーンバックも)、手前に重ねる画像 (ロゴなど) を設定します。重ねたものには、ビジュアライザーの光のにじみはかかりません。見た目は「ビジュアライザー」タブの画面で確かめてください。',
+    'Set the stacking order of layers, the background photo/video, freely placed media (images/videos, green screen too) and overlay images (logos etc.). These are not affected by the visualizer glow. Check the result in the Visualizer tab.',
   );
   el.appendChild(p);
 
   // 背景の一枚絵 (ビジュアライザーの奥)。オーバーレイ (前面) とは別の欄
-  // レイヤーの順番 (手前が上)、そのあと背景の一枚絵・動画
-  el.appendChild(createLayersCard());
+  // レイヤーの順番 (手前が上)、背景の一枚絵・動画、素材 (素材を足したり外したりしたらレイヤーの一覧も作り直す)
+  const layersHost = document.createElement('div');
+  const renderLayers = (): void => layersHost.replaceChildren(createLayersCard());
+  renderLayers();
+  el.appendChild(layersHost);
   el.appendChild(createBackgroundCard());
+  el.appendChild(createMediaCard(renderLayers));
 
   const addRow = document.createElement('div');
   addRow.className = 'row-gap';

@@ -476,3 +476,8 @@ body {
 .layer-head { align-items: center; }
 .layer-name { flex: 1; font-size: 13px; }
 .layer-move { padding: 2px 8px; }
+
+/* 素材 (背景と素材タブ) */
+.media-list { display: flex; flex-direction: column; gap: 8px; }
+.media-thumb { width: 160px; height: 90px; object-fit: contain; background: #111; border-radius: 4px; cursor: crosshair; }
+.media-chroma { border-top: 1px dashed var(--border); margin-top: 6px; padding-top: 6px; }

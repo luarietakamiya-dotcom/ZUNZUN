@@ -15,7 +15,7 @@ import type { AudioTimeline } from '../audio/timeline';
 import { buildJizuraAudio, LyricMotion, motionRhythmGrid } from '../lyrics/jizura-adapter';
 import { backgroundPalette } from '../render/palette';
 import { wantsMotion } from '../lyrics/motion-provider';
-import type { BackgroundSettings, CommonParams, ExportSettings, LyricsSettings, OverlayLayer, RhythmSettings, ViewSettings, CompositionSettings } from '../types';
+import type { BackgroundSettings, CommonParams, ExportSettings, LyricsSettings, OverlayLayer, RhythmSettings, ViewSettings, CompositionSettings, MediaLayer } from '../types';
 import { VisualizerHost } from '../visualizer/host';
 import type { VisualizerModule } from '../visualizer/registry';
 import { prepareAudioForEncode, sliceAudioBuffer } from './audio-prep';
@@ -47,6 +47,8 @@ export interface Mp4ExportJob {
   view?: ViewSettings;
   /** レイヤーの順番と重ね方。省略 = 既定 */
   composition?: CompositionSettings;
+  /** 素材レイヤー (設定と元のファイル)。省略 = 無し */
+  media?: { config: MediaLayer; file: File }[];
   fileName: string;
 }
 
@@ -114,6 +116,8 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
     await host.overlay.loadFrom(job.overlays);
     // 背景の動画は、書き出す各フレームの時刻ちょうどの絵を取り出す (exact)
     await host.background.load(job.background?.config ?? null, job.background?.file ?? null, { exact: true });
+    await host.media.load(job.media ?? [], { exact: true });
+    host.media.setConfigs((job.media ?? []).map((m) => m.config));
     // 歌詞モーション: 書き出し開始時の設定で作る (プレビューと同じ seed・時刻・設定なので同じ絵になる。書き出しは軽い描画を使わない)
     const lyricReq = { lyrics: job.lyrics, analysis: job.analysis, projectSeed: job.seed, width, height, fps };
     if (wantsMotion(lyricReq)) {
@@ -148,7 +152,9 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
 
     const total = totalFrameCount(job.timeline.duration, fps);
     const frameDuration = 1 / fps;
-    host.background.beginExact(Array.from({ length: total }, (_, i) => frameTimestamp(i, fps)));
+    const songTimes = Array.from({ length: total }, (_, i) => frameTimestamp(i, fps));
+    host.background.beginExact(songTimes);
+    host.media.beginExact(songTimes);
     onProgress(0, total);
 
     for (let i = 0; i < total; i++) {
@@ -158,6 +164,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
 
       const frame = job.timeline.at(t, Math.max(0, t - frameDuration));
       await host.background.advanceExact();
+      await host.media.advanceExact();
       host.render(frame, job.params);
       await videoSource.add(t, frameDuration);
 

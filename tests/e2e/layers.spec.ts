@@ -108,3 +108,100 @@ test('「背景と素材」タブのレイヤーの一覧: ▼ で歌詞がビ�
   await expect(page.locator('.layer-row[data-layer="lyrics"] input[type="checkbox"]')).not.toBeChecked();
   await expect(page.locator('select[data-control="visualizer-blend"]')).toHaveValue('screen');
 });
+
+test('素材レイヤー + クロマキー: グリーンバックの緑 (影の暗い緑も) は透けて下の絵が見え、人の形の色は残る', async ({ page }) => {
+  await page.goto('/');
+  const r = await page.evaluate(async () => {
+    const { VisualizerHost } = await import('/src/core/visualizer/host.ts');
+    const { defaultComposition, defaultMediaLayer, defaultChromaKey, defaultBackground } = await import('/src/core/types.ts');
+    const W = 320;
+    const H = 180;
+    // 下の絵: 背景の一枚絵 (赤紫一色)。素材: 影のある緑の背景 + 肌色の丸 (中央)
+    const bgSrc = document.createElement('canvas');
+    bgSrc.width = 64;
+    bgSrc.height = 36;
+    const bg = bgSrc.getContext('2d')!;
+    bg.fillStyle = '#803060';
+    bg.fillRect(0, 0, 64, 36);
+    const bgBlob = await new Promise<Blob>((res) => bgSrc.toBlob((b) => res(b!), 'image/png'));
+    const src = document.createElement('canvas');
+    src.width = 320;
+    src.height = 180;
+    const g = src.getContext('2d')!;
+    const grad = g.createLinearGradient(0, 0, 320, 0);
+    grad.addColorStop(0, '#0d7a26');
+    grad.addColorStop(1, '#2fe05a');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 320, 180);
+    g.fillStyle = '#e8b896';
+    g.beginPath();
+    g.arc(160, 90, 40, 0, Math.PI * 2);
+    g.fill();
+    const blob = await new Promise<Blob>((res) => src.toBlob((b) => res(b!), 'image/png'));
+    const renderOnce = async (chroma: boolean): Promise<number[][]> => {
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      document.body.appendChild(canvas);
+      const host = new VisualizerHost(canvas, { pixelRatio: 1, preserveDrawingBuffer: true });
+      host.resize(W, H);
+      await host.background.load({ ...defaultBackground('bg.png', 'a'.repeat(64), 'image'), dim: 0 }, bgBlob);
+      // 素材は画面いっぱい (高さ 1 = 画面の高さ、16:9)
+      const m = { ...defaultMediaLayer('m1', 'gs.png', 'b'.repeat(64), 'image'), scale: 1, chroma: { ...defaultChromaKey(), enabled: chroma, color: '#2fe05a' } };
+      await host.media.load([{ config: m, file: blob }]);
+      host.media.setConfigs([m]);
+      host.composition = { ...defaultComposition(), order: [...defaultComposition().order, 'media:m1'] };
+      const frame = { t: 0, dt: 1 / 60, bass: 0, mid: 0, high: 0, rms: 0, peak: 0, beat: 0, beatIndex: -1, spectralEnergy: 0, flux: 0, bands: new Float32Array(64) };
+      host.render(frame, {} as never);
+      const tmp = document.createElement('canvas');
+      tmp.width = W;
+      tmp.height = H;
+      const g2 = tmp.getContext('2d')!;
+      g2.drawImage(canvas, 0, 0);
+      const px = (x: number, y: number) => Array.from(g2.getImageData(x, y, 1, 1).data.slice(0, 3));
+      host.dispose();
+      canvas.remove();
+      // 暗い緑 (左端)・明るい緑 (右端)・肌色 (中央)
+      return [px(8, 20), px(310, 20), px(160, 90)];
+    };
+    return { off: await renderOnce(false), on: await renderOnce(true) };
+  });
+  // オフなら緑が見える
+  expect(r.off[0]![1]).toBeGreaterThan(r.off[0]![0]! + 40);
+  // オンなら、暗い緑も明るい緑も透けて、下の背景 (#803060) が見える
+  for (const p of [r.on[0]!, r.on[1]!]) {
+    expect(Math.abs(p[0]! - 0x80)).toBeLessThanOrEqual(3);
+    expect(Math.abs(p[1]! - 0x30)).toBeLessThanOrEqual(3);
+    expect(Math.abs(p[2]! - 0x60)).toBeLessThanOrEqual(3);
+  }
+  // 肌色は残る
+  expect(Math.abs(r.on[2]![0]! - 0xe8)).toBeLessThanOrEqual(3);
+  expect(Math.abs(r.on[2]![1]! - 0xb8)).toBeLessThanOrEqual(3);
+});
+
+test('「背景と素材」タブ: 素材を足すとレイヤーの一覧のいちばん手前に入り、サムネイルを押すと透かす色が選ばれる。外すと一覧から消える', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('zunzun.lang', 'en'));
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Overlay' }).click();
+  // 緑一色の PNG を作って選ぶ
+  const dataUrl = await page.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 36;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#22dd44';
+    g.fillRect(0, 0, 64, 36);
+    return c.toDataURL('image/png');
+  });
+  await page.locator('.media-card input[type="file"]').first().setInputFiles({ name: 'gs.png', mimeType: 'image/png', buffer: Buffer.from(dataUrl.split(',')[1]!, 'base64') });
+  await expect(page.locator('.media-item')).toHaveCount(1);
+  const first = await page.locator('.layer-row').first().getAttribute('data-layer');
+  expect(first).toMatch(/^media:/);
+  await expect(page.locator('.layer-row').first()).toContainText('gs.png');
+  await page.locator('.media-thumb').click();
+  await expect(page.locator('.media-item input[data-media="chroma"]')).toBeChecked();
+  await expect(page.locator('.media-item input[type="color"]')).toHaveValue('#22dd44');
+  await page.getByRole('button', { name: 'Remove this media' }).click();
+  await expect(page.locator('.media-item')).toHaveCount(0);
+  expect(await page.locator('.layer-row').evaluateAll((rows) => rows.map((r) => (r as HTMLElement).dataset.layer))).toEqual(['overlays', 'lyrics', 'visualizer', 'background']);
+});

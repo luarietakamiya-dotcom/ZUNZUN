@@ -277,9 +277,30 @@ describe('composition (レイヤーの順番と重ね方)', () => {
     raw.background = { ref: 'a.png', sha256: 'd'.repeat(64), blend: 'add' };
     const c = sanitizeProject(raw).composition!;
     // 足りない決まったレイヤーは、既定の順番で 1 つ奥にあるもののすぐ手前に入る (背景 = いちばん奥、重ねる画像 = 歌詞のすぐ手前)
-    expect(c.order).toEqual(['background', 'lyrics', 'overlays', 'visualizer', 'media:abc']);
+    // 素材の一覧 (media) に無い 'media:abc' は捨てる
+    expect(c.order).toEqual(['background', 'lyrics', 'overlays', 'visualizer']);
     expect(c.hidden).toEqual(['lyrics']);
     // composition があれば、背景の古い重ね方は使わない
     expect(c).toMatchObject({ visualizerBlend: 'screen', visualizerOpacity: 1, lyricsOpacity: 0.4 });
+  });
+});
+
+describe('media (素材レイヤー)', () => {
+  it('ファイル名・sha256・id があるものだけ残し、値は範囲に収める。レイヤーの順番に無い素材は手前に足され、消えた素材は順番から外れる', () => {
+    const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
+    const sha = 'e'.repeat(64);
+    raw.media = [
+      { id: 'a1', ref: 'gs.mp4', sha256: sha, kind: 'video', x: 9, scale: 0, opacity: 0.5, blend: 'screen', chroma: { enabled: true, color: '#00FF00', tolerance: 2, spill: -1 }, loop: false },
+      { id: 'a1', ref: 'dup.png', sha256: sha },
+      { id: 'bad id!', ref: 'x.png', sha256: sha },
+      { id: 'b2', ref: 'logo.png', sha256: 'nope' },
+      { id: 'c3', ref: 'logo.png', sha256: sha, blend: 'multiply', chroma: { color: 'green' } },
+    ];
+    raw.composition = { order: ['background', 'media:gone', 'visualizer', 'lyrics', 'overlays', 'media:c3'] };
+    const p = sanitizeProject(raw);
+    expect(p.media!.map((m) => m.id)).toEqual(['a1', 'c3']);
+    expect(p.media![0]).toMatchObject({ kind: 'video', x: 2, scale: 0.01, opacity: 0.5, blend: 'screen', loop: false, chroma: { enabled: true, color: '#00ff00', tolerance: 1, softness: 0.1, spill: 0 } });
+    expect(p.media![1]).toMatchObject({ kind: 'image', blend: 'normal', chroma: { enabled: false, color: '#00ff00' } });
+    expect(p.composition!.order).toEqual(['background', 'visualizer', 'lyrics', 'overlays', 'media:c3', 'media:a1']);
   });
 });

@@ -18,6 +18,8 @@ import {
   type ViewSettings,
   defaultComposition,
   type CompositionSettings,
+  defaultMediaLayer,
+  type MediaLayer,
 } from './types';
 import { tr } from './i18n';
 
@@ -54,6 +56,50 @@ class Store {
   private _backgroundFile: File | null = null;
   private _view: ViewSettings = defaultView();
   private _composition: CompositionSettings = defaultComposition();
+  private _media: MediaLayer[] = [];
+  /** 素材の元のファイル (メモリ上だけ。Project JSON には ref/sha256 だけを保存する) */
+  private readonly mediaFiles = new Map<string, File>();
+
+  /** 素材レイヤー (画像・動画)。Project JSON の media に保存される */
+  get media(): MediaLayer[] {
+    return this._media;
+  }
+
+  getMediaFile(id: string): File | undefined {
+    return this.mediaFiles.get(id);
+  }
+
+  /** 素材を足す (レイヤーのいちばん手前に入る)。戻り値は素材の id */
+  async addMedia(file: File, kind: MediaLayer['kind']): Promise<string> {
+    if (file.size > MAX_BACKGROUND_BYTES) throw new Error(tr(`ファイルが大きすぎます (${(file.size / 2 ** 30).toFixed(1)}GB)。2GB までにしてください`, `The file is too large (${(file.size / 2 ** 30).toFixed(1)} GB). Please keep it under 2 GB`));
+    const sha256 = await sha256Hex(await file.arrayBuffer());
+    const id = crypto.randomUUID();
+    this._media = [...this._media, defaultMediaLayer(id, file.name, sha256, kind)];
+    this.mediaFiles.set(id, file);
+    this._composition = { ...this._composition, order: [...this._composition.order, `media:${id}`] };
+    this.emit();
+    return id;
+  }
+
+  /** プロジェクトを開いたあと、素材のファイルを選び直す */
+  relinkMedia(id: string, file: File): void {
+    if (!this._media.some((m) => m.id === id)) return;
+    this.mediaFiles.set(id, file);
+    this.emit();
+  }
+
+  updateMedia(id: string, patch: Partial<Omit<MediaLayer, 'id' | 'ref' | 'sha256' | 'kind'>>): void {
+    this._media = this._media.map((m) => (m.id === id ? { ...m, ...patch } : m));
+    this.emit();
+  }
+
+  removeMedia(id: string): void {
+    this._media = this._media.filter((m) => m.id !== id);
+    this.mediaFiles.delete(id);
+    const key = `media:${id}`;
+    this._composition = { ...this._composition, order: this._composition.order.filter((o) => o !== key), hidden: this._composition.hidden.filter((o) => o !== key) };
+    this.emit();
+  }
 
   /** レイヤーの順番と重ね方。Project JSON の composition に保存される */
   get composition(): CompositionSettings {
@@ -293,7 +339,9 @@ class Store {
     this._presetId = project.visualizer.preset;
     this._params = { ...project.visualizer.common };
     this._view = { ...(project.visualizer.view ?? defaultView()) };
-    this._composition = normalizeComposition(project.composition);
+    this._media = (project.media ?? []).map((m) => ({ ...m, chroma: { ...m.chroma } }));
+    this.mediaFiles.clear();
+    this._composition = normalizeComposition(project.composition, { mediaIds: this._media.map((m) => m.id) });
     this._expectedAudio = project.audio;
     this._overlays = project.overlays;
     this.overlayFiles.clear();

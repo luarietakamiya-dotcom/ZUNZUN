@@ -100,6 +100,10 @@ function createRunnerFromStore(): ExportRunner {
         background,
         view: { ...store.view },
         composition: JSON.parse(JSON.stringify(store.composition)),
+        media: store.media.flatMap((m) => {
+          const file = store.getMediaFile(m.id);
+          return file ? [{ config: { ...m, chroma: { ...m.chroma } }, file }] : [];
+        }),
         fileName,
       },
       ctx,

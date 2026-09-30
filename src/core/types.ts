@@ -155,6 +155,8 @@ export interface ProjectFile {
   background: BackgroundSettings | null;
   /** レイヤーの順番と重ね方。古いプロジェクトには無い (読み込むと、背景の設定から移して作る) */
   composition?: CompositionSettings;
+  /** 素材レイヤー (画像・動画、グリーンバックの素材など)。古いプロジェクトには無い */
+  media?: MediaLayer[];
   colors: Record<string, string>;
   fonts: Record<string, string>;
   export: ExportSettings;
@@ -232,6 +234,57 @@ export interface CompositionSettings {
   /** 歌詞の濃さ (0..1) */
   lyricsOpacity: number;
 }
+
+/** クロマキー (決めた色を透かす。グリーンバックの素材用) */
+export interface ChromaKey {
+  enabled: boolean;
+  /** 透かす色 (#rrggbb) */
+  color: string;
+  /** どこまで近い色を透かすか (0..1) */
+  tolerance: number;
+  /** 境目のぼかし (0..1) */
+  softness: number;
+  /** 被写体の縁に残る色 (緑のにじみ) を取る量 (0..1) */
+  spill: number;
+}
+
+/** 素材レイヤー (画像・動画。レイヤーの順番の中では 'media:<id>')。中身は保存せず、ファイル名と sha256 だけ */
+export interface MediaLayer {
+  id: string;
+  ref: string;
+  sha256: string;
+  kind: 'image' | 'video';
+  /** 中心の位置 (0 = 左 / 下の端、1 = 右 / 上の端) */
+  x: number;
+  y: number;
+  /** 画面の高さに対する大きさ (1 = 画面の高さと同じ) */
+  scale: number;
+  /** 回転 (度、正 = 反時計回り) */
+  rotation: number;
+  opacity: number;
+  /** 下のレイヤーへの重ね方 ('normal' = そのまま上に) */
+  blend: 'normal' | 'screen' | 'add';
+  chroma: ChromaKey;
+  /** 動画が曲より短いとき、くり返すか */
+  loop: boolean;
+}
+
+export const defaultChromaKey = (): ChromaKey => ({ enabled: false, color: '#00ff00', tolerance: 0.25, softness: 0.1, spill: 0.5 });
+
+export const defaultMediaLayer = (id: string, ref: string, sha256: string, kind: MediaLayer['kind']): MediaLayer => ({
+  id,
+  ref,
+  sha256,
+  kind,
+  x: 0.5,
+  y: 0.5,
+  scale: 0.6,
+  rotation: 0,
+  opacity: 1,
+  blend: 'normal',
+  chroma: defaultChromaKey(),
+  loop: true,
+});
 
 export const defaultComposition = (): CompositionSettings => ({
   order: [...BASE_LAYERS],
