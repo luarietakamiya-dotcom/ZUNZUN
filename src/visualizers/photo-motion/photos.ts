@@ -5,6 +5,7 @@ import alleyDarkUrl from '../../assets/photo-motion/alley-dark.webp';
 import cabinetLeftUrl from '../../assets/photo-motion/cabinet-left.webp';
 import cabinetRightUrl from '../../assets/photo-motion/cabinet-right.webp';
 import lightsSmokeUrl from '../../assets/photo-motion/lights-smoke.webp';
+import rackDarkUrl from '../../assets/photo-motion/rack-dark.webp';
 import rackUrl from '../../assets/photo-motion/rack.webp';
 import speakerLeftUrl from '../../assets/photo-motion/speaker-left.webp';
 import speakerRightUrl from '../../assets/photo-motion/speaker-right.webp';
@@ -34,13 +35,21 @@ export interface Speaker {
  * - tubes: 音量で光り、ゆっくりゆらぐ (真空管)
  * - spectrum: 写真の LED のバーを、音の高さごとの強さに合わせて伸び縮みさせる
  * - lightsL / lightsR: 拍ごとに左右交互に強まる (照明)
+ * 明かりの消えた絵に、光そのものを描き足す種類 (2026-10-01。暗い絵では「明るい所を光らせる」が効かないため):
+ * - vu: VU メーターの盤面を暖かい色で照らし、音量で振れる針を描く (四角は盤面。針の根元は下の辺の真ん中)
+ * - tubeGlow: 真空管の中に橙色の灯りを描く (四角は管 1 本)
+ * - vent: すき間 (暗い所) から漏れる光 (音量で明るく)
+ * - ventSpectrum: すき間の奥に、音の高さごとの強さで伸び縮みするバーを描く
+ * - meter: 縦の LED の列。音量の高さまで点く
  */
 export interface Region {
   x: number;
   y: number;
   w: number;
   h: number;
-  kind: 'glow' | 'tubes' | 'spectrum' | 'lightsL' | 'lightsR';
+  kind: 'glow' | 'tubes' | 'spectrum' | 'lightsL' | 'lightsR' | 'vu' | 'tubeGlow' | 'vent' | 'ventSpectrum' | 'meter';
+  /** vu / meter で、左右どちらの音量を見るか (0 = 左, 1 = 右。曲は 1 本の音なので、右は少し高音寄りにして左右の差を出す) */
+  ch?: 0 | 1;
 }
 
 /**
@@ -83,9 +92,33 @@ function photoScene(id: string, name: Text2, url: string, speakers: Speaker[], r
 }
 
 export const PHOTOS: readonly Scene[] = [
+  // 明かりの消えた絵 (2026-10-01 ユーザー提供) に、光を描き足す。位置は scratchpad の目盛り付きの絵で読んだ
   photoScene(
     'speaker-rack',
     { ja: 'スピーカーと機材ラック', en: 'Speakers and gear rack' },
+    rackDarkUrl,
+    [
+      // コーンの紙の縁より少し外 (エッジの真ん中) までをふくらませる。枠の金属の輪は動かさない
+      { x: 0.154, y: 0.47, r: 0.27, band: 'bass', delay: 0 },
+      { x: 0.846, y: 0.47, r: 0.27, band: 'bass', delay: 0 },
+      { x: 0.082, y: 0.048, r: 0.06, band: 'high', delay: 0 },
+      { x: 0.919, y: 0.05, r: 0.06, band: 'high', delay: 0 },
+    ],
+    [
+      { x: 0.395, y: 0.152, w: 0.205, h: 0.108, kind: 'ventSpectrum' },
+      { x: 0.393, y: 0.293, w: 0.075, h: 0.062, kind: 'vu', ch: 0 },
+      { x: 0.535, y: 0.293, w: 0.075, h: 0.062, kind: 'vu', ch: 1 },
+      { x: 0.487, y: 0.48, w: 0.009, h: 0.09, kind: 'meter', ch: 0 },
+      { x: 0.504, y: 0.48, w: 0.009, h: 0.09, kind: 'meter', ch: 1 },
+      { x: 0.473, y: 0.695, w: 0.02, h: 0.095, kind: 'tubeGlow' },
+      { x: 0.507, y: 0.695, w: 0.02, h: 0.095, kind: 'tubeGlow' },
+      { x: 0.39, y: 0.69, w: 0.225, h: 0.11, kind: 'vent' },
+    ],
+    null,
+  ),
+  photoScene(
+    'speaker-rack-lit',
+    { ja: 'スピーカーと機材ラック (明かりの点いた写真)', en: 'Speakers and gear rack (lit photo)' },
     speakerRackUrl,
     [
       { x: 0.105, y: 0.462, r: 0.3, band: 'bass', delay: 0 },

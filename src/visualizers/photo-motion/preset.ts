@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { shapeAudio, shapeBands } from '../../core/visualizer/response';
 import type { AudioFrame, CommonParams, VisualizerInitContext, VisualizerPreset } from '../../core/types';
-import { CANVAS_ASPECT, MAX_REGIONS, MAX_SPEAKERS, photoById, type Layer, type Scene } from './photos';
+import { CANVAS_ASPECT, MAX_REGIONS, MAX_SPEAKERS, photoById, type Layer, type Region, type Scene } from './photos';
 import { createPhotoMaterial } from './shaders';
 
 /**
@@ -13,7 +13,9 @@ import { createPhotoMaterial } from './shaders';
  * - high: ツイーターが細かく震える。
  * - 帯域 (bands): 写真のスペクトラムの LED のバーが、音の高さごとの強さに合わせて伸び縮みする。
  * - rms (音量): メーター・LED・真空管などの明るい所が光る。
- * - beat: 照明が左右交互に少し強まる。拍の頭で写真がほんの少し震える。bass でスモークが少し濃くなる。
+ * - beat: 照明が左右交互に少し強まる。bass でスモークが少し濃くなる。
+ *   (拍の頭で写真全体を震わせていたが、コーンの動きが見えにくくなるのでやめた。2026-10-01 ユーザーの実機確認)
+ * - 明かりの消えた絵には光を描き足す: VU の針は音量で振れ (針らしく、上がりは速く戻りはゆっくり)、LED の列も同じ高さまで点く。
  * 光らせるのは写真の中の明るい画素だけ (暗い所はそのまま) で、強まり方もなめらかにする (光過敏への配慮)。
  *
  * 乱数は使わない (効果の形はすべて写真ごとの決まった位置と、音と時刻だけで決まる)。
@@ -47,10 +49,15 @@ export interface PhotoMotionInspection {
   haze: number;
   /** スペクトラムのバーの平均 (0..1) */
   spectrum: number;
-  shake: number;
+  /** VU の針の振れ (左, 右。0..1) */
+  needles: [number, number];
 }
 
 const fin = (v: number): number => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
+const fin2 = (v: number): number => (Number.isFinite(v) ? Math.min(2, Math.max(0, v)) : 0);
+
+/** 光る所の種類 → シェーダーの番号 (shaders.ts の regionLevel.y) */
+const REGION_KIND: Record<Region['kind'], number> = { glow: 0, tubes: 0, lightsL: 0, lightsR: 0, spectrum: 1, vu: 2, tubeGlow: 3, vent: 4, ventSpectrum: 5, meter: 6 };
 const safeDt = (dt: number): number => (Number.isFinite(dt) ? Math.min(0.1, Math.max(0, dt)) : 0);
 function follow(cur: number, target: number, dt: number, up: number, down: number): number {
   const v = fin(target);
@@ -115,7 +122,8 @@ export class PhotoMotionPreset implements VisualizerPreset {
   private rmsEnv = 0;
   private beatEnv = 0;
   private bassSlow = 0;
-  private shake = 0;
+  /** VU の針 (左, 右) */
+  private readonly needle = [0, 0];
   private lastBeat = -1;
   private side = 0;
   private readonly bands = new Float32Array(64);
@@ -174,9 +182,10 @@ export class PhotoMotionPreset implements VisualizerPreset {
     if (frame.beatIndex !== this.lastBeat && frame.beatIndex >= 0) {
       this.lastBeat = frame.beatIndex;
       this.side = frame.beatIndex % 2;
-      this.shake = Math.max(this.shake, fin(a.beat) * k);
     }
-    this.shake *= Math.exp(-dt * 10);
+    // VU の針: 上がりは速く、戻りはゆっくり。右は少し高音寄り (曲は 1 本の音なので、左右に差を付ける)
+    this.needle[0] = follow(this.needle[0]!, rmsN * (0.35 + 0.65 * k), dt, 14, 3.5);
+    this.needle[1] = follow(this.needle[1]!, (0.75 * rmsN + 0.25 * highN) * (0.35 + 0.65 * k), dt, 14, 3.5);
 
     // 帯域 → スペクトラムのバー (低い音の帯域を細かく、上をまとめる)
     shapeBands(frame.bands ?? new Float32Array(64), params, this.bands);
@@ -191,8 +200,9 @@ export class PhotoMotionPreset implements VisualizerPreset {
       let s = 0;
       for (let j = s0; j < s1; j++) s += fin(this.bands[j]!);
       // 耳の感じ方に近づける (小さい値を持ち上げる)
-      const target = fin(Math.pow(fin((s / (s1 - s0)) * (1 + (i / SPECTRUM_BARS) * 0.8)), 0.6) * (0.35 + 0.65 * k));
-      this.bars[i] = follow(this.bars[i]!, target, dt, 40, 7);
+      // (2026-10-01: 伸びが悪いとの声で、持ち上げを強めて上まで届くようにした)
+      const target = fin(Math.pow(fin((s / (s1 - s0)) * (1 + (i / SPECTRUM_BARS) * 0.8)), 0.5) * 1.15 * (0.45 + 0.55 * k));
+      this.bars[i] = follow(this.bars[i]!, target, dt, 40, 6);
       const v = Math.round(this.bars[i]! * 255);
       this.bandData[i * 4] = v;
       this.bandData[i * 4 + 1] = v;
@@ -240,7 +250,7 @@ export class PhotoMotionPreset implements VisualizerPreset {
       globalGlow,
       haze,
       spectrum: this.bars.reduce((s, v) => s + v, 0) / SPECTRUM_BARS,
-      shake: this.shake,
+      needles: [this.needle[0]!, this.needle[1]!],
     };
   }
 
@@ -308,9 +318,8 @@ export class PhotoMotionPreset implements VisualizerPreset {
     else sx = this.aspect / CANVAS_ASPECT;
     sx /= zoom;
     sy /= zoom;
-    const shake = this.shake * 0.003;
-    const ox = (1 - sx) / 2 + Math.sin(this.t * 0.07) * (1 - sx) * 0.3 + Math.sin(this.t * 57) * shake;
-    const oy = (1 - sy) / 2 + Math.sin(this.t * 0.05) * (1 - sy) * 0.2 + Math.sin(this.t * 43) * shake;
+    const ox = (1 - sx) / 2 + Math.sin(this.t * 0.07) * (1 - sx) * 0.3;
+    const oy = (1 - sy) / 2 + Math.sin(this.t * 0.05) * (1 - sy) * 0.2;
 
     // 照明の層の濃さ: 静かなときはほぼ消え、音量と拍で点く (なめらかに。拍で強まる幅は控えめ)
     const lights = Math.min(1, 0.1 + (0.75 * this.rmsEnv + 0.35 * this.beatEnv) * glowK * 1.4);
@@ -343,23 +352,36 @@ export class PhotoMotionPreset implements VisualizerPreset {
       }
       // 光る所。明かりの消える層 (offDim > 0) は、静かなときは 0 (消える)、大きい音で 1 (点く) まで
       const regions = u.regions!.value as THREE.Vector4[];
-      const levels = u.regionLevel!.value as THREE.Vector2[];
+      const levels = u.regionLevel!.value as THREE.Vector4[];
       const glow = def.offDim > 0 ? Math.min(1, (0.1 + 1.0 * this.rmsEnv) * glowK * 1.3) : (0.12 + 0.55 * this.rmsEnv) * glowK;
       for (let i = 0; i < MAX_REGIONS; i++) {
         const r = def.regions[i];
         if (!r) {
           regions[i]!.set(0, 0, 0, 0);
-          levels[i]!.set(0, 0);
+          levels[i]!.set(0, 0, 0, 0);
           continue;
         }
         regions[i]!.set(r.x, 1 - (r.y + r.h), r.x + r.w, 1 - r.y);
+        const kindCode = REGION_KIND[r.kind];
+        const needle = this.needle[r.ch ?? 0]!;
         let level = glow;
-        if (r.kind === 'tubes') level = glow * (0.9 + 0.1 * Math.sin(this.t * 2.3) * Math.sin(this.t * 0.7)) + 0.1 * glowK;
+        let extra = 0;
+        if (r.kind === 'vu') {
+          // 盤面の灯りはいつも点いていて、音量で少し明るく
+          level = (0.4 + 0.45 * this.rmsEnv) * glowK;
+          extra = needle;
+        } else if (r.kind === 'meter') {
+          level = 0.6 + 0.4 * glowK;
+          extra = needle;
+        } else if (r.kind === 'tubeGlow') level = (0.35 + 0.55 * this.rmsEnv) * glowK * (0.94 + 0.06 * Math.sin(this.t * 2.3) * Math.sin(this.t * 0.7));
+        else if (r.kind === 'vent') level = (0.12 + 0.6 * this.rmsEnv) * glowK;
+        else if (r.kind === 'ventSpectrum') level = 0.4 + 0.6 * glowK;
+        else if (r.kind === 'tubes') level = glow * (0.9 + 0.1 * Math.sin(this.t * 2.3) * Math.sin(this.t * 0.7)) + 0.1 * glowK;
         else if (r.kind === 'lightsL' || r.kind === 'lightsR') {
           const mine = (r.kind === 'lightsL' ? 0 : 1) === this.side;
           level = (0.08 + (mine ? 0.5 : 0.12) * this.beatEnv) * glowK;
         } else if (r.kind === 'spectrum') level = 0.5 * glowK;
-        levels[i]!.set(Math.min(def.offDim > 0 ? 1 : 2, level), r.kind === 'spectrum' ? 1 : 0);
+        levels[i]!.set(Math.min(def.offDim > 0 ? 1 : 2, fin2(level)), kindCode, fin(extra), 0);
       }
       u.globalGlow!.value = def.offDim > 0 || def.lights ? 0 : 0.04 * glowK;
       if (def.haze) {

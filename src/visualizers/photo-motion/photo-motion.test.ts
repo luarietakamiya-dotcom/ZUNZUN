@@ -47,8 +47,8 @@ const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 const uniforms = (p: PhotoMotionPreset): Record<string, THREE.IUniform> => (p.scene.children[0] as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>).material.uniforms;
 
 describe('写真の定義 (photos)', () => {
-  it('写真 1 枚の場面 3 つと、部品から組み立てる場面 2 つがあり、位置はどれも絵の中、数はシェーダーの上限まで', () => {
-    expect(PHOTOS.map((p) => p.id)).toEqual(['speaker-rack', 'stage-lights', 'speaker-alley', 'rack-parts', 'alley-lights']);
+  it('写真 1 枚の場面 4 つと、部品から組み立てる場面 2 つがあり、位置はどれも絵の中、数はシェーダーの上限まで', () => {
+    expect(PHOTOS.map((p) => p.id)).toEqual(['speaker-rack', 'speaker-rack-lit', 'stage-lights', 'speaker-alley', 'rack-parts', 'alley-lights']);
     for (const scene of PHOTOS) {
       expect(scene.layers.length).toBeGreaterThan(0);
       for (const p of scene.layers) {
@@ -162,6 +162,28 @@ describe('PhotoMotionPreset', () => {
     p.dispose();
   });
 
+  it('明かりの消えたラック: VU の針は音量で振れ (上がりは速く、戻りはゆっくり)、盤面の灯り・真空管はいつも少し点いている。拍で写真全体は動かない', async () => {
+    const p = await makePreset();
+    run(p, 60, () => ({}));
+    const quiet = p.inspect();
+    expect(Math.max(...quiet.needles)).toBeLessThan(0.01);
+    // 盤面 (regions[1], [2]) と真空管 (regions[5], [6]) は静かなときも消えない
+    for (const i of [1, 2, 5, 6]) expect(quiet.regions[i]).toBeGreaterThan(0.1);
+    const offsetBefore = (uniforms(p).uvOffset!.value as THREE.Vector2).clone();
+    run(p, 15, (i) => ({ rms: 0.8, bass: 1, beat: i === 0 ? 1 : 0, beatIndex: 0 }));
+    const loud = p.inspect();
+    expect(loud.needles[0]).toBeGreaterThan(0.5);
+    expect(loud.needles[1]).toBeGreaterThan(0.4);
+    // 写真全体の位置は、ゆっくりした寄り・流れ (Camera Motion) のぶんしか変わらない
+    expect((uniforms(p).uvOffset!.value as THREE.Vector2).distanceTo(offsetBefore)).toBeLessThan(0.002);
+    run(p, 6, () => ({}));
+    // 戻りはゆっくり (0.1 秒ではまだ半分以上残る)
+    expect(p.inspect().needles[0]).toBeGreaterThan(loud.needles[0] * 0.5);
+    run(p, 180, () => ({}));
+    expect(p.inspect().needles[0]).toBeLessThan(0.02);
+    p.dispose();
+  });
+
   it('ステージの写真では、照明が拍ごとに左右交互に強まり、スモークが流れる。強まり方は控えめ (0.6 以下)', async () => {
     const pr = params({ photo: 'stage-lights' });
     const p = await makePreset(pr);
@@ -246,7 +268,7 @@ describe('PhotoMotionPreset', () => {
     p.update(frame(1, { dt: 5, bass: 1, high: 1, beat: 1, beatIndex: 3, rms: 1 }), params());
     p.update(frame(2, { dt: Number.NaN, high: Number.NaN, bass: Number.NaN, rms: Number.NaN, bands: new Float32Array(64).fill(Number.NaN) }), params({ intensity: Number.NaN, pump: Number.NaN }));
     const i = p.inspect();
-    for (const v of [...i.speakers, ...i.regions, i.globalGlow, i.haze, i.spectrum, i.shake]) expect(Number.isFinite(v)).toBe(true);
+    for (const v of [...i.speakers, ...i.regions, i.globalGlow, i.haze, i.spectrum, ...i.needles]) expect(Number.isFinite(v)).toBe(true);
     const u = uniforms(p);
     for (const v of [...(u.uvScale!.value as THREE.Vector2).toArray(), ...(u.uvOffset!.value as THREE.Vector2).toArray()]) expect(Number.isFinite(v)).toBe(true);
     const mesh = p.scene.children[0] as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;

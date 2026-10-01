@@ -95,6 +95,7 @@ const CASES: [string, Record<string, unknown>][] = [
   ['speaker-rack', { framing: 'closeup' }],
   ['speaker-rack', { layout: 'alley' }],
   ['photo-motion', { photo: 'speaker-rack' }],
+  ['photo-motion', { photo: 'speaker-rack-lit' }],
   ['photo-motion', { photo: 'stage-lights' }],
   ['photo-motion', { photo: 'speaker-alley' }],
   ['photo-motion', { photo: 'rack-parts' }],
