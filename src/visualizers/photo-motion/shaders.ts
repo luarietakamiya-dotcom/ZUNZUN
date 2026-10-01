@@ -7,6 +7,9 @@ import { MAX_REGIONS, MAX_SPEAKERS } from './photos';
  * - 光る所: 明るい画素だけを、その所の強さで明るくする (暗い所はそのまま)
  * - スペクトラム: 写真の LED のバーを、横の位置ごとの音の強さより上の部分だけ暗くする (バーが伸び縮みして見える)
  * - スモーク: ゆっくり流れるむらを、決めた四角の中に足す
+ * - 層: どの層も画面いっぱいの板で描き、画面 → 画用紙 (uvScale/uvOffset) → 層の絵 (partRect) の順に位置を直す。
+ *   部品の層は置き場所の外を描かない。透明な所は透明のまま (下の層が見える)。層全体の濃さ (layerOpacity) も掛ける
+ * - 明かりの消え具合 (offDim): 光る所の明るい画素を、静かなときは暗く、音で明るくする (0 なら今までと同じ式)
  * 写真の色は sRGB のテクスチャとして読む (three.js が線形に直し、画面へ描くときに戻すので、写真の色のまま出る)
  */
 
@@ -27,6 +30,10 @@ uniform sampler2D bands;
 uniform vec2 uvScale;
 uniform vec2 uvOffset;
 uniform float photoAspect;
+/** 層の絵が画用紙のどこにあるか (x0, y0, x1, y1。下が 0)。画面いっぱいの層は 0, 0, 1, 1 */
+uniform vec4 partRect;
+uniform float layerOpacity;
+uniform float offDim;
 /** スピーカー: x, y (写真の uv。下が 0), 半径 (写真の高さに対する), ふくらみ (0..1.2) */
 uniform vec4 speakers[MAX_SPEAKERS];
 /** 光る所: x0, y0, x1, y1 (写真の uv) と、強さ・種類 (0 = 明るい所を光らせる, 1 = スペクトラム) */
@@ -52,7 +59,9 @@ float inRect(vec2 p, vec4 r, float soft) {
 }
 
 void main() {
-  vec2 uv = vUv * uvScale + uvOffset;
+  vec2 canvasUv = vUv * uvScale + uvOffset;
+  vec2 uv = (canvasUv - partRect.xy) / max(partRect.zw - partRect.xy, vec2(1e-6));
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;
   // スピーカー: 円の中を少し拡大して読む (ふくらんで見える)
   float lift = 0.0;
   for (int i = 0; i < MAX_SPEAKERS; i++) {
@@ -67,12 +76,14 @@ void main() {
       lift += f;
     }
   }
-  vec3 col = texture2D(map, clamp(uv, 0.0, 1.0)).rgb;
+  vec4 tex = texture2D(map, clamp(uv, 0.0, 1.0));
+  vec3 col = tex.rgb;
   col *= 1.0 + 0.3 * clamp(lift, 0.0, 1.5);
   float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
   float bright = smoothstep(0.12, 0.55, lum);
-  // 光る所
+  // 光る所 (off = 明かりを消す量。光る所の中で、音が小さいほど大きい)
   float glow = globalGlow;
+  float off = 0.0;
   for (int i = 0; i < MAX_REGIONS; i++) {
     vec4 r = regions[i];
     if (r.z <= r.x) continue;
@@ -88,8 +99,10 @@ void main() {
       col = mix(col, col * mix(1.0 + 1.1 * lv.x, 0.1, above), bright * inside);
     } else {
       glow += lv.x * inside;
+      off += (1.0 - clamp(lv.x, 0.0, 1.0)) * inside;
     }
   }
+  col *= 1.0 - offDim * bright * clamp(off, 0.0, 1.0);
   col += col * bright * glow;
   // スモーク
   if (hazeAmount > 0.0) {
@@ -97,7 +110,7 @@ void main() {
     float n = noise(q) * 0.6 + noise(q * 2.1 + 5.0) * 0.4;
     col += hazeColor * hazeAmount * n * inRect(uv, hazeRect, 0.12);
   }
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(col, tex.a * layerOpacity);
 }
 `;
 
@@ -108,12 +121,16 @@ export function createPhotoMaterial(map: THREE.Texture, bands: THREE.DataTexture
     fragmentShader: FRAG,
     depthTest: false,
     depthWrite: false,
+    transparent: true,
     uniforms: {
       map: { value: map },
       bands: { value: bands },
       uvScale: { value: new THREE.Vector2(1, 1) },
       uvOffset: { value: new THREE.Vector2(0, 0) },
       photoAspect: { value: 16 / 9 },
+      partRect: { value: new THREE.Vector4(0, 0, 1, 1) },
+      layerOpacity: { value: 1 },
+      offDim: { value: 0 },
       speakers: { value: Array.from({ length: MAX_SPEAKERS }, () => new THREE.Vector4(0, 0, 0, 0)) },
       regions: { value: Array.from({ length: MAX_REGIONS }, () => new THREE.Vector4(0, 0, 0, 0)) },
       regionLevel: { value: Array.from({ length: MAX_REGIONS }, () => new THREE.Vector2(0, 0)) },

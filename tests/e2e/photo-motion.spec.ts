@@ -1,13 +1,13 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * 「写真に動き」の E2E: 3 枚それぞれの写真が読み込まれて映り (真っ黒でない)、音があると絵が変わる
+ * 「写真に動き」の E2E: 写真 1 枚の場面 3 つと部品から組み立てる場面 2 つが読み込まれて映り (真っ黒でない)、音があると絵が変わる
  * (スピーカーのふくらみ・光る所)。同じ音なら同じ絵 (乱数を使わない)。
  */
 
 test.describe.configure({ timeout: 180_000 });
 
-for (const photo of ['speaker-rack', 'stage-lights', 'speaker-alley']) {
+for (const photo of ['speaker-rack', 'stage-lights', 'speaker-alley', 'rack-parts', 'alley-lights']) {
   test(`写真に動き (${photo}): 写真が映り、低音・音量で絵が変わり、同じ音なら同じ絵`, async ({ page }) => {
     await page.goto('/');
     const r = await page.evaluate(async (photo) => {

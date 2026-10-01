@@ -42,24 +42,29 @@ function frame(t: number, o: Partial<AudioFrame> = {}): AudioFrame {
 function run(p: PhotoMotionPreset, frames: number, o: (i: number) => Partial<AudioFrame>, pr: Params = params()): void {
   for (let i = 0; i < frames; i++) p.update(frame(i / 60, o(i)), pr);
 }
+/** 読み込み (Promise) が終わるのを待つ */
+const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 const uniforms = (p: PhotoMotionPreset): Record<string, THREE.IUniform> => (p.scene.children[0] as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>).material.uniforms;
 
 describe('写真の定義 (photos)', () => {
-  it('用意された 3 枚があり、位置はどれも写真の中、数はシェーダーの上限まで', () => {
-    expect(PHOTOS.map((p) => p.id)).toEqual(['speaker-rack', 'stage-lights', 'speaker-alley']);
-    for (const p of PHOTOS) {
-      expect(p.speakers.length).toBeLessThanOrEqual(MAX_SPEAKERS);
-      expect(p.regions.length).toBeLessThanOrEqual(MAX_REGIONS);
-      for (const s of p.speakers) {
-        expect(s.x).toBeGreaterThanOrEqual(0);
-        expect(s.x).toBeLessThanOrEqual(1);
-        expect(s.y).toBeGreaterThanOrEqual(0);
-        expect(s.y).toBeLessThanOrEqual(1);
-        expect(s.r).toBeGreaterThan(0);
-      }
-      for (const r of p.regions) {
-        expect(r.x + r.w).toBeLessThanOrEqual(1 + 1e-9);
-        expect(r.y + r.h).toBeLessThanOrEqual(1 + 1e-9);
+  it('写真 1 枚の場面 3 つと、部品から組み立てる場面 2 つがあり、位置はどれも絵の中、数はシェーダーの上限まで', () => {
+    expect(PHOTOS.map((p) => p.id)).toEqual(['speaker-rack', 'stage-lights', 'speaker-alley', 'rack-parts', 'alley-lights']);
+    for (const scene of PHOTOS) {
+      expect(scene.layers.length).toBeGreaterThan(0);
+      for (const p of scene.layers) {
+        expect(p.speakers.length).toBeLessThanOrEqual(MAX_SPEAKERS);
+        expect(p.regions.length).toBeLessThanOrEqual(MAX_REGIONS);
+        for (const s of p.speakers) {
+          expect(s.x).toBeGreaterThanOrEqual(0);
+          expect(s.x).toBeLessThanOrEqual(1);
+          expect(s.y).toBeGreaterThanOrEqual(0);
+          expect(s.y).toBeLessThanOrEqual(1);
+          expect(s.r).toBeGreaterThan(0);
+        }
+        for (const r of p.regions) {
+          expect(r.x + r.w).toBeLessThanOrEqual(1 + 1e-9);
+          expect(r.y + r.h).toBeLessThanOrEqual(1 + 1e-9);
+        }
       }
     }
   });
@@ -73,14 +78,12 @@ describe('PhotoMotionPreset', () => {
     let disposed = false;
     first.addEventListener('dispose', () => (disposed = true));
     p.update(frame(0), params({ photo: 'speaker-alley' }));
-    await Promise.resolve();
-    await Promise.resolve();
+    await settle();
     expect(p.inspect().photo).toBe('speaker-alley');
     expect(disposed).toBe(true);
     // 知らない写真は最初の写真
     p.update(frame(0), params({ photo: 'nothing' }));
-    await Promise.resolve();
-    await Promise.resolve();
+    await settle();
     expect(p.inspect().photo).toBe('speaker-rack');
     p.dispose();
   });
@@ -191,6 +194,50 @@ describe('PhotoMotionPreset', () => {
     expect(t.x).toBeLessThan(0.4);
     wide.dispose();
     tall.dispose();
+  });
+
+  it('部品から組み立てる「ラックとスピーカー」: 3 つの層。静かなときは明かりが消え (0 近く)、音で点く (1 近く)。スピーカーは低音でふくらむ', async () => {
+    const pr = params({ photo: 'rack-parts', sensitivity: 1 });
+    const p = await makePreset(pr);
+    expect(p.inspect()).toMatchObject({ photo: 'rack-parts', layers: 3, lights: -1 });
+    run(p, 120, () => ({}), pr);
+    const quiet = p.inspect();
+    // 明かりの消える層の光る所 (スペクトラム以外) は、静かなときほぼ 0
+    const glows = (i: ReturnType<typeof p.inspect>): number[] => i.regions.filter((_v, k) => k !== 0);
+    expect(Math.max(...glows(quiet))).toBeLessThan(0.15);
+    run(p, 120, () => ({ rms: 0.5, bass: 1 }), pr);
+    const loud = p.inspect();
+    expect(Math.min(...glows(loud))).toBeGreaterThan(0.6);
+    expect(Math.max(...glows(loud))).toBeLessThanOrEqual(1);
+    expect(loud.speakers[0]).toBeGreaterThan(0.3);
+    expect(loud.speakers[1]).toBeGreaterThan(0.3);
+    p.dispose();
+  });
+
+  it('部品から組み立てる「通路」: 4 つの層。照明の層は静かなときは薄く、音量と拍で濃くなる (なめらかに)', async () => {
+    const pr = params({ photo: 'alley-lights', sensitivity: 1 });
+    const p = await makePreset(pr);
+    expect(p.inspect()).toMatchObject({ photo: 'alley-lights', layers: 4 });
+    run(p, 120, () => ({}), pr);
+    const quiet = p.inspect().lights;
+    expect(quiet).toBeLessThan(0.2);
+    let prev = quiet;
+    let maxStep = 0;
+    for (let i = 0; i < 120; i++) {
+      p.update(frame(i / 60, { rms: 0.5, beat: i % 30 === 0 ? 1 : Math.exp(-(i % 30) / 8), beatIndex: Math.floor(i / 30) }), pr);
+      const l = p.inspect().lights;
+      maxStep = Math.max(maxStep, l - prev);
+      prev = l;
+    }
+    expect(p.inspect().lights).toBeGreaterThan(0.6);
+    // 1 コマで急に濃くならない (光過敏への配慮。0.2 以下)
+    expect(maxStep).toBeLessThanOrEqual(0.2);
+    // 手前の箱 2 つのスピーカーがふくらむ
+    run(p, 12, () => ({ bass: 1, rms: 0.5 }), pr);
+    const sp = p.inspect().speakers;
+    expect(sp.length).toBe(2);
+    expect(Math.min(...sp)).toBeGreaterThan(0.3);
+    p.dispose();
   });
 
   it('dt=0 や極端な値でも NaN にならない。dispose で写真・材質・形を片づける', async () => {

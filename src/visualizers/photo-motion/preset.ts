@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { shapeAudio, shapeBands } from '../../core/visualizer/response';
 import type { AudioFrame, CommonParams, VisualizerInitContext, VisualizerPreset } from '../../core/types';
-import { MAX_REGIONS, MAX_SPEAKERS, photoById, type Photo } from './photos';
+import { CANVAS_ASPECT, MAX_REGIONS, MAX_SPEAKERS, photoById, type Layer, type Scene } from './photos';
 import { createPhotoMaterial } from './shaders';
 
 /**
@@ -35,9 +35,13 @@ const defaultLoader: TextureLoaderFn = async (url) => {
 export interface PhotoMotionInspection {
   photo: string;
   loaded: boolean;
-  /** スピーカーごとのふくらみ */
+  /** 層の数 */
+  layers: number;
+  /** 照明の層の濃さ (照明の層が無ければ -1) */
+  lights: number;
+  /** スピーカーごとのふくらみ (全部の層を下から順に) */
   speakers: number[];
-  /** 光る所ごとの強さ */
+  /** 光る所ごとの強さ (全部の層を下から順に) */
   regions: number[];
   globalGlow: number;
   haze: number;
@@ -74,6 +78,14 @@ class AutoLevel {
   }
 }
 
+/** 描いている層 1 枚 */
+interface LayerState {
+  def: Layer;
+  mesh: THREE.Mesh;
+  material: THREE.ShaderMaterial;
+  texture: THREE.Texture;
+}
+
 export class PhotoMotionPreset implements VisualizerPreset {
   /** 写真の読み方 (テストで差し替える) */
   static loadTexture: TextureLoaderFn = defaultLoader;
@@ -81,13 +93,13 @@ export class PhotoMotionPreset implements VisualizerPreset {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-  private readonly material: THREE.ShaderMaterial;
-  private readonly plane: THREE.Mesh;
-  private readonly placeholder = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+  /** どの層も、画面いっぱいのこの板で描く */
+  private readonly geometry = new THREE.PlaneGeometry(2, 2);
   private readonly bandTexture: THREE.DataTexture;
   private readonly bandData = new Uint8Array(SPECTRUM_BARS * 4);
-  private texture: THREE.Texture | null = null;
-  private photo: Photo = photoById('speaker-rack');
+  private layers: LayerState[] = [];
+  private photo: Scene = photoById('speaker-rack');
+  private loaded = false;
   private wanted = '';
   private generation = 0;
   private aspect = 16 / 9;
@@ -114,21 +126,16 @@ export class PhotoMotionPreset implements VisualizerPreset {
   private readonly autoBands = new AutoLevel(0.05);
 
   constructor() {
-    this.placeholder.needsUpdate = true;
     this.bandTexture = new THREE.DataTexture(this.bandData, SPECTRUM_BARS, 1);
     this.bandTexture.magFilter = THREE.LinearFilter;
     this.bandTexture.minFilter = THREE.LinearFilter;
     this.bandTexture.needsUpdate = true;
-    this.material = createPhotoMaterial(this.placeholder, this.bandTexture);
-    this.plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
-    this.plane.frustumCulled = false;
-    this.scene.add(this.plane);
     this.scene.background = new THREE.Color(0x000000);
   }
 
   async init(ctx: VisualizerInitContext): Promise<void> {
     this.resize(ctx.width, ctx.height);
-    // 最初の写真は、読み終わってから描き始める (書き出しの最初のフレームから写真が出るように)
+    // 最初の場面は、絵を全部読み終わってから描き始める (書き出しの最初のフレームから絵が出るように)
     await this.selectPhoto(ctx.params.photo);
     this.writeUniforms(ctx.params);
   }
@@ -202,25 +209,36 @@ export class PhotoMotionPreset implements VisualizerPreset {
 
   dispose(): void {
     this.generation++;
-    this.texture?.dispose();
-    this.texture = null;
-    this.placeholder.dispose();
+    this.clearLayers();
     this.bandTexture.dispose();
-    this.material.dispose();
-    this.plane.geometry.dispose();
+    this.geometry.dispose();
     this.scene.clear();
   }
 
   /** テスト用 */
   inspect(): PhotoMotionInspection {
-    const u = this.material.uniforms;
+    const speakers: number[] = [];
+    const regions: number[] = [];
+    let haze = 0;
+    let lights = -1;
+    let globalGlow = 0;
+    for (const l of this.layers) {
+      const u = l.material.uniforms;
+      speakers.push(...(u.speakers!.value as THREE.Vector4[]).slice(0, l.def.speakers.length).map((s) => s.w));
+      regions.push(...(u.regionLevel!.value as THREE.Vector2[]).slice(0, l.def.regions.length).map((r) => r.x));
+      haze = Math.max(haze, u.hazeAmount!.value as number);
+      globalGlow = Math.max(globalGlow, u.globalGlow!.value as number);
+      if (l.def.lights) lights = u.layerOpacity!.value as number;
+    }
     return {
       photo: this.photo.id,
-      loaded: this.texture != null,
-      speakers: (u.speakers!.value as THREE.Vector4[]).slice(0, this.photo.speakers.length).map((s) => s.w),
-      regions: (u.regionLevel!.value as THREE.Vector2[]).slice(0, this.photo.regions.length).map((r) => r.x),
-      globalGlow: u.globalGlow!.value as number,
-      haze: u.hazeAmount!.value as number,
+      loaded: this.loaded,
+      layers: this.layers.length,
+      lights,
+      speakers,
+      regions,
+      globalGlow,
+      haze,
       spectrum: this.bars.reduce((s, v) => s + v, 0) / SPECTRUM_BARS,
       shake: this.shake,
     };
@@ -228,28 +246,46 @@ export class PhotoMotionPreset implements VisualizerPreset {
 
   // ----------------------------------------------------------------
 
-  /** 写真を選ぶ。読み終わるまでは前の写真のまま (位置も前のまま)。途中で別の写真を選んだら、古い方は捨てる */
+  /**
+   * 場面を選ぶ。絵を全部読み終わるまでは前の場面のまま。途中で別の場面を選んだら、古い方は捨てる。
+   * 読めなかった絵の層は飛ばす (ほかの層は描く)。1 枚も読めなければ前の場面のまま
+   */
   private async selectPhoto(id: unknown): Promise<void> {
     this.wanted = typeof id === 'string' ? id : '';
     const photo = photoById(id);
-    if (photo.id === this.photo.id && this.texture) return;
+    if (photo.id === this.photo.id && this.loaded) return;
     const my = ++this.generation;
-    let tex: THREE.Texture | null = null;
-    try {
-      tex = await PhotoMotionPreset.loadTexture(photo.url);
-    } catch {
-      tex = null;
-    }
+    const textures = await Promise.all(photo.layers.map((l) => PhotoMotionPreset.loadTexture(l.url).catch(() => null)));
     if (my !== this.generation) {
-      tex?.dispose();
+      for (const t of textures) t?.dispose();
       return;
     }
-    if (!tex) return;
-    this.texture?.dispose();
-    this.texture = tex;
+    if (textures.every((t) => t == null)) return;
+    this.clearLayers();
     this.photo = photo;
-    this.material.uniforms.map!.value = tex;
-    this.material.uniforms.photoAspect!.value = photo.aspect;
+    this.loaded = true;
+    (this.scene.background as THREE.Color).setRGB(...photo.background);
+    photo.layers.forEach((def, i) => {
+      const texture = textures[i];
+      if (!texture) return;
+      const material = createPhotoMaterial(texture, this.bandTexture);
+      material.uniforms.photoAspect!.value = def.aspect;
+      material.uniforms.offDim!.value = def.offDim;
+      const mesh = new THREE.Mesh(this.geometry, material);
+      mesh.frustumCulled = false;
+      mesh.renderOrder = i;
+      this.scene.add(mesh);
+      this.layers.push({ def, mesh, material, texture });
+    });
+  }
+
+  private clearLayers(): void {
+    for (const l of this.layers) {
+      this.scene.remove(l.mesh);
+      l.material.dispose();
+      l.texture.dispose();
+    }
+    this.layers = [];
   }
 
   /** 遅れ (秒) の分だけ前の、低音のばねの動き */
@@ -259,66 +295,81 @@ export class PhotoMotionPreset implements VisualizerPreset {
   }
 
   private writeUniforms(params: CommonParams & Record<string, unknown>): void {
-    const u = this.material.uniforms;
-    const p = this.photo;
     const k = fin(params.intensity);
     const pump = typeof params.pump === 'number' ? fin(params.pump) : 0.7;
     const glowK = (typeof params.glowAmount === 'number' ? fin(params.glowAmount) : 0.7) * (0.3 + 0.7 * k);
 
-    // 画面いっぱいに収める (はみ出した所を切る)。Camera Motion でゆっくり寄って、少し動く
+    // 画面いっぱいに画用紙を収める (はみ出した所を切る)。Camera Motion でゆっくり寄って、少し動く
     const cm = fin(params.cameraMotion);
     const zoom = 1 + 0.05 * cm * (0.5 + 0.5 * Math.sin(this.t * 0.05));
     let sx = 1;
     let sy = 1;
-    if (this.aspect > p.aspect) sy = p.aspect / this.aspect;
-    else sx = this.aspect / p.aspect;
+    if (this.aspect > CANVAS_ASPECT) sy = CANVAS_ASPECT / this.aspect;
+    else sx = this.aspect / CANVAS_ASPECT;
     sx /= zoom;
     sy /= zoom;
     const shake = this.shake * 0.003;
     const ox = (1 - sx) / 2 + Math.sin(this.t * 0.07) * (1 - sx) * 0.3 + Math.sin(this.t * 57) * shake;
     const oy = (1 - sy) / 2 + Math.sin(this.t * 0.05) * (1 - sy) * 0.2 + Math.sin(this.t * 43) * shake;
-    (u.uvScale!.value as THREE.Vector2).set(sx, sy);
-    (u.uvOffset!.value as THREE.Vector2).set(ox, oy);
 
-    // スピーカー (写真の y は上が 0 なので、下が 0 の uv に直す)
-    const speakers = u.speakers!.value as THREE.Vector4[];
-    for (let i = 0; i < MAX_SPEAKERS; i++) {
-      const s = p.speakers[i];
-      if (!s) {
-        speakers[i]!.set(0, 0, 0, 0);
-        continue;
+    // 照明の層の濃さ: 静かなときはほぼ消え、音量と拍で点く (なめらかに。拍で強まる幅は控えめ)
+    const lights = Math.min(1, 0.1 + (0.75 * this.rmsEnv + 0.35 * this.beatEnv) * glowK * 1.4);
+    let speakerIndex = 0;
+    for (const l of this.layers) {
+      const u = l.material.uniforms;
+      const def = l.def;
+      (u.uvScale!.value as THREE.Vector2).set(sx, sy);
+      (u.uvOffset!.value as THREE.Vector2).set(ox, oy);
+      // 層の置き場所 (画用紙の上。下が 0 の uv に直す)
+      if (def.place === 'cover') (u.partRect!.value as THREE.Vector4).set(0, 0, 1, 1);
+      else {
+        const h = def.place.h;
+        const w = (h * def.aspect) / CANVAS_ASPECT;
+        (u.partRect!.value as THREE.Vector4).set(def.place.x - w / 2, 1 - (def.place.y + h / 2), def.place.x + w / 2, 1 - (def.place.y - h / 2));
       }
-      const amount = s.band === 'bass' ? this.delayed(s.delay) * pump : this.highEnv * pump * 0.7 * Math.abs(Math.sin(this.t * 71 + i));
-      speakers[i]!.set(s.x, 1 - s.y, s.r, Math.min(1.2, Math.max(-0.3, amount)));
-    }
-    // 光る所
-    const regions = u.regions!.value as THREE.Vector4[];
-    const levels = u.regionLevel!.value as THREE.Vector2[];
-    const glow = (0.12 + 0.55 * this.rmsEnv) * glowK;
-    for (let i = 0; i < MAX_REGIONS; i++) {
-      const r = p.regions[i];
-      if (!r) {
-        regions[i]!.set(0, 0, 0, 0);
-        levels[i]!.set(0, 0);
-        continue;
+      u.layerOpacity!.value = def.lights ? lights : 1;
+
+      // スピーカー (絵の y は上が 0 なので、下が 0 の uv に直す)
+      const speakers = u.speakers!.value as THREE.Vector4[];
+      for (let i = 0; i < MAX_SPEAKERS; i++) {
+        const s = def.speakers[i];
+        if (!s) {
+          speakers[i]!.set(0, 0, 0, 0);
+          continue;
+        }
+        const amount = s.band === 'bass' ? this.delayed(s.delay) * pump : this.highEnv * pump * 0.7 * Math.abs(Math.sin(this.t * 71 + speakerIndex));
+        speakers[i]!.set(s.x, 1 - s.y, s.r, Math.min(1.2, Math.max(-0.3, amount)));
+        speakerIndex++;
       }
-      regions[i]!.set(r.x, 1 - (r.y + r.h), r.x + r.w, 1 - r.y);
-      let level = glow;
-      if (r.kind === 'tubes') level = glow * (0.9 + 0.1 * Math.sin(this.t * 2.3) * Math.sin(this.t * 0.7)) + 0.1 * glowK;
-      else if (r.kind === 'lightsL' || r.kind === 'lightsR') {
-        const mine = (r.kind === 'lightsL' ? 0 : 1) === this.side;
-        level = (0.08 + (mine ? 0.5 : 0.12) * this.beatEnv) * glowK;
-      } else if (r.kind === 'spectrum') level = 0.5 * glowK;
-      levels[i]!.set(level, r.kind === 'spectrum' ? 1 : 0);
+      // 光る所。明かりの消える層 (offDim > 0) は、静かなときは 0 (消える)、大きい音で 1 (点く) まで
+      const regions = u.regions!.value as THREE.Vector4[];
+      const levels = u.regionLevel!.value as THREE.Vector2[];
+      const glow = def.offDim > 0 ? Math.min(1, (0.1 + 1.0 * this.rmsEnv) * glowK * 1.3) : (0.12 + 0.55 * this.rmsEnv) * glowK;
+      for (let i = 0; i < MAX_REGIONS; i++) {
+        const r = def.regions[i];
+        if (!r) {
+          regions[i]!.set(0, 0, 0, 0);
+          levels[i]!.set(0, 0);
+          continue;
+        }
+        regions[i]!.set(r.x, 1 - (r.y + r.h), r.x + r.w, 1 - r.y);
+        let level = glow;
+        if (r.kind === 'tubes') level = glow * (0.9 + 0.1 * Math.sin(this.t * 2.3) * Math.sin(this.t * 0.7)) + 0.1 * glowK;
+        else if (r.kind === 'lightsL' || r.kind === 'lightsR') {
+          const mine = (r.kind === 'lightsL' ? 0 : 1) === this.side;
+          level = (0.08 + (mine ? 0.5 : 0.12) * this.beatEnv) * glowK;
+        } else if (r.kind === 'spectrum') level = 0.5 * glowK;
+        levels[i]!.set(Math.min(def.offDim > 0 ? 1 : 2, level), r.kind === 'spectrum' ? 1 : 0);
+      }
+      u.globalGlow!.value = def.offDim > 0 || def.lights ? 0 : 0.04 * glowK;
+      if (def.haze) {
+        (u.hazeRect!.value as THREE.Vector4).set(def.haze.x, 1 - (def.haze.y + def.haze.h), def.haze.x + def.haze.w, 1 - def.haze.y);
+        (u.hazeColor!.value as THREE.Color).setRGB(...def.haze.color);
+        u.hazeAmount!.value = (0.05 + 0.08 * this.bassSlow) * (0.5 + 0.5 * glowK);
+      } else {
+        u.hazeAmount!.value = 0;
+      }
+      u.time!.value = this.t;
     }
-    u.globalGlow!.value = 0.04 * glowK;
-    if (p.haze) {
-      (u.hazeRect!.value as THREE.Vector4).set(p.haze.x, 1 - (p.haze.y + p.haze.h), p.haze.x + p.haze.w, 1 - p.haze.y);
-      (u.hazeColor!.value as THREE.Color).setRGB(...p.haze.color);
-      u.hazeAmount!.value = (0.05 + 0.08 * this.bassSlow) * (0.5 + 0.5 * glowK);
-    } else {
-      u.hazeAmount!.value = 0;
-    }
-    u.time!.value = this.t;
   }
 }
