@@ -13,7 +13,7 @@ export function renderSettingsPanel(): HTMLElement {
   el.className = 'panel';
 
   const h2 = document.createElement('h2');
-  h2.textContent = tr('設定', 'Settings');
+  h2.textContent = tr('保存', 'Save');
   el.appendChild(h2);
 
   const p = document.createElement('p');

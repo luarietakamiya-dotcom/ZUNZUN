@@ -50,6 +50,11 @@ export class ExportController {
     return this._status.kind === 'running';
   }
 
+  /** 状態はそのままで、購読している画面に描き直してもらう (書き出しのあとの保存の結果を出すときなど) */
+  notify(): void {
+    for (const fn of this.listeners) fn();
+  }
+
   subscribe(fn: Listener): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);

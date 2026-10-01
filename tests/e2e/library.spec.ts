@@ -56,7 +56,7 @@ test('用意された背景を使うプロジェクトを開くと、選び直�
     const item = LIBRARY.find((it) => it.id === 'stage-lights')!;
     return JSON.stringify({ ...defaultProject(), background: { ...defaultBackground(libraryRef(item), item.sha256, 'image'), dim: 0.2 } });
   });
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.getByRole('tab', { name: 'Save', exact: true }).click();
   await page.locator('input[type="file"][accept=".json,application/json"]').setInputFiles({ name: 'p.zunzun.json', mimeType: 'application/json', buffer: Buffer.from(json) });
   await page.getByRole('tab', { name: 'Overlay' }).click();
   await expect(bgCard(page)).toContainText('"Live stage (lights and haze)"');

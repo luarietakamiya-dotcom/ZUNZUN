@@ -3,7 +3,8 @@ import { PANELS } from './panels';
 import { createTransport } from './transport';
 import { lang, onLangChange, setLang, t2, tr, type Lang } from '../core/i18n';
 
-const TAB_ORDER: PanelId[] = ['music', 'visualizer', 'lyrics', 'overlay', 'settings', 'export', 'help'];
+// 並び: 作る順 (曲 → 歌詞 → 映像 → 背景 → 保存 → 書き出し) と使い方 (2026-10-01 レビューの声)
+const TAB_ORDER: PanelId[] = ['music', 'lyrics', 'visualizer', 'overlay', 'settings', 'export', 'help'];
 
 /**
  * アプリのシェル (ヘッダーのタブ + 現在のパネル本体) を root にマウントする。

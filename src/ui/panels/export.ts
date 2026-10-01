@@ -32,6 +32,55 @@ function formatBytes(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
+/**
+ * 書き出した動画の保存先。Chrome / Edge は「書き出しを始める」を押したときに保存する場所を選んでもらい、
+ * 終わったらそこへ自動で書き込む (2026-10-01 レビューの声「終わったらそのまま保存場所を選ぶ窓を開くといい」)。
+ * 終わってから窓を開くことはできない (ブラウザは、押した直後でないと保存の窓を開かせない。長い書き出しのあとでは断られる)。
+ * 窓が無いブラウザ (Firefox・Safari など) は、終わったら自動でダウンロードを始める
+ */
+type SaveTarget = { kind: 'file'; handle: SaveFileHandle } | { kind: 'download' };
+interface SaveFileHandle {
+  name: string;
+  createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }>;
+}
+type SavePicker = (opts: { suggestedName: string; types: { description: string; accept: Record<string, string[]> }[] }) => Promise<SaveFileHandle>;
+
+/** 保存する場所を選んでもらう。やめたら null。窓が使えなければダウンロード */
+async function pickSaveTarget(fileName: string): Promise<SaveTarget | null> {
+  const picker = (window as unknown as { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
+  if (typeof picker !== 'function') return { kind: 'download' };
+  try {
+    const handle = await picker.call(window, { suggestedName: fileName, types: [{ description: 'MP4', accept: { 'video/mp4': ['.mp4'] } }] });
+    return { kind: 'file', handle };
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return null;
+    return { kind: 'download' };
+  }
+}
+
+/** 書き出しが終わったあとの保存の結果 (タブを切り替えても出せるように、モジュールに置く) */
+let saveNote = '';
+
+/** 書き出した動画を、選んだ場所 (かダウンロード) に保存する */
+async function saveResult(target: SaveTarget, blob: Blob, fileName: string): Promise<string> {
+  if (target.kind === 'file') {
+    try {
+      const w = await target.handle.createWritable();
+      await w.write(blob);
+      await w.close();
+      return tr(`「${target.handle.name}」に保存しました。`, `Saved to "${target.handle.name}".`);
+    } catch (err) {
+      downloadBlob(blob, fileName);
+      return tr(
+        `選んだ場所に保存できなかったので (${err instanceof Error ? err.message : String(err)})、ダウンロードに保存しました。`,
+        `Could not save to the chosen place (${err instanceof Error ? err.message : String(err)}), so it was downloaded instead.`,
+      );
+    }
+  }
+  downloadBlob(blob, fileName);
+  return tr('ダウンロードに保存しました (ブラウザの設定によっては、保存する場所を聞かれます)。', 'Downloaded (depending on your browser settings, it may ask where to save).');
+}
+
 function downloadBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -59,7 +108,7 @@ function labeledRow(label: string, control: HTMLElement): HTMLElement {
  * 書き出し開始時点の store の状態から runner を作る。
  * 書き出し中に他のタブでパラメータを触っても、書き出し結果には影響しない (スナップショットを使う)。
  */
-function createRunnerFromStore(): ExportRunner {
+function createRunnerFromStore(): { runner: ExportRunner; fileName: string } {
   const audio = store.audio;
   const audioBuffer = audio.audioBuffer;
   const timeline = audio.timeline;
@@ -83,7 +132,7 @@ function createRunnerFromStore(): ExportRunner {
   const background = store.background && store.backgroundFile ? { config: { ...store.background }, file: store.backgroundFile, slideFiles: [...store.slideFiles] } : null;
   const seed = store.seed;
 
-  return (ctx) =>
+  const runner: ExportRunner = (ctx) =>
     renderMp4(
       {
         width: settings.width,
@@ -110,6 +159,7 @@ function createRunnerFromStore(): ExportRunner {
       },
       ctx,
     );
+  return { runner, fileName };
 }
 
 export function renderExportPanel(): HTMLElement {
@@ -210,7 +260,7 @@ export function renderExportPanel(): HTMLElement {
   const downloadBtn = document.createElement('button');
   downloadBtn.type = 'button';
   downloadBtn.className = 'tab-button';
-  downloadBtn.textContent = tr('MP4 を保存する', 'Download MP4');
+  downloadBtn.textContent = tr('もう一度保存する', 'Save again');
   controls.appendChild(startBtn);
   controls.appendChild(cancelBtn);
   controls.appendChild(downloadBtn);
@@ -279,7 +329,8 @@ export function renderExportPanel(): HTMLElement {
         const { result, elapsedMs } = status;
         statusText.textContent =
           `${tr('書き出しが終わりました', 'Export finished')}: ${result.fileName} (${result.videoCodec} / ${result.audioCodec}, ` +
-          `${result.frames} ${tr('コマ', 'frames')}, ${formatBytes(result.blob.size)}, ${formatDuration(elapsedMs)})`;
+          `${result.frames} ${tr('コマ', 'frames')}, ${formatBytes(result.blob.size)}, ${formatDuration(elapsedMs)})` +
+          (saveNote ? ` ${saveNote}` : '');
         break;
       }
       case 'cancelled':
@@ -294,22 +345,44 @@ export function renderExportPanel(): HTMLElement {
   };
 
   startBtn.addEventListener('click', () => {
-    let runner: ExportRunner;
+    let job: { runner: ExportRunner; fileName: string };
     try {
-      runner = createRunnerFromStore();
+      job = createRunnerFromStore();
     } catch (err) {
       statusText.textContent = err instanceof Error ? err.message : String(err);
       return;
     }
-    // 状態の変化は subscribe 経由で render() に届くので、ここでは完了を待つだけ
-    void exportController.start(runner);
+    // 押した直後に保存する場所を選んでもらう (終わってからでは、ブラウザが保存の窓を開かせない)
+    void (async () => {
+      const target = await pickSaveTarget(job.fileName);
+      if (!target) {
+        statusText.textContent = tr('保存する場所を選ばなかったので、書き出しを始めませんでした。', 'No save location was chosen, so the export was not started.');
+        return;
+      }
+      saveNote = '';
+      // 状態の変化は subscribe 経由で render() に届く。終わったら、タブを切り替えていても保存する
+      await exportController.start(job.runner);
+      const status = exportController.status;
+      if (status.kind !== 'done') return;
+      saveNote = tr('保存しています…', 'Saving…');
+      exportController.notify();
+      saveNote = await saveResult(target, status.result.blob, status.result.fileName);
+      exportController.notify();
+    })();
   });
 
   cancelBtn.addEventListener('click', () => exportController.cancel());
 
+  // もう一度保存する (別の場所にも残したいとき。押した直後なので保存の窓を開ける)
   downloadBtn.addEventListener('click', () => {
     const status = exportController.status;
-    if (status.kind === 'done') downloadBlob(status.result.blob, status.result.fileName);
+    if (status.kind !== 'done') return;
+    void (async () => {
+      const target = await pickSaveTarget(status.result.fileName);
+      if (!target) return;
+      saveNote = await saveResult(target, status.result.blob, status.result.fileName);
+      exportController.notify();
+    })();
   });
 
   // shell.ts はタブ切り替えで body を丸ごと差し替えるだけなので、DOM から外れた時点で購読をやめる

@@ -14,10 +14,12 @@ test('shows all 7 tabs (including Help) and switches panels', async ({ page }) =
   await page.goto('/');
   await expect(page).toHaveTitle('ZUNZUN');
 
-  const tabLabels = ['Music', 'Visualizer', 'Lyrics', 'Overlay', 'Settings', 'Export', 'Help'];
+  const tabLabels = ['Music', 'Lyrics', 'Visualizer', 'Overlay', 'Save', 'Export', 'Help'];
   for (const label of tabLabels) {
     await expect(page.getByRole('tab', { name: label })).toBeVisible();
   }
+  // 並び: 作る順 (曲 → 歌詞 → 映像 → 背景 → 保存 → 書き出し) と使い方
+  await expect(page.getByRole('tab')).toHaveText(tabLabels);
 
   // Music が既定でアクティブ
   await expect(page.getByRole('tab', { name: 'Music' })).toHaveAttribute('aria-selected', 'true');

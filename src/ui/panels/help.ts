@@ -37,17 +37,7 @@ const QUICK: Block[] = [
     image: { src: musicImg, alt: { ja: '「音楽」タブで曲を読み込んだところ', en: 'The Music tab with a song loaded' } },
   },
   {
-    title: { ja: '2. 映像を選ぶ', en: '2. Pick the visuals' },
-    body: [
-      {
-        ja: '「ビジュアライザー」タブで、音に合わせて動く映像の種類を選びます。下のつまみで、派手さや音への反応のしやすさを変えられます。再生すると、その場で動きが見られます。',
-        en: 'Choose the music-reactive visuals in the Visualizer tab. The sliders below change how bold they are and how easily they react. Press play to see them move.',
-      },
-    ],
-    image: { src: visualizerImg, alt: { ja: '「ビジュアライザー」タブ (写真に動き)', en: 'The Visualizer tab (Photo Motion)' } },
-  },
-  {
-    title: { ja: '3. 歌詞を入れて、タップで合わせる', en: '3. Enter the lyrics and sync by tapping' },
+    title: { ja: '2. 歌詞を入れて、タップで合わせる', en: '2. Enter the lyrics and sync by tapping' },
     body: [
       {
         ja: '「歌詞」タブのいちばん上の「はじめかた」に沿って進めます。歌詞を貼りつけたら「1 行目からタップを始める」を押し、曲に合わせて各行の歌い出しで Space キーを叩きます。叩いた時刻が、そのまま歌詞の出る時刻になります。',
@@ -55,6 +45,16 @@ const QUICK: Block[] = [
       },
     ],
     image: { src: lyricsStepsImg, alt: { ja: '「歌詞」タブの「はじめかた」', en: '"Getting started" in the Lyrics tab' } },
+  },
+  {
+    title: { ja: '3. 映像を選ぶ', en: '3. Pick the visuals' },
+    body: [
+      {
+        ja: '「ビジュアライザー」タブで、音に合わせて動く映像の種類を選びます。下のつまみで、派手さや音への反応のしやすさを変えられます。再生すると、その場で動きが見られます。',
+        en: 'Choose the music-reactive visuals in the Visualizer tab. The sliders below change how bold they are and how easily they react. Press play to see them move.',
+      },
+    ],
+    image: { src: visualizerImg, alt: { ja: '「ビジュアライザー」タブ (写真に動き)', en: 'The Visualizer tab (Photo Motion)' } },
   },
   {
     title: { ja: '4. 背景を置く (なくても大丈夫)', en: '4. Add a background (optional)' },
@@ -70,12 +70,12 @@ const QUICK: Block[] = [
     title: { ja: '5. 書き出す', en: '5. Export' },
     body: [
       {
-        ja: '「書き出し」タブで「書き出しを始める」を押すと、曲の最初から最後までを動画 (MP4) にします。終わったら「MP4 を保存する」で保存します。Chrome か Edge を使ってください。',
-        en: 'Press "Start export" in the Export tab to render the whole song to a video (MP4). When it finishes, save it with "Download MP4". Please use Chrome or Edge.',
+        ja: '「書き出し」タブで「書き出しを始める」を押すと、まず保存する場所を聞かれます。選ぶと曲の最初から最後までを動画 (MP4) にして、終わったらそこへ自動で保存します。Chrome か Edge を使ってください。',
+        en: 'Press "Start export" in the Export tab. It first asks where to save; then it renders the whole song to a video (MP4) and saves it there automatically when done. Please use Chrome or Edge.',
       },
       {
-        ja: '作業の続きは「設定」タブの「プロジェクトを保存」で残せます。',
-        en: 'Save your work with "Save project" in the Settings tab.',
+        ja: '作業の続きは「保存」タブの「プロジェクトを保存」で残せます。',
+        en: 'Save your work with "Save project" in the Save tab.',
       },
     ],
     image: { src: exportImg, alt: { ja: '「書き出し」タブ', en: 'The Export tab' } },
@@ -89,26 +89,6 @@ const DETAILS: Block[] = [
       {
         ja: '曲を読み込むと、テンポ・拍・音の強さ・歌声らしさを調べます (長い曲は少しかかります)。画面の上の再生ボタンと時刻のつまみは、どのタブからでも使えます。',
         en: 'Loading a song analyzes its tempo, beats, loudness and voice likelihood (long songs take a moment). The play button and time slider at the top work from any tab.',
-      },
-    ],
-  },
-  {
-    title: { ja: 'ビジュアライザー (映像の種類と設定)', en: 'Visualizer (visual types and settings)' },
-    body: [{ ja: '映像の種類:', en: 'Visual types:' }],
-    list: [
-      { ja: 'Solar Gate: 光の門と空。低音で光が強まります', en: 'Solar Gate: a gate of light and a sky. The light swells with the bass' },
-      { ja: 'Milky Way: 星空と湖。音量で湖に波紋が広がります', en: 'Milky Way: a starry sky and a lake. Ripples spread with the volume' },
-      { ja: 'Live Stage: ライブの照明とスモーク。照明の向き・カメラの位置・ステージの機材を選べます', en: 'Live Stage: concert lights and haze. Choose light direction, camera spot and stage gear' },
-      { ja: 'Speaker Rack: スピーカーと機材ラックの 3D。コーンが低音で動き、メーターが振れます', en: 'Speaker Rack: 3D speakers and a gear rack. Cones move with the bass, meters swing' },
-      { ja: '写真に動き: 写真のスピーカーのコーンや明かりを音で動かします', en: 'Photo Motion: brings the speakers and lights in a photo to life with the music' },
-    ],
-  },
-  {
-    title: { ja: '', en: '' },
-    body: [
-      {
-        ja: '「全体の派手さ」「音への反応のしやすさ」「低い音・中くらいの音・高い音への反応」は、どの映像にも共通のつまみです。動きが小さいと感じたら「音への反応のしやすさ」を上げてください。「見え方」で拡大・位置・傾きも変えられます。急に画面全体が光る回数は、光に敏感な人に配慮して抑えています。',
-        en: '"Overall boldness", "Sensitivity" and "Low / mid / high response" are shared by all visuals. If the motion feels small, raise "Sensitivity". "View" changes zoom, position and tilt. Large sudden flashes are limited for people sensitive to light.',
       },
     ],
   },
@@ -172,6 +152,26 @@ const DETAILS: Block[] = [
     ],
   },
   {
+    title: { ja: 'ビジュアライザー (映像の種類と設定)', en: 'Visualizer (visual types and settings)' },
+    body: [{ ja: '映像の種類:', en: 'Visual types:' }],
+    list: [
+      { ja: 'Solar Gate: 光の門と空。低音で光が強まります', en: 'Solar Gate: a gate of light and a sky. The light swells with the bass' },
+      { ja: 'Milky Way: 星空と湖。音量で湖に波紋が広がります', en: 'Milky Way: a starry sky and a lake. Ripples spread with the volume' },
+      { ja: 'Live Stage: ライブの照明とスモーク。照明の向き・カメラの位置・ステージの機材を選べます', en: 'Live Stage: concert lights and haze. Choose light direction, camera spot and stage gear' },
+      { ja: 'Speaker Rack: スピーカーと機材ラックの 3D。コーンが低音で動き、メーターが振れます', en: 'Speaker Rack: 3D speakers and a gear rack. Cones move with the bass, meters swing' },
+      { ja: '写真に動き: 写真のスピーカーのコーンや明かりを音で動かします', en: 'Photo Motion: brings the speakers and lights in a photo to life with the music' },
+    ],
+  },
+  {
+    title: { ja: '', en: '' },
+    body: [
+      {
+        ja: '「全体の派手さ」「音への反応のしやすさ」「低い音・中くらいの音・高い音への反応」は、どの映像にも共通のつまみです。動きが小さいと感じたら「音への反応のしやすさ」を上げてください。「見え方」で拡大・位置・傾きも変えられます。急に画面全体が光る回数は、光に敏感な人に配慮して抑えています。',
+        en: '"Overall boldness", "Sensitivity" and "Low / mid / high response" are shared by all visuals. If the motion feels small, raise "Sensitivity". "View" changes zoom, position and tilt. Large sudden flashes are limited for people sensitive to light.',
+      },
+    ],
+  },
+  {
     title: { ja: '背景と素材', en: 'Overlay (background and media)' },
     body: [
       {
@@ -193,18 +193,18 @@ const DETAILS: Block[] = [
     title: { ja: 'プロジェクトの保存と読み込み', en: 'Saving and opening projects' },
     body: [
       {
-        ja: '「設定」タブの「プロジェクトを保存」で、映像の種類・設定・歌詞と時刻・背景などを 1 つのファイル (.zunzun.json) に残します。曲・画像・動画のファイルそのものは入らないので、開いたあとに同じファイルを選び直してください (同じファイルかどうかは自動で確かめます)。',
-        en: '"Save project" in the Settings tab keeps the visuals, settings, lyrics and timing, background and more in one file (.zunzun.json). Song, image and video files are not included, so pick the same files again after opening (they are checked automatically).',
+        ja: '「保存」タブの「プロジェクトを保存」で、映像の種類・設定・歌詞と時刻・背景などを 1 つのファイル (.zunzun.json) に残します。曲・画像・動画のファイルそのものは入らないので、開いたあとに同じファイルを選び直してください (同じファイルかどうかは自動で確かめます)。',
+        en: '"Save project" in the Save tab keeps the visuals, settings, lyrics and timing, background and more in one file (.zunzun.json). Song, image and video files are not included, so pick the same files again after opening (they are checked automatically).',
       },
     ],
-    image: { src: settingsImg, alt: { ja: '「設定」タブ', en: 'The Settings tab' } },
+    image: { src: settingsImg, alt: { ja: '「保存」タブ', en: 'The Save tab' } },
   },
   {
     title: { ja: '書き出し', en: 'Export' },
     body: [
       {
-        ja: '画面の大きさ (横長・縦長・正方形)・なめらかさ (fps)・画質を選びます。書き出しはこのブラウザの中だけで行い、書き出し中にほかのタブへ移っても続きます。曲の長さや大きさによっては時間がかかります。',
-        en: 'Choose size (landscape, portrait, square), frame rate and quality. Exporting runs entirely in this browser and continues if you switch tabs. It can take a while for long or large videos.',
+        ja: '画面の大きさ (横長・縦長・正方形)・なめらかさ (fps)・画質を選びます。「書き出しを始める」を押すと保存する場所を聞かれ、終わったらそこへ自動で保存します (保存の窓が無いブラウザでは、終わったら自動でダウンロードします)。「もう一度保存する」で別の場所にも残せます。書き出しはこのブラウザの中だけで行い、書き出し中にほかのタブへ移っても続きます。曲の長さや大きさによっては時間がかかります。',
+        en: 'Choose size (landscape, portrait, square), frame rate and quality. "Start export" asks where to save and saves there automatically when done (browsers without a save dialog download it automatically). "Save again" keeps another copy. Exporting runs entirely in this browser and continues if you switch tabs. It can take a while for long or large videos.',
       },
     ],
   },
