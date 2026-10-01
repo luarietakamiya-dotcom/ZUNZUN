@@ -368,14 +368,14 @@ export class PhotoMotionPreset implements VisualizerPreset {
         let extra = 0;
         if (r.kind === 'vu') {
           // 盤面の灯りはいつも点いていて、音量で少し明るく
-          level = (0.4 + 0.45 * this.rmsEnv) * glowK;
+          level = (0.55 + 0.5 * this.rmsEnv) * glowK * 1.4;
           extra = needle;
         } else if (r.kind === 'meter') {
           level = 0.6 + 0.4 * glowK;
           extra = needle;
-        } else if (r.kind === 'tubeGlow') level = (0.35 + 0.55 * this.rmsEnv) * glowK * (0.94 + 0.06 * Math.sin(this.t * 2.3) * Math.sin(this.t * 0.7));
-        else if (r.kind === 'vent') level = (0.12 + 0.6 * this.rmsEnv) * glowK;
-        else if (r.kind === 'ventSpectrum') level = 0.4 + 0.6 * glowK;
+        } else if (r.kind === 'tubeGlow') level = (0.45 + 0.6 * this.rmsEnv) * glowK * 1.3 * (0.94 + 0.06 * Math.sin(this.t * 2.3) * Math.sin(this.t * 0.7));
+        else if (r.kind === 'vent') level = (0.2 + 0.8 * this.rmsEnv) * glowK * 1.3;
+        else if (r.kind === 'ventSpectrum') level = 0.5 + 0.7 * glowK;
         else if (r.kind === 'tubes') level = glow * (0.9 + 0.1 * Math.sin(this.t * 2.3) * Math.sin(this.t * 0.7)) + 0.1 * glowK;
         else if (r.kind === 'lightsL' || r.kind === 'lightsR') {
           const mine = (r.kind === 'lightsL' ? 0 : 1) === this.side;

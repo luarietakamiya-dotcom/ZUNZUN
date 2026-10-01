@@ -58,7 +58,8 @@ float noise(vec2 p) {
   f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-const vec3 AMBER = vec3(1.0, 0.52, 0.16);
+// 足す光の色は線形の値。画面 (sRGB) に出すと薄まるので、濃いめにしておく (2026-10-01 「彩度が弱い」)
+const vec3 AMBER = vec3(1.0, 0.3, 0.035);
 float inRect(vec2 p, vec4 r, float soft) {
   vec2 a = smoothstep(r.xy, r.xy + soft, p) * (1.0 - smoothstep(r.zw - soft, r.zw, p));
   return a.x * a.y;
@@ -110,7 +111,7 @@ void main() {
     } else if (kind > 1.5 && kind < 2.5) {
       // VU: 盤面 (明るい所) を暖かい色で照らし、針を描く。根元は下の辺の真ん中
       float face = smoothstep(0.06, 0.25, lum) * inside;
-      col = mix(col, col * vec3(1.5, 1.05, 0.5) * (1.0 + 2.6 * lv.x), face);
+      col = mix(col, col * vec3(1.85, 0.85, 0.2) * (1.0 + 3.2 * lv.x), face);
       float ra = (r.z - r.x) * photoAspect / max(r.w - r.y, 1e-6);
       vec2 p = vec2((u - 0.5) * ra, v - 0.04);
       float ang = mix(-0.85, 0.85, clamp(lv.z, 0.0, 1.0));
@@ -123,11 +124,11 @@ void main() {
       // 真空管の灯り: 管の真ん中ほど明るい橙色
       float cx = (u - 0.5) * 2.6;
       float g = exp(-cx * cx) * smoothstep(0.0, 0.25, v) * (1.0 - smoothstep(0.8, 1.0, v));
-      emit += vec3(1.0, 0.45, 0.12) * lv.x * g * inside * 1.1;
+      emit += vec3(1.0, 0.28, 0.03) * lv.x * g * inside * 2.0;
     } else if (kind > 3.5 && kind < 4.5) {
       // すき間から漏れる光 (真ん中の高さほど明るい)
       float g = 1.0 - abs(v - 0.5) * 1.2;
-      emit += AMBER * lv.x * gap * g * inside * 0.45;
+      emit += AMBER * lv.x * gap * g * inside * 0.9;
     } else if (kind > 4.5 && kind < 5.5) {
       // すき間の奥のスペクトラム: 細い光の線を並べ、下から音の強さの高さまで光らせる (上ほど赤く、下ほど明るい)
       const float LINES = 46.0;
@@ -136,14 +137,14 @@ void main() {
       float fx = fract(u * LINES);
       float line = smoothstep(0.15, 0.35, fx) * (1.0 - smoothstep(0.65, 0.85, fx));
       float below = 1.0 - smoothstep(b - 0.025, b + 0.025, v);
-      vec3 c = mix(vec3(1.0, 0.62, 0.2), vec3(1.0, 0.25, 0.06), v);
-      emit += c * lv.x * below * line * (1.0 - 0.45 * v) * inside * 1.1;
+      vec3 c = mix(vec3(1.0, 0.42, 0.05), vec3(1.0, 0.12, 0.02), v);
+      emit += c * lv.x * below * line * (1.0 - 0.35 * v) * inside * 2.0;
     } else if (kind > 5.5 && kind < 6.5) {
       // LED の列: 下から点く高さまで、刻みごとに光る
       float seg = smoothstep(0.2, 0.3, fract(v * 12.0)) * (1.0 - smoothstep(0.75, 0.85, fract(v * 12.0)));
       float lit = 1.0 - step(clamp(lv.z, 0.0, 1.0), floor(v * 12.0) / 12.0);
-      vec3 c = v > 0.8 ? vec3(1.0, 0.2, 0.05) : AMBER;
-      emit += c * lv.x * lit * seg * inside * 1.2;
+      vec3 c = v > 0.8 ? vec3(1.0, 0.08, 0.02) : AMBER;
+      emit += c * lv.x * lit * seg * inside * 2.0;
     } else {
       glow += lv.x * inside;
       off += (1.0 - clamp(lv.x, 0.0, 1.0)) * inside;
