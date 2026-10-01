@@ -30,6 +30,23 @@ describe('sectionKindOf (見出し・ファイル名の言葉)', () => {
       ['Outro', 'outro'],
       ['アウトロ', 'outro'],
       ['ハモ', null],
+      // 2026-10-01 ユーザーの歌詞の見出し
+      ['Cold Open', 'intro'],
+      ['Intro Hook', 'intro'],
+      ['Verse - Street Rush', 'verse'],
+      ['Lift - Spark', 'prechorus'],
+      ['Chorus - Riot', 'chorus'],
+      ['Post-Hook', 'chorus'],
+      ['Verse 2 - Speed Up', 'verse'],
+      ['Lift 2 - Heat', 'prechorus'],
+      ['Break - Low Fire', 'bridge'],
+      ['Build - Ignite', 'prechorus'],
+      ['Guitar Solo', 'interlude'],
+      ['Final Chorus - Full Riot', 'chorus'],
+      ['Last Hook', 'chorus'],
+      ['Afterglow', 'outro'],
+      ['Pre-Hook', 'prechorus'],
+      ['Weekend', null],
     ];
     for (const [text, kind] of cases) expect(sectionKindOf(text), text).toBe(kind);
   });

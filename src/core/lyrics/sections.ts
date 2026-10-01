@@ -29,22 +29,35 @@ export interface Section {
 /** ローマ字の言葉は前後が英字でないときだけ (universe の verse・_chorus_01 の chorus を区別する) */
 const latin = (w: string): string => `(?<![a-z])(?:${w})(?![a-z])`;
 
-/** 見出し・ファイル名の言葉 → 種類。上から順に調べる (Pre-Chorus を Chorus より先に) */
+/**
+ * 見出し・ファイル名の言葉 → 種類。いちばん前に出てくる言葉で決める
+ * (「Intro Hook」はイントロ、「Pre-Chorus」は B メロ、「Final Chorus」はサビ)。
+ * 2026-10-01 ユーザーの歌詞 (Cold Open / Lift / Build / Break / Afterglow など) で見分けられなかった言葉を足した
+ */
 const KIND_WORDS: [SectionKind, RegExp][] = [
-  ['prechorus', new RegExp(`${latin('pre[\\s_-]?chorus')}|プレ\\s*サビ|b\\s*メロ`, 'i')],
-  ['chorus', new RegExp(`${latin('chorus|hook|refrain|drop')}|サビ|さび`, 'i')],
-  ['intro', new RegExp(`${latin('intro|introduction|opening')}|イントロ|前奏|オープニング`, 'i')],
-  ['verse', new RegExp(`${latin('verse')}|a\\s*メロ|ヴァース|バース`, 'i')],
-  ['bridge', new RegExp(`${latin('bridge')}|[cd]\\s*メロ|ブリッジ`, 'i')],
-  ['interlude', new RegExp(`${latin('interlude|instrumental|inst|solo|break')}|間奏|间奏|ソロ|간주`, 'i')],
-  ['outro', new RegExp(`${latin('outro|ending|coda')}|アウトロ|エンディング|後奏`, 'i')],
+  ['prechorus', new RegExp(`${latin('pre[\\s_-]?(?:chorus|hook)|lift|build(?:[\\s_-]?up)?|rise|climb')}|プレ\\s*サビ|b\\s*メロ`, 'gi')],
+  ['chorus', new RegExp(`${latin('chorus|hook|refrain|drop')}|サビ|さび`, 'gi')],
+  ['intro', new RegExp(`${latin('intro|introduction|opening|cold[\\s_-]?open|prologue')}|イントロ|前奏|オープニング`, 'gi')],
+  ['verse', new RegExp(`${latin('verse')}|a\\s*メロ|ヴァース|バース`, 'gi')],
+  ['bridge', new RegExp(`${latin('bridge|break(?:down)?')}|[cd]\\s*メロ|ブリッジ`, 'gi')],
+  ['interlude', new RegExp(`${latin('interlude|instrumental|inst|solo')}|間奏|间奏|ソロ|간주`, 'gi')],
+  ['outro', new RegExp(`${latin('outro|ending|end|coda|afterglow|epilogue')}|アウトロ|エンディング|後奏`, 'gi')],
 ];
 
 /** 文字 (見出し・ファイル名) から区切りの種類を見分ける。どれでもなければ null */
 export function sectionKindOf(text: string): SectionKind | null {
   const s = text.normalize('NFKC');
-  for (const [kind, re] of KIND_WORDS) if (re.test(s)) return kind;
-  return null;
+  let best: SectionKind | null = null;
+  let bestAt = Infinity;
+  for (const [kind, re] of KIND_WORDS) {
+    re.lastIndex = 0;
+    const m = re.exec(s);
+    if (m && m.index < bestAt) {
+      bestAt = m.index;
+      best = kind;
+    }
+  }
+  return best;
 }
 
 const TIME_TAG = /^\[(\d+):(\d+(?:[.:]\d+)?)\]/;
