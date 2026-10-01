@@ -115,6 +115,30 @@ export class OverlayManager {
     for (const layer of this.layers) this.applyTransform(layer);
   }
 
+  /** 読み込んだ画像を全部片づける (読み込み直す前に呼ぶ。loadFrom は足していくだけなので) */
+  clear(): void {
+    this.dispose();
+  }
+
+  /**
+   * 位置・大きさ・濃さなどの設定だけを差し替える (画像は読み込み直さない。毎フレーム呼んでよい)。
+   * 「背景と素材」タブのプレビューで、つまみを動かすたびに画像を読み直さないように
+   */
+  setConfigs(configs: readonly OverlayLayer[]): void {
+    const byId = new Map(configs.map((c) => [c.id, c]));
+    let changed = false;
+    for (const layer of this.layers) {
+      const c = byId.get(layer.config.id);
+      if (c && c !== layer.config) {
+        layer.config = c;
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    this.layers.sort((a, b) => a.config.z - b.config.z);
+    for (const layer of this.layers) this.applyTransform(layer);
+  }
+
   /** 毎フレーム呼ぶ。float (上下浮遊) と beat (ビート反応の拡縮) をアニメーションさせる。 */
   animate(frame: AudioFrame): void {
     this.t += frame.dt > 0 ? frame.dt : 1 / 60;

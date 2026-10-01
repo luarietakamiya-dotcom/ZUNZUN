@@ -247,6 +247,16 @@ export class BackgroundCompositor {
     this.apply();
   }
 
+  /**
+   * 読み込み直さずに済む設定 (暗さ・収め方・くり返し・スライドショーの切り替わり方) だけを差し替える。
+   * ぼかし・ファイル・画像の並びが変わったときは load() し直すこと (ぼかしは読み込むときにかけるため)
+   */
+  updateSettings(settings: BackgroundSettings): void {
+    if (!this.settings) return;
+    this.settings = settings;
+    this.apply();
+  }
+
   /** 毎フレーム、描く前に呼ぶ (プレビューの動画を曲の時刻 t に合わせる。スライドショーは今の画像を選ぶ。書き出しでは何もしない) */
   update(t: number): void {
     if (this.video instanceof PreviewVideo) this.video.sync(t);

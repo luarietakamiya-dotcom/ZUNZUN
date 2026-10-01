@@ -5,7 +5,7 @@ import { sliderRow } from './panel-helpers';
 
 /**
  * 「背景と素材」タブの「レイヤー」欄: 画面に重なる順番 (手前が上) を入れ替え、表示・非表示と、ビジュアライザーの重ね方・濃さ、
- * 歌詞の濃さを決める。設定は store.composition (Project JSON の composition)。見た目は「ビジュアライザー」タブで確かめる。
+ * 歌詞の濃さを決める。設定は store.composition (Project JSON の composition)。見た目は同じタブのプレビュー (live-preview.ts) で確かめる。
  */
 
 const NAMES: Record<string, Text2> = {
@@ -43,8 +43,8 @@ export function createLayersCard(): HTMLElement {
       'p',
       'lyrics-help',
       tr(
-        '上にあるものほど手前に見えます。▲ ▼ で入れ替え、チェックを外すと隠せます。たとえば歌詞をビジュアライザーの下にすると、光が歌詞の上に重なります。見た目は「ビジュアライザー」タブで確かめてください。',
-        'Items higher in the list appear in front. Use ▲ ▼ to reorder and uncheck to hide. For example, putting the lyrics under the visualizer lets its light shine over the text. Check the result in the Visualizer tab.',
+        '上にあるものほど手前に見えます。▲ ▼ で入れ替え、チェックを外すと隠せます。たとえば歌詞をビジュアライザーの下にすると、光が歌詞の上に重なります。見た目は右 (狭い画面では上) のプレビューで確かめられます。',
+        'Items higher in the list appear in front. Use ▲ ▼ to reorder and uncheck to hide. For example, putting the lyrics under the visualizer lets its light shine over the text. Check the result in the preview on the right (top on narrow screens).',
       ),
     ),
   );

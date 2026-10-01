@@ -1,9 +1,7 @@
-import { slidePlan, slidePlanKey } from '../../core/render/slideshow';
-import { createMotionApplyNotice, previewMotionNow } from './motion-apply';
+import { createMotionApplyNotice } from './motion-apply';
+import { createLivePreview } from './live-preview';
 import { store } from '../../core/store';
-import { type AudioFrame, type CommonParams, defaultView, type OverlayLayer, VIEW_ZOOM_MAX, VIEW_ZOOM_MIN, type ViewSettings } from '../../core/types';
-import { BAND_COUNT } from '../../core/audio';
-import { VisualizerHost } from '../../core/visualizer/host';
+import { type CommonParams, defaultView, VIEW_ZOOM_MAX, VIEW_ZOOM_MIN, type ViewSettings } from '../../core/types';
 import { visualizerRegistry } from '../../visualizers';
 import { t2, tr, type Text2 } from '../../core/i18n';
 import { sliderRow } from './panel-helpers';
@@ -69,26 +67,6 @@ const COLOR_THEMES: { id: string; label: Text2 }[] = [
   { id: 'mono', label: { ja: 'モノクロ', en: 'Mono' } },
 ];
 
-/** 音源未読み込みのとき、プリセットが動いているのを確認できるようにするダミーの AudioFrame。 */
-function syntheticIdleFrame(t: number, prevT: number): AudioFrame {
-  const bands = new Float32Array(BAND_COUNT);
-  for (let i = 0; i < BAND_COUNT; i++) bands[i] = 0.08 + 0.05 * Math.sin(t * 1.3 + i * 0.35);
-  return {
-    t,
-    dt: t - prevT,
-    bass: 0.15,
-    mid: 0.12,
-    high: 0.1,
-    rms: 0.1,
-    peak: 0.15,
-    beat: Math.max(0, Math.sin(t * 2)) ** 8,
-    beatIndex: -1,
-    spectralEnergy: 0.1,
-    flux: 0,
-    bands,
-  };
-}
-
 export function renderVisualizerPanel(): HTMLElement {
   const el = document.createElement('section');
   el.className = 'panel';
@@ -115,14 +93,11 @@ export function renderVisualizerPanel(): HTMLElement {
   }
   el.appendChild(presetSelect);
 
-  const canvasWrap = document.createElement('div');
-  canvasWrap.className = 'visualizer-canvas-wrap';
-  const canvas = document.createElement('canvas');
-  canvas.className = 'visualizer-canvas';
-  canvasWrap.appendChild(canvas);
-  el.appendChild(canvasWrap);
+  // 映像のプレビュー (背景と素材タブと同じ部品。ui/panels/live-preview.ts)
   // 歌詞の時刻だけを変えたあと、歌詞の動きに反映するボタン (Lyrics タブと同じもの)
   const applyNotice = createMotionApplyNotice();
+  const preview = createLivePreview({ onFrame: () => applyNotice.update() });
+  el.appendChild(preview.element);
   el.appendChild(applyNotice.element);
 
   // このビジュアライザーだけの設定 (manifest.controls)。映像の種類を変えるたびに作り直す
@@ -237,58 +212,6 @@ export function renderVisualizerPanel(): HTMLElement {
   });
   el.appendChild(viewReset);
 
-  // 歌詞モーションはプレビューでは軽く描く (書き出しでは全部描く)
-  const host = new VisualizerHost(canvas, { fastLyrics: true });
-
-  // Overlay タブで設定されたレイヤーを、その時点の store の状態から一括で読み込む。
-  // 画像本体はタブをまたいで保持されないため (core/store.ts 参照)、まだ再選択されていない
-  // レイヤー (getOverlayFile が undefined) は読み込まずスキップする。
-  const overlayEntries = store.overlays
-    .map((config) => ({ config, file: store.getOverlayFile(config.id) }))
-    .filter((e): e is { config: OverlayLayer; file: File } => e.file != null);
-  void host.overlay.loadFrom(overlayEntries);
-  // 背景 (Overlay タブで設定)。ファイルがまだ選び直されていなければ背景なし
-  void host.background.load(store.background, store.backgroundFile, { slideFiles: store.slideFiles }).catch(() => {});
-  // スライドショーの切り替え表 (歌詞の区切り・拍・枚数から。材料が変わったときだけ作り直す)
-  let slideKey = '';
-  const syncSlides = (): void => {
-    const slides = store.background?.slides;
-    if (!slides || !store.audio.isLoaded) return;
-    const input = {
-      names: slides.items.map((it) => it.ref),
-      pace: slides.pace,
-      lyrics: store.lyrics,
-      beats: store.audio.analysis?.beats ?? [],
-      rhythm: store.rhythm,
-      duration: store.audio.duration,
-    };
-    const key = slidePlanKey(input);
-    if (key === slideKey) return;
-    slideKey = key;
-    host.background.setSlideCues(slidePlan(input));
-  };
-  // 用意された背景 (core/library.ts) をプロジェクトを開いたあとに読み込み中なら、読めたところで当てる
-  if (store.background && !store.backgroundFile) {
-    store
-      .restoreLibraryBackground()
-      .then(() => {
-        if (canvas.isConnected && store.backgroundFile) void host.background.load(store.background, store.backgroundFile).catch(() => {});
-      })
-      .catch(() => {});
-  }
-  // 素材レイヤー (「背景と素材」タブで足したもの)。ファイルをまだ選び直していないものは飛ばす
-  void host.media.load(
-    store.media.flatMap((m) => {
-      const file = store.getMediaFile(m.id);
-      return file ? [{ config: m, file }] : [];
-    }),
-  );
-
-  /** 共通の設定 + 今のビジュアライザーだけの設定 (プリセットの update() に渡す) */
-  const renderParams = (): CommonParams & Record<string, unknown> => {
-    const id = store.presetId ?? '';
-    return { ...store.params, ...resolvePresetParams(visualizerRegistry.get(id)?.manifest.controls, store.presetParams(id)) };
-  };
 
   const buildPresetControls = (id: string): void => {
     presetBox.textContent = '';
@@ -343,47 +266,12 @@ export function renderVisualizerPanel(): HTMLElement {
     if (!mod) return;
     store.setPresetId(id);
     buildPresetControls(id);
-    void host.setPreset(mod, store.seed, renderParams());
   };
 
   const firstId = visualizerRegistry.list()[0]?.id;
   presetSelect.value = store.presetId ?? firstId ?? '';
   if (presetSelect.value) applyPreset(presetSelect.value);
   presetSelect.addEventListener('change', () => applyPreset(presetSelect.value));
-
-  const resizeObserver = new ResizeObserver(() => {
-    const rect = canvasWrap.getBoundingClientRect();
-    host.resize(rect.width, rect.height);
-  });
-  resizeObserver.observe(canvasWrap);
-
-  // このパネルが DOM から外れたら (別タブへ切り替わったら) WebGL リソースを解放する。
-  // shell.ts はタブ切り替え時に body.innerHTML を丸ごと差し替えるだけなので、各フレームで
-  // canvas.isConnected を見て自分で後片付けする。
-  let prevT = performance.now() / 1000;
-  const tick = (): void => {
-    if (!canvas.isConnected) {
-      resizeObserver.disconnect();
-      host.dispose();
-      return;
-    }
-    const t = performance.now() / 1000;
-    const frame = store.audio.isLoaded ? store.audio.currentFrame() : syntheticIdleFrame(t, prevT);
-    prevT = t;
-    // 歌詞モーション: 音源があるときだけ重ねる (音源が無いとダミーの時刻になるため)。
-    // 設定が変わってから作り直すまでの間は、ひとつ前の歌詞モーションが表示され続ける
-    host.lyrics.setMotion(previewMotionNow());
-    host.lyrics.setBlanks(store.lyrics?.timing.blanks);
-    applyNotice.update();
-    syncSlides();
-    host.view = store.view;
-    host.composition = store.composition;
-    host.media.setConfigs(store.media);
-    host.media.setMatteView(store.chromaPreviewId);
-    if (frame) host.render(frame, renderParams());
-    requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
 
   return el;
 }

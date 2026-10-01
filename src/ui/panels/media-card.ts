@@ -6,7 +6,7 @@ import { sliderRow } from './panel-helpers';
 
 /**
  * 「背景と素材」タブの「素材」欄: 画像・動画を足して、位置・大きさ・回転・濃さ・重ね方・クロマキー (グリーンバックを透かす) を決める。
- * 重なる順番は上の「レイヤー」で変える。見た目は「ビジュアライザー」タブで確かめる。
+ * 重なる順番は上の「レイヤー」で変える。見た目は同じタブのプレビュー (live-preview.ts) で確かめる。
  * 透かす色は、サムネイルの上を押すとその場所の色を拾う (スポイト)。
  */
 
@@ -276,7 +276,7 @@ export function createMediaCard(onChange: () => void): HTMLElement {
     const matteRow = h('label', 'row-gap param-label');
     matteRow.append(
       matte,
-      tr('透け具合を見る (「ビジュアライザー」タブで、白 = 残る所・黒 = 透ける所。灰色の点が残った緑)', 'Show the matte (in the Visualizer tab: white = kept, black = removed; gray specks are leftover green)'),
+      tr('透け具合を見る (プレビューで、白 = 残る所・黒 = 透ける所。灰色の点が残った緑)', 'Show the matte (in the preview: white = kept, black = removed; gray specks are leftover green)'),
     );
     const cgrid = h('div', 'param-grid');
     for (const def of CHROMA) {

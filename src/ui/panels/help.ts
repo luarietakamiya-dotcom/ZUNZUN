@@ -187,8 +187,8 @@ const DETAILS: Block[] = [
         en: 'Slideshow: "Choose a folder" or "Choose several images" lines them up in file-name order. It always switches at lyric sections ([Chorus] etc.) and on bar heads in between (faster in the chorus, slower in the intro / outro, faster with more images). Images whose names contain words like "Chorus", "Intro" or "サビ" appear only in that section.',
       },
       {
-        ja: 'レイヤー: 背景・ビジュアライザー・歌詞・重ねる画像の重なる順番と重ね方を変えられます。素材の欄では、グリーンバックの素材を置いて「自動で合わせる」で緑を透かせます。',
-        en: 'Layers: change the stacking order and blending of background, visuals, lyrics and overlay images. In Media you can place green-screen footage and key it out with "Auto".',
+        ja: 'レイヤー: 背景・ビジュアライザー・歌詞・重ねる画像の重なる順番と重ね方を変えられます。素材の欄では、グリーンバックの素材を置いて「自動で合わせる」で緑を透かせます。このタブには右 (狭い画面では上) にプレビューが固定で出るので、つまみを動かしながら見た目を確かめられます。',
+        en: 'Layers: change the stacking order and blending of background, visuals, lyrics and overlay images. In Media you can place green-screen footage and key it out with "Auto". A preview stays pinned on the right (top on narrow screens), so you can watch the result while moving the sliders.',
       },
     ],
     image: { src: layersImg, alt: { ja: 'レイヤー (重なる順番)', en: 'Layers (stacking order)' } },

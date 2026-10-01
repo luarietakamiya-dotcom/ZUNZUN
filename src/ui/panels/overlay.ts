@@ -5,6 +5,7 @@ import { createMediaCard } from './media-card';
 import type { OverlayLayer } from '../../core/types';
 import { tr, type Text2 } from '../../core/i18n';
 import { sliderRow } from './panel-helpers';
+import { createLivePreview } from './live-preview';
 
 const IMAGE_ACCEPT = 'image/png,image/webp,image/jpeg';
 
@@ -21,10 +22,9 @@ const SLIDERS: { key: NumericKey; label: Text2; help: Text2; min: number; max: n
 ];
 
 /**
- * オーバーレイの設定パネル。ここでは画像の追加/削除/並び替え/変形のみを扱い、
- * 実際の合成結果 (Bloom を通さず前面に重なる) は Visualizer タブのキャンバスで確認する。
- * 別タブなのでライブプレビューは無い (shell.ts はタブ切り替えごとにパネルを丸ごと作り直すため、
- * 1 つの WebGL キャンバスを 2 タブで同時に出すには Step 6 の範囲を超える設計変更が要る)。
+ * 「背景と素材」タブ: レイヤーの順番・背景・素材 (グリーンバックも)・手前に重ねる画像。
+ * 右 (狭い画面では上) に映像のプレビューを固定で置き、つまみを動かしながら見た目を確かめられる
+ * (2026-10-01 「グリーンバックの素材をプレビューを見ながら調整したい」。ui/panels/live-preview.ts)。
  */
 export function renderOverlayPanel(): HTMLElement {
   const el = document.createElement('section');
@@ -36,19 +36,33 @@ export function renderOverlayPanel(): HTMLElement {
 
   const p = document.createElement('p');
   p.textContent = tr(
-    '画面に重なるもの (レイヤー) の順番、背景の写真・動画、好きな位置に置く素材 (画像・動画、グリーンバックも)、手前に重ねる画像 (ロゴなど) を設定します。重ねたものには、ビジュアライザーの光のにじみはかかりません。見た目は「ビジュアライザー」タブの画面で確かめてください。',
-    'Set the stacking order of layers, the background photo/video, freely placed media (images/videos, green screen too) and overlay images (logos etc.). These are not affected by the visualizer glow. Check the result in the Visualizer tab.',
+    '画面に重なるもの (レイヤー) の順番、背景の写真・動画、好きな位置に置く素材 (画像・動画、グリーンバックも)、手前に重ねる画像 (ロゴなど) を設定します。重ねたものには、ビジュアライザーの光のにじみはかかりません。プレビューは、下へ動かしても見えたままです (再生すると動きます)。',
+    'Set the stacking order of layers, the background photo/video, freely placed media (images/videos, green screen too) and overlay images (logos etc.). These are not affected by the visualizer glow. The preview stays in view while you scroll (press play to see it move).',
   );
   el.appendChild(p);
+
+  // 左 (狭い画面では下) が設定、右 (上) が固定のプレビュー
+  const split = document.createElement('div');
+  split.className = 'overlay-split';
+  const controlsCol = document.createElement('div');
+  controlsCol.className = 'overlay-controls';
+  const previewCol = document.createElement('div');
+  previewCol.className = 'overlay-preview';
+  previewCol.dataset.overlay = 'preview';
+  previewCol.appendChild(createLivePreview().element);
+  split.append(controlsCol, previewCol);
+  el.appendChild(split);
+  // ここから下の欄は設定の列に入れる
+  const body = controlsCol;
 
   // 背景の一枚絵 (ビジュアライザーの奥)。オーバーレイ (前面) とは別の欄
   // レイヤーの順番 (手前が上)、背景の一枚絵・動画、素材 (素材を足したり外したりしたらレイヤーの一覧も作り直す)
   const layersHost = document.createElement('div');
   const renderLayers = (): void => layersHost.replaceChildren(createLayersCard());
   renderLayers();
-  el.appendChild(layersHost);
-  el.appendChild(createBackgroundCard());
-  el.appendChild(createMediaCard(renderLayers));
+  body.appendChild(layersHost);
+  body.appendChild(createBackgroundCard());
+  body.appendChild(createMediaCard(renderLayers));
 
   const addRow = document.createElement('div');
   addRow.className = 'row-gap';
@@ -60,16 +74,16 @@ export function renderOverlayPanel(): HTMLElement {
   addInput.accept = IMAGE_ACCEPT;
   addRow.appendChild(addLabel);
   addRow.appendChild(addInput);
-  el.appendChild(addRow);
+  body.appendChild(addRow);
 
   const errorBox = document.createElement('div');
   errorBox.className = 'placeholder-card';
   errorBox.style.display = 'none';
-  el.appendChild(errorBox);
+  body.appendChild(errorBox);
 
   const list = document.createElement('div');
   list.className = 'overlay-list';
-  el.appendChild(list);
+  body.appendChild(list);
 
   // id -> objectURL。サムネイル表示用。個別削除時は revoke するが、タブ切り替えでパネルごと
   // 破棄されるときは他パネル同様に明示的な unmount フックが無いため revoke しない

@@ -72,8 +72,8 @@ export function createBackgroundCard(): HTMLElement {
       'p',
       'lyrics-help',
       tr(
-        '写真か動画 (MP4 (H.264) / WebM) を背景に敷きます。重なる順番とビジュアライザーの重ね方は、上の「レイヤー」で変えられます (スクリーンなら、ビジュアライザーの黒い部分は透けて光だけが乗ります)。背景には光のにじみはかかりません。動画の音は使いません。動画は曲と同じ時刻から流れ、曲より短ければくり返すか最後の絵で止めます。見た目は「ビジュアライザー」タブで確かめてください。',
-        'Place a photo or video (MP4 (H.264) / WebM) as the background. Change the stacking order and how the visuals are layered in "Layers" above (with Screen, the visuals\' black is see-through and only light is added). The background gets no glow. Video sound is not used. The video plays from the same time as the song; if shorter it loops or holds the last frame. Check the result in the Visualizer tab.',
+        '写真か動画 (MP4 (H.264) / WebM) を背景に敷きます。重なる順番とビジュアライザーの重ね方は、上の「レイヤー」で変えられます (スクリーンなら、ビジュアライザーの黒い部分は透けて光だけが乗ります)。背景には光のにじみはかかりません。動画の音は使いません。動画は曲と同じ時刻から流れ、曲より短ければくり返すか最後の絵で止めます。見た目は右 (狭い画面では上) のプレビューで確かめられます。',
+        'Place a photo or video (MP4 (H.264) / WebM) as the background. Change the stacking order and how the visuals are layered in "Layers" above (with Screen, the visuals\' black is see-through and only light is added). The background gets no glow. Video sound is not used. The video plays from the same time as the song; if shorter it loops or holds the last frame. Check the result in the preview on the right (top on narrow screens).',
       ),
     ),
   );
