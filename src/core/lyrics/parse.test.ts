@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lyricsForEngine, parseLyrics, parseLyricsSource, srtToLrc } from './parse';
+import { lyricsForEngine, parseLyrics, parseLyricsSource, srtToLrc, stripBracketNotes } from './parse';
 
 describe('parseLyrics (JIZURA の J.parseLyrics と同じ規則)', () => {
   it('1 行 = 1 行。空行は次の行の gapBefore、# はコメント', () => {
@@ -100,5 +100,33 @@ describe('SRT', () => {
     expect(lyricsForEngine('[00:01.00]a', 'lrc')).toBe('[00:01.00]a');
     expect(lyricsForEngine(SRT, 'srt')).toContain('[00:01.000]最初の字幕');
     expect(parseLyricsSource('a', 'text').srtEnds).toBeNull();
+  });
+});
+
+describe('[ ] で囲んだ所 (見出しなど) は書かなかったのと同じ', () => {
+  it('[ ] だけの行は空行と同じ (次の行の gapBefore)。行の中の [ ] は取り除く', () => {
+    const { lines } = parseLyricsSource('[Verse 1]\n夜明けの色を\n[サビ]\nほどけた [ハモ] 声が\n[]', 'text');
+    expect(lines.map((l) => l.text)).toEqual(['夜明けの色を', 'ほどけた 声が']);
+    expect(lines.map((l) => l.gapBefore)).toEqual([false, true]);
+    // 元の入力の行番号は変わらない
+    expect(lines.map((l) => l.src)).toEqual([1, 3]);
+  });
+
+  it('タイムタグ・メタ情報・間奏はそのまま残る', () => {
+    expect(stripBracketNotes('[ti:曲名]\n[00:01.00][Chorus]\n[00:02.00]歌詞[x]\n[間奏 8]')).toBe('[ti:曲名]\n\n[00:02.00]歌詞\n[間奏 8]');
+    const { lines, meta } = parseLyricsSource('[ti:曲名]\n[00:01.00][Chorus]\n[00:02.00]歌詞\n[間奏 8]', 'lrc');
+    expect(meta.ti).toBe('曲名');
+    expect(lines.map((l) => [l.text, l.lrc, l.interlude])).toEqual([
+      ['歌詞', 2, false],
+      ['', null, true],
+    ]);
+  });
+
+  it('JIZURA に渡す文も同じように取り除く (行番号がずれない)。SRT の [Music] だけの字幕も消える', () => {
+    expect(lyricsForEngine('[Intro]\nあ', 'text')).toBe('\nあ');
+    const srt = '1\n00:00:01,000 --> 00:00:02,000\n[Music]\n\n2\n00:00:03,000 --> 00:00:04,000\n歌う\n';
+    expect(parseLyricsSource(srt, 'srt').lines.map((l) => l.text)).toEqual(['歌う']);
+    expect(parseLyricsSource(srt, 'srt').srtEnds).toEqual([4]);
+    expect(lyricsForEngine(srt, 'srt')).not.toContain('Music');
   });
 });

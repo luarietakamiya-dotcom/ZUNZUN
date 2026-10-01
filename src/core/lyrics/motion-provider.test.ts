@@ -144,4 +144,38 @@ describe('LyricMotionProvider', () => {
     p.get(req());
     expect(LyricMotion.create).toHaveBeenCalledTimes(1);
   });
+
+  it('時刻だけの変更 (タイムラインで合わせているとき) は、手を止めて 1.5 秒たってから 1 回だけ作り直す', async () => {
+    const stub = stubCreate();
+    let now = 0;
+    const p = new LyricMotionProvider(() => now);
+    p.get(req());
+    now = 400;
+    p.get(req());
+    await stub.resolveAll();
+    expect(stub.calls).toBe(1);
+    const moved = (t: number): MotionRequest => req({ lyrics: lyrics({ timing: { ...defaultLyrics().timing, lineTimes: { '0': t } } }) });
+    // 少しずつ何度も動かす (0.5 秒ごと) 間は作り直さない
+    for (let k = 1; k <= 6; k++) {
+      now = 400 + k * 500;
+      p.get(moved(k * 0.1));
+      now += 400;
+      p.get(moved(k * 0.1));
+    }
+    expect(stub.calls).toBe(1);
+    // 手を止めて 1.5 秒たったら作り直す
+    now += 900;
+    p.get(moved(6 * 0.1));
+    expect(stub.calls).toBe(1);
+    now += 300;
+    p.get(moved(6 * 0.1));
+    expect(stub.calls).toBe(2);
+    await stub.resolveAll();
+    // 時刻以外 (文字) の変更は今までどおり 350ms
+    const t0 = now;
+    p.get(req({ lyrics: lyrics({ text: 'え', timing: { ...defaultLyrics().timing, lineTimes: { '0': 0.6 } } }) }));
+    now = t0 + 400;
+    p.get(req({ lyrics: lyrics({ text: 'え', timing: { ...defaultLyrics().timing, lineTimes: { '0': 0.6 } } }) }));
+    expect(stub.calls).toBe(3);
+  });
 });

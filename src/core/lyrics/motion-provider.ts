@@ -9,7 +9,9 @@ import type { PackPalette } from './packs/types';
  *
  * LyricMotion は作るのに時間がかかる (JIZURA の読み込み、書体の準備で全カットの下描き) ので、
  * - 設定 (歌詞・時刻・モーションの設定・seed・比率・fps・音源) が同じ間は作り直さない
- * - 変わったら、DEBOUNCE_MS のあいだ変わらなくなってから作り直す (タイムラインのドラッグ中に何度も作らない)
+ * - 変わったら、DEBOUNCE_MS のあいだ変わらなくなってから作り直す (タイムラインのドラッグ中に何度も作らない)。
+ *   作り直しの間は画面が少し止まるので、時刻だけの変更 (タイムラインで合わせているとき) は TIMING_DEBOUNCE_MS 待つ。
+ *   続けて動かしている間は作り直さず、手を止めてから 1 回だけ作り直す (2026-10-01 「少し動かしただけで反映されて固まる」)
  * - 作っている間は、ひとつ前の LyricMotion を返し続ける (歌詞が一瞬消えないように)
  * 書き出しはこれを使わず、書き出し開始時の設定で LyricMotion.create を直接呼ぶ。
  */
@@ -29,6 +31,7 @@ export interface MotionRequest {
 }
 
 const DEBOUNCE_MS = 350;
+const TIMING_DEBOUNCE_MS = 1500;
 
 const analysisIds = new WeakMap<AudioAnalysis, number>();
 let nextAnalysisId = 1;
@@ -49,12 +52,15 @@ export function wantsMotion(req: MotionRequest): req is MotionRequest & { lyrics
 
 /** 作り直しが要るかを判定するためのキー */
 export function motionKey(req: MotionRequest & { lyrics: LyricsSettings }): string {
+  return JSON.stringify([req.lyrics.timing.lineTimes, req.lyrics.timing.lineEnds, motionKeyWithoutTiming(req)]);
+}
+
+/** キーのうち、行の時刻を除いた所 (時刻だけが変わったかを見分ける) */
+function motionKeyWithoutTiming(req: MotionRequest & { lyrics: LyricsSettings }): string {
   const { lyrics } = req;
   return JSON.stringify([
     lyrics.source,
     lyrics.text,
-    lyrics.timing.lineTimes,
-    lyrics.timing.lineEnds,
     lyrics.motion,
     req.projectSeed >>> 0,
     nearestAspect(req.width, req.height),
@@ -72,6 +78,10 @@ export class LyricMotionProvider {
   private current: LyricMotion | null = null;
   private requestedKey = '';
   private requestedAt = 0;
+  /** 今の LyricMotion の、時刻を除いたキー */
+  private currentBase = '';
+  /** 今待っている変更が時刻だけか */
+  private timingOnly = false;
   private building = false;
   /** 直近の作成の失敗 (UI に出す用)。成功したら null に戻す */
   lastError: string | null = null;
@@ -89,7 +99,8 @@ export class LyricMotionProvider {
     if (key !== this.requestedKey) {
       this.requestedKey = key;
       this.requestedAt = this.now();
-    } else if (!this.building && this.now() - this.requestedAt >= DEBOUNCE_MS) {
+      this.timingOnly = this.current != null && motionKeyWithoutTiming(req) === this.currentBase;
+    } else if (!this.building && this.now() - this.requestedAt >= (this.timingOnly ? TIMING_DEBOUNCE_MS : DEBOUNCE_MS)) {
       this.build(key, req);
     }
     return this.current;
@@ -102,17 +113,20 @@ export class LyricMotionProvider {
 
   private build(key: string, req: MotionRequest & { lyrics: LyricsSettings }): void {
     this.building = true;
+    const base = motionKeyWithoutTiming(req);
     const rhythm = motionRhythmGrid(req.rhythm);
     const audio = req.analysis ? buildJizuraAudio(req.analysis, rhythm) : null;
     LyricMotion.create(req.lyrics, audio, { projectSeed: req.projectSeed, width: req.width, height: req.height, fps: req.fps, rhythm, palette: req.palette ?? null })
       .then((motion) => {
         this.current = motion;
         this.currentKey = key;
+        this.currentBase = base;
         this.lastError = null;
       })
       .catch((err: unknown) => {
         // 失敗した設定では作り直さない (同じキーのまま次の変更を待つ)
         this.currentKey = key;
+        this.currentBase = base;
         this.current = null;
         this.lastError = err instanceof Error ? err.message : String(err);
       })

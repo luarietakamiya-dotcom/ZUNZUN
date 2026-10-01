@@ -13,6 +13,9 @@ import type { LyricsSource } from '../types';
  * - `[mm:ss.xx]` = LRC のタイムタグ (複数付けると同じ歌詞を繰り返す)。`[ti:…]` `[ar:…]` などはメタ情報
  * - `[間奏]` `[間奏 8]` = 歌詞なしの区間 (8 秒)。`[interlude]` `[inst]` `[간주]` なども可
  * - `歌詞|注釈` = 注釈、`*強調*` = 強調、行末の `!` = キメ、`/` = 手動の区切り
+ * ZUNZUN で足した記法 (JIZURA に渡す前に stripBracketNotes で取り除く):
+ * - `[Verse 1]` `[サビ]` のような [ ] で囲んだ所 (タイムタグ・メタ情報・間奏を除く) は書かなかったのと同じ。
+ *   行が [ ] だけなら空行と同じ (間を空ける)
  */
 
 export interface LyricLine {
@@ -40,6 +43,33 @@ export interface ParsedLyrics {
 const TIME_TAG = /^\[(\d+):(\d+(?:[.:]\d+)?)\]/;
 const META_TAG = /^\[(ti|ar|al|by|offset):(.*)\]$/i;
 const INTERLUDE = /^\[\s*(間奏|间奏|interlude|instrumental|inst|간주)(?:\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(?:s|sec|秒|초)?)?\s*\]$/i;
+
+/**
+ * [ ] で囲んだ所を取り除く (歌詞サイトや作曲ツールの「[Verse]」「[Chorus]」などの見出し)。
+ * 行の頭のタイムタグ・メタ情報 (`[ti:…]`)・間奏 (`[間奏]`) はそのまま残す。[ ] だけの行は空行にする。
+ * JIZURA に渡す文 (lyricsForEngine) と行の読み取り (parseLyricsSource) の両方に通すので、行番号はずれない
+ */
+export function stripBracketNotes(raw: string): string {
+  return String(raw || '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((row) => {
+      const s0 = row.trim();
+      if (!s0 || s0.startsWith('#') || META_TAG.test(s0)) return row;
+      let tags = '';
+      let s = s0;
+      let m: RegExpMatchArray | null;
+      while ((m = s.match(TIME_TAG))) {
+        tags += m[0];
+        s = s.slice(m[0].length);
+      }
+      s = s.trim();
+      if (INTERLUDE.test(s) || !s.includes('[')) return row;
+      const rest = s.replace(/\[[^\]]*\]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+      return rest ? tags + rest : '';
+    })
+    .join('\n');
+}
 
 export function parseLyrics(raw: string): ParsedLyrics {
   const lines: LyricLine[] = [];
@@ -177,7 +207,7 @@ export function srtToLrc(raw: string): { text: string; ends: number[] } {
 
 /** 入力形式に関係なく、JIZURA (と parseLyrics) に渡す歌詞テキストにする。 */
 export function lyricsForEngine(text: string, source: LyricsSource): string {
-  return source === 'srt' ? srtToLrc(text).text : text;
+  return stripBracketNotes(source === 'srt' ? srtToLrc(text).text : text);
 }
 
 /**
@@ -185,9 +215,9 @@ export function lyricsForEngine(text: string, source: LyricsSource): string {
  * (読み込み直後の lineEnds の初期値に使える)。
  */
 export function parseLyricsSource(text: string, source: LyricsSource): ParsedLyrics & { srtEnds: number[] | null } {
-  if (source !== 'srt') return { ...parseLyrics(text), srtEnds: null };
+  if (source !== 'srt') return { ...parseLyrics(stripBracketNotes(text)), srtEnds: null };
   const converted = srtToLrc(text);
-  const parsed = parseLyrics(converted.text);
+  const parsed = parseLyrics(stripBracketNotes(converted.text));
   // line.src は変換後の LRC の行番号 = SRT の字幕の番号 (並べ替え後)
   return { ...parsed, srtEnds: parsed.lines.map((l) => converted.ends[l.src] ?? l.lrc ?? 0) };
 }
