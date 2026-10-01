@@ -387,3 +387,9 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 - **タイムラインのドラッグで固まる**: 原因は、ドラッグを離して 350ms 後に歌詞モーション (JIZURA の下描き) を丸ごと作り直していたこと (作り直しの間は画面が止まる)。`core/lyrics/motion-provider.ts` で、**時刻だけの変更は自動では作り直さず、「反映」ボタン (`ui/panels/motion-apply.ts`。Lyrics タブのタイムラインの下・歌詞の見本の上、Visualizer タブの画面の下) を押したときに作り直す**ようにした (ユーザーの案。最初は「1.5 秒手を止めたら」にしたが、ボタンの方が軽い)。待っている間に文字・スタイルを変えたら、そのときに時刻もまとめて反映する (350ms)。書き出しはいつも今の時刻で作る。判定 (時刻だけの変更か) は毎フレームし直す (最初の作成中に時刻を変えたときも、できあがったあとは待つ)。**ハマったこと**: `.row-gap` の `display: flex` が `hidden` 属性に勝つので、`.motion-apply[hidden] { display: none; }` が要る。タイムラインのブロック・一覧は今までどおりすぐ変わる。作り直しそのものの重さは変えていない (もっと速くするなら、下描きを Worker に移すなどの設計変更が要る)。
 - **[ ] で囲んだ所**: `[Verse 1]` `[サビ]` などは書かなかったのと同じ (`parse.ts` の `stripBracketNotes`)。[ ] だけの行は空行 (間を空ける)。タイムタグ・メタ情報・`[間奏]` は残す。JIZURA に渡す文 (`lyricsForEngine`) と行の読み取り (`parseLyricsSource`) の両方に通すので、行番号はずれない。**注意**: 前に [ ] の行を含む歌詞で時刻を合わせたプロジェクトは、その行が無くなるぶん、後ろの行の時刻が 1 行ずつずれる。
 - **タイムラインのドラッグの吸着** (2026-10-01 「吸着してる？ちょっと使いづらい」): 最初は切っておき、タイムラインの下のチェック「ドラッグで吸着する」(`data-lyrics="timeline-snap"`、lyrics.ts のモジュール変数 `timelineSnap`。タブをまたいで残る・保存はしない) で入れる。Shift を押している間は逆。小節線のドラッグの吸着と、ボタンの「吸着」(全行をまとめて合わせる) は変えていない。
+
+### 2026-10-01 テスト公開 (GitHub Pages)
+- `.github/workflows/pages.yml`: **main-jxttta に push するたびに**、lint・単体テスト・ビルド (`ZUNZUN_BASE=/ZUNZUN/`) をして https://luarietakamiya-dotcom.github.io/ZUNZUN/ に出す (ユーザー指示。push するたびに公開版も変わるので、途中のものを push するときは気をつける)。
+- 初回はユーザーがリポジトリの設定を 2 つする: Settings → Pages の Source を「GitHub Actions」、Settings → Environments → github-pages の Deployment branches に main-jxttta を足す。
+- `vite.config.ts` の `base` は `ZUNZUN_BASE` (ふだんは `/`)。
+- 残り: ビジュアライザーの設定に「光の強さ」という名前のつまみが 2 つある (共通の光のにじみと、写真に動きの glowAmount)。名前を分ける。

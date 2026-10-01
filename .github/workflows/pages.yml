@@ -1,10 +1,14 @@
-# テスト公開: main に push されたら、ビルドして GitHub Pages に出す (https://luarietakamiya-dotcom.github.io/ZUNZUN/)
-# 初回だけ、リポジトリの Settings → Pages → Build and deployment → Source を「GitHub Actions」にする必要がある
+# テスト公開: 作業ブランチ main-jxttta に push されたら、ビルドして GitHub Pages に出す
+# (https://luarietakamiya-dotcom.github.io/ZUNZUN/。2026-10-01 ユーザー指示「main-jxttta から」)。
+# 初回だけ、リポジトリの設定が 2 つ要る:
+# - Settings → Pages → Build and deployment → Source を「GitHub Actions」にする
+# - Settings → Environments → github-pages → Deployment branches and tags に main-jxttta を足す
+#   (Pages は最初、既定のブランチ (main) からしか出せない)
 name: Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main-jxttta]
   workflow_dispatch:
 
 permissions:
