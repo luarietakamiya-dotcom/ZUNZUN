@@ -215,6 +215,32 @@ describe('sanitizeProject', () => {
     }
   });
 
+  it('background.slides (スライドショー): 画像が 2 枚以上あるときだけ残し、値は範囲に収める。前のプロジェクト (slides 無し) はそのまま', () => {
+    const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
+    const sha = (c: string): string => c.repeat(64);
+    raw.background = {
+      ref: 'a.jpg',
+      sha256: sha('a'),
+      kind: 'image',
+      slides: { items: [{ ref: 'a.jpg', sha256: sha('a') }, { ref: 'bad', sha256: 'zz' }, { ref: 'サビ.jpg', sha256: sha('b') }], transition: 'wipe', fadeSec: 99, pace: -1 },
+    };
+    expect(sanitizeProject(raw).background?.slides).toEqual({
+      items: [
+        { ref: 'a.jpg', sha256: sha('a') },
+        { ref: 'サビ.jpg', sha256: sha('b') },
+      ],
+      transition: 'fade',
+      fadeSec: 3,
+      pace: 0,
+    });
+    // 1 枚しか残らなければ、1 枚の背景
+    raw.background = { ref: 'a.jpg', sha256: sha('a'), kind: 'image', slides: { items: [{ ref: 'a.jpg', sha256: sha('a') }] } };
+    expect(sanitizeProject(raw).background?.slides).toBeUndefined();
+    // 動画の背景にはスライドショーを付けない
+    raw.background = { ref: 'a.mp4', sha256: sha('a'), kind: 'video', slides: { items: [{ ref: 'a.jpg', sha256: sha('a') }, { ref: 'b.jpg', sha256: sha('b') }] } };
+    expect(sanitizeProject(raw).background?.slides).toBeUndefined();
+  });
+
   it('lyrics.stem: ファイル名と sha256 (64 桁の 16 進) があるときだけ残し、enabled の既定は true', () => {
     const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
     const sha = 'c'.repeat(64);

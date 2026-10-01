@@ -1,3 +1,4 @@
+import { slidePlan } from '../render/slideshow';
 import {
   AudioBufferSource,
   BufferTarget,
@@ -41,8 +42,8 @@ export interface Mp4ExportJob {
   analysis: AudioAnalysis | null;
   /** 小節と拍子 (変拍子モードがオンのときだけ歌詞モーションに使う。省略 = 使わない) */
   rhythm?: RhythmSettings | null;
-  /** 背景の一枚絵・動画 (設定と元のファイル)。省略 = 背景なし */
-  background?: { config: BackgroundSettings; file: File } | null;
+  /** 背景の一枚絵・動画 (設定と元のファイル)。スライドショーなら slideFiles も。省略 = 背景なし */
+  background?: { config: BackgroundSettings; file: File; slideFiles?: readonly (File | null)[] } | null;
   /** ビジュアライザーの見え方 (拡大・位置・傾き)。省略 = そのまま */
   view?: ViewSettings;
   /** レイヤーの順番と重ね方。省略 = 既定 */
@@ -115,7 +116,21 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
     if (job.composition) host.composition = job.composition;
     await host.overlay.loadFrom(job.overlays);
     // 背景の動画は、書き出す各フレームの時刻ちょうどの絵を取り出す (exact)
-    await host.background.load(job.background?.config ?? null, job.background?.file ?? null, { exact: true });
+    await host.background.load(job.background?.config ?? null, job.background?.file ?? null, { exact: true, slideFiles: job.background?.slideFiles });
+    // スライドショーの切り替え表 (プレビューと同じ材料・同じ計算なので、同じ所で切り替わる)
+    const slides = job.background?.config.slides;
+    if (slides) {
+      host.background.setSlideCues(
+        slidePlan({
+          names: slides.items.map((it) => it.ref),
+          pace: slides.pace,
+          lyrics: job.lyrics,
+          beats: job.analysis?.beats ?? [],
+          rhythm: job.rhythm ?? null,
+          duration: job.timeline.duration,
+        }),
+      );
+    }
     await host.media.load(job.media ?? [], { exact: true });
     host.media.setConfigs((job.media ?? []).map((m) => m.config));
     // 歌詞モーション: 書き出し開始時の設定で作る (プレビューと同じ seed・時刻・設定なので同じ絵になる。書き出しは軽い描画を使わない)

@@ -490,3 +490,11 @@ body {
 .motion-apply { padding: 6px 10px; border-left: 3px solid #f0b35a; background: rgba(240, 179, 90, 0.08); border-radius: 4px; }
 .motion-apply .tab-button { border-color: #f0b35a; color: #f0b35a; font-weight: 600; }
 .motion-apply[hidden] { display: none; }
+
+/* 背景のスライドショーの画像の一覧 */
+.slide-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; max-height: 260px; overflow-y: auto; margin: 8px 0; }
+.slide-item { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #9aa1ad; min-width: 0; }
+.slide-item img, .slide-missing { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; background: #1a1d24; }
+.slide-missing { display: flex; align-items: center; justify-content: center; }
+.slide-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slide-kind { align-self: flex-start; padding: 0 6px; border-radius: 8px; background: rgba(224, 102, 102, 0.25); color: #f0c0c0; }

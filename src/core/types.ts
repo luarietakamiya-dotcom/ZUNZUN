@@ -207,7 +207,34 @@ export interface BackgroundSettings {
   blur: number;
   /** 動画が曲より短いとき、くり返すか (false なら最後の絵で止める) */
   loop: boolean;
+  /**
+   * スライドショー (フォルダ・複数の画像を、曲に合わせて自動で切り替える)。無ければ 1 枚の背景。
+   * あるときは kind = 'image'、ref / sha256 は 1 枚目 (色の読み取りなどは 1 枚目を使う)
+   */
+  slides?: BackgroundSlides | null;
 }
+
+/** スライドショーの画像 1 枚 (中身は保存しない。ファイル名と sha256 だけ) */
+export interface BackgroundSlide {
+  ref: string;
+  sha256: string;
+}
+
+export interface BackgroundSlides {
+  /** ファイル名の順 */
+  items: BackgroundSlide[];
+  /** 'cut' = パッと切り替え、'fade' = じわっと重なる */
+  transition: 'cut' | 'fade';
+  /** じわっと重なる長さ (秒) */
+  fadeSec: number;
+  /** 切り替えの細かさ (0..1、0.5 が既定。上げるほど速い) */
+  pace: number;
+}
+
+/** スライドショーの画像の上限 */
+export const MAX_SLIDES = 100;
+
+export const defaultSlides = (items: BackgroundSlide[]): BackgroundSlides => ({ items, transition: 'fade', fadeSec: 0.6, pace: 0.5 });
 
 export const defaultBackground = (ref: string, sha256: string, kind: BackgroundSettings['kind']): BackgroundSettings => ({
   ref,

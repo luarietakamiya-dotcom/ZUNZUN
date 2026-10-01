@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { BackgroundSettings, VisualizerBlend } from '../types';
 import { ExactVideo, PreviewVideo } from './background-video';
+import { slideAt, type SlideCue } from './slideshow';
 import { tr } from '../i18n';
 
 /**
@@ -17,6 +18,11 @@ import { tr } from '../i18n';
  * - 濃さ (レイヤーの設定の visualizerOpacity) < 1: 先に黒を重ねてビジュアライザーを薄くしてから、背景を重ねる
  * - 'over' (そのまま上に): 背景に (1 − 濃さ) を掛けて足す = ビジュアライザー × 濃さ + 背景 × (1 − 濃さ)
  * 背景の画像はファイルの値 (sRGB) をそのまま出す (色の変換をしない)。背景には Bloom をかけない (明るい写真が白飛びしないように)。
+ *
+ * スライドショー (settings.slides。core/render/slideshow.ts の切り替え表 setSlideCues): 今の画像と、じわっと切り替える間は
+ * ひとつ前の画像を重ねて描く (map / map2 と mixAmt)。画像は全部を一度に持たず、今・前・次の画像だけを読み込む
+ * (長い辺 SLIDE_MAX_SIDE まで縮める。使わなくなったものは捨てる)。プレビューは読み終わるまで前の絵のまま、
+ * 書き出しは advanceExact でそのフレームに要る画像を読み終わるまで待つ。
  */
 
 /** 背景の絵の uv の拡大率。'cover' は画面いっぱい (はみ出しは切る)、'contain' は全体を収める (余りは黒) */
@@ -38,16 +44,22 @@ void main() {
 const BG_FRAG = /* glsl */ `
 uniform sampler2D map;
 uniform vec2 uvScale;
+/** スライドショーで、じわっと切り替える間のひとつ前の画像 (mixAmt = 今の画像の割合。1 なら map だけ) */
+uniform sampler2D map2;
+uniform vec2 uvScale2;
+uniform float mixAmt;
 /** 暗さと、'over' のときの (1 − 濃さ) を掛けたもの */
 uniform float brightness;
 varying vec2 vUv;
+vec3 sampleFit(sampler2D tex, vec2 scale) {
+  vec2 uv = (vUv - 0.5) * scale + 0.5;
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec3(0.0);
+  return texture2D(tex, uv).rgb;
+}
 void main() {
-  vec2 uv = (vUv - 0.5) * uvScale + 0.5;
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-    return;
-  }
-  gl_FragColor = vec4(texture2D(map, uv).rgb * brightness, 1.0);
+  vec3 col = sampleFit(map, uvScale);
+  if (mixAmt < 1.0) col = mix(sampleFit(map2, uvScale2), col, mixAmt);
+  gl_FragColor = vec4(col * brightness, 1.0);
 }
 `;
 
@@ -72,15 +84,19 @@ function blendFor(material: THREE.ShaderMaterial, blend: VisualizerBlend): void 
 const BLUR_MAX = 0.03;
 /** 背景の画像の長い辺の上限 (px)。大きすぎる写真は縮めてから使う (GPU のテクスチャの上限とメモリのため) */
 const MAX_IMAGE_SIDE = 4096;
+/** スライドショーの画像の長い辺の上限 (px。何枚も持つので小さめ) */
+const SLIDE_MAX_SIDE = 2048;
+/** スライドショーで同時に持つ画像の数の上限 (今・前・次と、その少し先) */
+const SLIDE_CACHE = 5;
 
 /**
  * 画像ファイルを背景用のテクスチャにする。ぼかしはここで一度だけかける (canvas の filter)。
  * ぼかすと端が透けて暗くなるので、少し大きく描いてから切り取る。
  */
-export async function loadBackgroundImage(file: Blob, blur01: number): Promise<{ texture: THREE.Texture; aspect: number }> {
+export async function loadBackgroundImage(file: Blob, blur01: number, maxSide = MAX_IMAGE_SIDE): Promise<{ texture: THREE.Texture; aspect: number }> {
   const bitmap = await createImageBitmap(file);
   try {
-    const k = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+    const k = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
     const w = Math.max(1, Math.round(bitmap.width * k));
     const h = Math.max(1, Math.round(bitmap.height * k));
     const canvas = document.createElement('canvas');
@@ -126,6 +142,16 @@ export class BackgroundCompositor {
   private vOpacity = 1;
   /** load() の呼び出し世代 (読み込み中に別の読み込みが来たら古い方を捨てる) */
   private generation = 0;
+  /** スライドショー: 画像ごとのファイル (選び直していないものは null)・切り替え表・読み込んだ画像 */
+  private slideFiles: (File | null)[] | null = null;
+  private slideCues: readonly SlideCue[] = [];
+  private readonly slideTex = new Map<number, Promise<{ texture: THREE.Texture; aspect: number } | null>>();
+  private readonly slideReady = new Map<number, { texture: THREE.Texture; aspect: number }>();
+  /** いま描いている画像 (読み込み中の画像に切り替わるまでは前のまま) */
+  private shown: { cur: number; prev: number; mix: number } = { cur: -1, prev: -1, mix: 1 };
+  /** 書き出しの各フレームの時刻 (スライドショー用) と、次に描くフレームの番号 */
+  private exactTimes: readonly number[] | null = null;
+  private exactFrame = 0;
 
   constructor() {
     this.fadeMaterial = new THREE.ShaderMaterial({
@@ -140,7 +166,14 @@ export class BackgroundCompositor {
     this.bgMaterial = new THREE.ShaderMaterial({
       vertexShader: VERT,
       fragmentShader: BG_FRAG,
-      uniforms: { map: { value: null }, uvScale: { value: new THREE.Vector2(1, 1) }, brightness: { value: 1 } },
+      uniforms: {
+        map: { value: null },
+        uvScale: { value: new THREE.Vector2(1, 1) },
+        map2: { value: null },
+        uvScale2: { value: new THREE.Vector2(1, 1) },
+        mixAmt: { value: 1 },
+        brightness: { value: 1 },
+      },
       depthTest: false,
       depthWrite: false,
       transparent: true,
@@ -155,7 +188,18 @@ export class BackgroundCompositor {
 
   /** 背景を使っているか (使っていなければ何もしない) */
   get active(): boolean {
+    if (this.slideFiles) return this.settings != null && this.shown.cur >= 0 && this.slideReady.has(this.shown.cur);
     return this.texture != null && this.settings != null;
+  }
+
+  /** スライドショーか (テスト・UI 用) */
+  get isSlideshow(): boolean {
+    return this.slideFiles != null;
+  }
+
+  /** スライドショーの切り替え表 (core/render/slideshow.ts)。プレビューは変わるたび、書き出しは最初に 1 回 */
+  setSlideCues(cues: readonly SlideCue[]): void {
+    this.slideCues = cues;
   }
 
   /**
@@ -163,8 +207,16 @@ export class BackgroundCompositor {
    * 動画は、exact = false (プレビュー) ならブラウザの動画を曲の位置に合わせて流し、exact = true (書き出し) なら
    * beginExact / advanceExact で各フレームの時刻ちょうどの絵を取り出す
    */
-  async load(settings: BackgroundSettings | null, file: Blob | null, opts: { exact?: boolean } = {}): Promise<void> {
+  async load(settings: BackgroundSettings | null, file: Blob | null, opts: { exact?: boolean; slideFiles?: readonly (File | null)[] } = {}): Promise<void> {
     const my = ++this.generation;
+    this.clearSlides();
+    if (settings?.slides && opts.slideFiles && opts.slideFiles.some((f) => f != null)) {
+      this.setTexture(null, 1);
+      this.settings = settings;
+      this.slideFiles = settings.slides.items.map((_, i) => opts.slideFiles![i] ?? null);
+      this.apply();
+      return;
+    }
     if (!settings || !file) {
       this.setTexture(null, 1);
       this.settings = null;
@@ -195,19 +247,121 @@ export class BackgroundCompositor {
     this.apply();
   }
 
-  /** 毎フレーム、描く前に呼ぶ (プレビューの動画を曲の時刻 t に合わせる。画像・書き出しでは何もしない) */
+  /** 毎フレーム、描く前に呼ぶ (プレビューの動画を曲の時刻 t に合わせる。スライドショーは今の画像を選ぶ。書き出しでは何もしない) */
   update(t: number): void {
     if (this.video instanceof PreviewVideo) this.video.sync(t);
+    if (this.slideFiles && !this.exactTimes) void this.showSlidesAt(t, false);
   }
 
-  /** 書き出しの前に、書き出す全フレームの曲の時刻を渡す (背景が書き出し用の動画のときだけ意味がある) */
+  /** 書き出しの前に、書き出す全フレームの曲の時刻を渡す (背景が書き出し用の動画・スライドショーのときだけ意味がある) */
   beginExact(songTimes: readonly number[]): void {
     if (this.video instanceof ExactVideo) this.video.begin(songTimes);
+    if (this.slideFiles) {
+      this.exactTimes = songTimes;
+      this.exactFrame = 0;
+    }
   }
 
-  /** 書き出しで、各フレームを描く前に呼ぶ (次のフレームの動画の絵を用意する) */
+  /** 書き出しで、各フレームを描く前に呼ぶ (次のフレームの動画の絵・スライドショーの画像を用意する) */
   async advanceExact(): Promise<void> {
     if (this.video instanceof ExactVideo) await this.video.next();
+    if (this.slideFiles && this.exactTimes) {
+      const t = this.exactTimes[Math.min(this.exactFrame, this.exactTimes.length - 1)] ?? 0;
+      this.exactFrame++;
+      await this.showSlidesAt(t, true);
+    }
+  }
+
+  /**
+   * 時刻 t の画像を選んで描けるようにする。wait = true (書き出し) なら読み終わるまで待つ。
+   * プレビューは読み込みを始めるだけで、読み終わるまでは前に描いていた画像のまま
+   */
+  private async showSlidesAt(t: number, wait: boolean): Promise<void> {
+    const files = this.slideFiles;
+    const s = this.settings?.slides;
+    if (!files || !s) return;
+    const { index, prev, since } = slideAt(this.slideCues, t);
+    const cur = index >= 0 ? index : files.findIndex((f) => f != null);
+    if (cur < 0) return;
+    const fade = s.transition === 'fade' ? Math.max(0.05, s.fadeSec) : 0;
+    const mixAmt = prev >= 0 && fade > 0 ? Math.min(1, since / fade) : 1;
+    // 次に出る画像も先に読んでおく
+    const next = this.slideCues.find((c) => c.t > t)?.index ?? -1;
+    const want = [cur, ...(mixAmt < 1 ? [prev] : []), ...(next >= 0 ? [next] : [])];
+    const loads = want.map((i) => this.loadSlide(i));
+    if (wait) await Promise.all(loads);
+    this.evictSlides(new Set([...want, this.shown.cur, this.shown.prev]));
+    if (!this.slideReady.has(cur)) return; // 読み込み中 (プレビュー): 前の絵のまま
+    const usePrev = mixAmt < 1 && this.slideReady.has(prev);
+    this.shown = { cur, prev: usePrev ? prev : -1, mix: usePrev ? mixAmt : 1 };
+    this.applySlides();
+  }
+
+  private loadSlide(i: number): Promise<{ texture: THREE.Texture; aspect: number } | null> {
+    const file = this.slideFiles?.[i];
+    if (!file) return Promise.resolve(null);
+    let p = this.slideTex.get(i);
+    if (!p) {
+      const my = this.generation;
+      p = loadBackgroundImage(file, this.settings?.blur ?? 0, SLIDE_MAX_SIDE)
+        .then((r) => {
+          if (my !== this.generation || this.slideTex.get(i) !== p) {
+            r.texture.dispose();
+            return null;
+          }
+          this.slideReady.set(i, r);
+          return r;
+        })
+        .catch(() => null);
+      this.slideTex.set(i, p);
+    }
+    return p;
+  }
+
+  /** 使わなくなった画像を捨てる (上限を超えたときだけ。keep は残す) */
+  private evictSlides(keep: Set<number>): void {
+    if (this.slideTex.size <= SLIDE_CACHE) return;
+    for (const i of [...this.slideTex.keys()]) {
+      if (this.slideTex.size <= SLIDE_CACHE) break;
+      if (keep.has(i)) continue;
+      this.slideReady.get(i)?.texture.dispose();
+      this.slideReady.delete(i);
+      this.slideTex.delete(i);
+    }
+  }
+
+  private clearSlides(): void {
+    for (const r of this.slideReady.values()) r.texture.dispose();
+    this.slideReady.clear();
+    this.slideTex.clear();
+    this.slideFiles = null;
+    this.slideCues = [];
+    this.shown = { cur: -1, prev: -1, mix: 1 };
+    this.exactTimes = null;
+    this.exactFrame = 0;
+    this.bgMaterial.uniforms.map2!.value = null;
+    this.bgMaterial.uniforms.mixAmt!.value = 1;
+  }
+
+  /** いま描く画像 (shown) をシェーダーに渡す */
+  private applySlides(): void {
+    const s = this.settings;
+    const cur = this.slideReady.get(this.shown.cur);
+    if (!s || !cur) return;
+    const u = this.bgMaterial.uniforms;
+    u.map!.value = cur.texture;
+    const [sx, sy] = backgroundUvScale(cur.aspect, this.dstAspect, s.fit);
+    (u.uvScale!.value as THREE.Vector2).set(sx, sy);
+    const prev = this.slideReady.get(this.shown.prev);
+    if (prev && this.shown.mix < 1) {
+      u.map2!.value = prev.texture;
+      const [px, py] = backgroundUvScale(prev.aspect, this.dstAspect, s.fit);
+      (u.uvScale2!.value as THREE.Vector2).set(px, py);
+      u.mixAmt!.value = this.shown.mix;
+    } else {
+      u.map2!.value = null;
+      u.mixAmt!.value = 1;
+    }
   }
 
   resize(width: number, height: number): void {
@@ -258,6 +412,7 @@ export class BackgroundCompositor {
 
   dispose(): void {
     this.generation++;
+    this.clearSlides();
     this.setTexture(null, 1);
     this.bgMaterial.dispose();
     this.fadeMaterial.dispose();
@@ -279,8 +434,11 @@ export class BackgroundCompositor {
   private apply(): void {
     const s = this.settings;
     if (!s) return;
-    const [sx, sy] = backgroundUvScale(this.srcAspect, this.dstAspect, s.fit);
-    (this.bgMaterial.uniforms.uvScale!.value as THREE.Vector2).set(sx, sy);
+    if (this.slideFiles) this.applySlides();
+    else {
+      const [sx, sy] = backgroundUvScale(this.srcAspect, this.dstAspect, s.fit);
+      (this.bgMaterial.uniforms.uvScale!.value as THREE.Vector2).set(sx, sy);
+    }
     const opacity = this.vOpacity;
     const bright = 1 - Math.max(0, Math.min(1, s.dim));
     this.bgMaterial.uniforms.brightness!.value = this.vBlend === 'over' ? bright * (1 - opacity) : bright;

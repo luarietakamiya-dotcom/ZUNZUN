@@ -20,6 +20,10 @@ import {
   type ViewSettings,
   type MediaLayer,
   defaultMediaLayer,
+  defaultSlides,
+  MAX_SLIDES,
+  type BackgroundSlide,
+  type BackgroundSlides,
 } from '../types';
 import { normalizeView } from '../render/view';
 import { normalizeComposition } from '../render/composition';
@@ -230,6 +234,27 @@ function sanitizeBackground(raw: unknown): BackgroundSettings | null {
     dim: unit(raw.dim, base.dim),
     blur: unit(raw.blur, base.blur),
     loop: typeof raw.loop === 'boolean' ? raw.loop : base.loop,
+    ...(kind === 'image' ? sanitizeSlides(raw.slides) : {}),
+  };
+}
+
+/** スライドショー。画像が 2 枚未満なら無し (1 枚の背景として扱う) */
+function sanitizeSlides(raw: unknown): { slides?: BackgroundSlides } {
+  if (!isPlainObject(raw) || !Array.isArray(raw.items)) return {};
+  const items: BackgroundSlide[] = [];
+  for (const it of raw.items.slice(0, MAX_SLIDES)) {
+    if (!isPlainObject(it) || typeof it.ref !== 'string' || it.ref === '' || typeof it.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(it.sha256)) continue;
+    items.push({ ref: it.ref.slice(0, 512), sha256: it.sha256 });
+  }
+  if (items.length < 2) return {};
+  const base = defaultSlides(items);
+  return {
+    slides: {
+      items,
+      transition: raw.transition === 'cut' ? 'cut' : 'fade',
+      fadeSec: isFiniteNumber(raw.fadeSec) ? clamp(raw.fadeSec, 0.1, 3) : base.fadeSec,
+      pace: isFiniteNumber(raw.pace) ? clamp(raw.pace, 0, 1) : base.pace,
+    },
   };
 }
 

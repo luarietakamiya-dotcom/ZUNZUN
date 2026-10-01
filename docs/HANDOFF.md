@@ -397,3 +397,6 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 ### 2026-10-01 曲の区切り（ARCHITECTURE「曲の区切りと、背景のスライドショー」①）
 - `core/lyrics/sections.ts`: `sectionKindOf`（見出し・ファイル名の言葉 → 種類。英字は前後が英字でないときだけ = universe は verse ではない、`_chorus_01` は chorus）、`findSections`（見出しの行番号 → 歌詞の行の時刻）、`sectionAt`。`buildLyricsView` の `sections`。タイムラインに色の帯（`lyrics-timeline.ts` の `SECTION_STYLE`）。
 - 次は ② 背景のスライドショー。
+- **② 背景のスライドショー（済）**: `core/render/slideshow.ts`・`background.ts`（スライドショーの描き方）・`store.setBackgroundSlides` / `restoreSlides` / `updateBackgroundSlides`・`background-card.ts`（「フォルダを選ぶ」`webkitdirectory` /「画像を複数選ぶ」、一覧と区切りの印、切り替わり方・重なる長さ・切り替えの細かさ）・プレビュー（visualizer.ts の `syncSlides`）・書き出し（mp4.ts）。E2E `tests/e2e/slideshow.spec.ts`。
+  - **ハマったこと**: 小節の頭の表に 0 秒を足すとき、0.3 秒などのすぐ近くの頭を消さないと、曲の頭で 2 回切り替わった。区切りの頭を半小節以内でそろえると、後ろの小節へ寄って歌い出しより 1 秒以上遅れて見えた（1/4 小節以内に狭めた）。
+  - 確かめていないこと: 実際の MP4 の書き出し（書き出しと同じ `advanceExact` の流れは E2E で確認）、フォルダ選び（`webkitdirectory`）の実機での動き。

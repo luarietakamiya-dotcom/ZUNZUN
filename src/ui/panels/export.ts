@@ -80,7 +80,7 @@ function createRunnerFromStore(): ExportRunner {
   const lyrics = store.lyrics ? (JSON.parse(JSON.stringify(store.lyrics)) as typeof store.lyrics) : null;
   const analysis = audio.analysis;
   const rhythm = store.rhythm ? (JSON.parse(JSON.stringify(store.rhythm)) as typeof store.rhythm) : null;
-  const background = store.background && store.backgroundFile ? { config: { ...store.background }, file: store.backgroundFile } : null;
+  const background = store.background && store.backgroundFile ? { config: { ...store.background }, file: store.backgroundFile, slideFiles: [...store.slideFiles] } : null;
   const seed = store.seed;
 
   return (ctx) =>

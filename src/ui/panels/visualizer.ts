@@ -1,3 +1,4 @@
+import { slidePlan, slidePlanKey } from '../../core/render/slideshow';
 import { createMotionApplyNotice } from './motion-apply';
 import { store } from '../../core/store';
 import { type AudioFrame, type CommonParams, defaultView, type OverlayLayer, VIEW_ZOOM_MAX, VIEW_ZOOM_MIN, type ViewSettings } from '../../core/types';
@@ -249,7 +250,25 @@ export function renderVisualizerPanel(): HTMLElement {
     .filter((e): e is { config: OverlayLayer; file: File } => e.file != null);
   void host.overlay.loadFrom(overlayEntries);
   // 背景 (Overlay タブで設定)。ファイルがまだ選び直されていなければ背景なし
-  void host.background.load(store.background, store.backgroundFile).catch(() => {});
+  void host.background.load(store.background, store.backgroundFile, { slideFiles: store.slideFiles }).catch(() => {});
+  // スライドショーの切り替え表 (歌詞の区切り・拍・枚数から。材料が変わったときだけ作り直す)
+  let slideKey = '';
+  const syncSlides = (): void => {
+    const slides = store.background?.slides;
+    if (!slides || !store.audio.isLoaded) return;
+    const input = {
+      names: slides.items.map((it) => it.ref),
+      pace: slides.pace,
+      lyrics: store.lyrics,
+      beats: store.audio.analysis?.beats ?? [],
+      rhythm: store.rhythm,
+      duration: store.audio.duration,
+    };
+    const key = slidePlanKey(input);
+    if (key === slideKey) return;
+    slideKey = key;
+    host.background.setSlideCues(slidePlan(input));
+  };
   // 用意された背景 (core/library.ts) をプロジェクトを開いたあとに読み込み中なら、読めたところで当てる
   if (store.background && !store.backgroundFile) {
     store
@@ -370,6 +389,7 @@ export function renderVisualizerPanel(): HTMLElement {
         : null,
     );
     applyNotice.update();
+    syncSlides();
     host.view = store.view;
     host.composition = store.composition;
     host.media.setConfigs(store.media);

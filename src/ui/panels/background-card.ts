@@ -1,5 +1,6 @@
 import { store } from '../../core/store';
-import type { BackgroundSettings } from '../../core/types';
+import { MAX_SLIDES, type BackgroundSettings, type BackgroundSlides } from '../../core/types';
+import { sectionKindOf, type SectionKind } from '../../core/lyrics/sections';
 import { t2, tr, type Text2 } from '../../core/i18n';
 import { findLibraryItem, LIBRARY, libraryRef } from '../../core/library';
 import { sliderRow } from './panel-helpers';
@@ -28,6 +29,29 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text =
   if (className) e.className = className;
   if (text) e.textContent = text;
   return e;
+}
+
+/** 区切りの種類の名前 (スライドショーの画像の一覧に出す) */
+const KIND_NAME: Record<SectionKind, Text2> = {
+  intro: { ja: 'イントロ', en: 'Intro' },
+  verse: { ja: 'Aメロ', en: 'Verse' },
+  prechorus: { ja: 'Bメロ', en: 'Pre-chorus' },
+  chorus: { ja: 'サビ', en: 'Chorus' },
+  bridge: { ja: 'Cメロ', en: 'Bridge' },
+  interlude: { ja: '間奏', en: 'Interlude' },
+  outro: { ja: 'アウトロ', en: 'Outro' },
+  other: { ja: 'その他', en: 'Other' },
+};
+
+/** スライドショーの画像のサムネイルの URL (ファイルごとに 1 つ) */
+const slideThumbs = new WeakMap<File, string>();
+function slideThumbUrl(file: File): string {
+  let url = slideThumbs.get(file);
+  if (!url) {
+    url = URL.createObjectURL(file);
+    slideThumbs.set(file, url);
+  }
+  return url;
 }
 
 /** サムネイル用の URL (ファイルごとに 1 つ。タブを切り替えても作り直さない) */
@@ -60,6 +84,27 @@ export function createBackgroundCard(): HTMLElement {
   const removeBtn = h('button', 'tab-button', tr('背景を外す', 'Remove background'));
   removeBtn.type = 'button';
   fileRow.append(h('span', 'param-label', tr('写真・動画を選ぶ:', 'Choose a photo / video:')), input, removeBtn);
+  // スライドショー: フォルダか、複数の画像を選ぶ (曲に合わせて自動で切り替える)
+  const slideRow = h('div', 'row-gap lyrics-row-wrap');
+  const folderInput = h('input');
+  folderInput.type = 'file';
+  folderInput.multiple = true;
+  folderInput.setAttribute('webkitdirectory', '');
+  folderInput.dataset.background = 'slides-folder';
+  const filesInput = h('input');
+  filesInput.type = 'file';
+  filesInput.multiple = true;
+  filesInput.accept = 'image/*';
+  filesInput.dataset.background = 'slides-files';
+  const folderBtn = h('button', 'tab-button', tr('フォルダを選ぶ', 'Choose a folder'));
+  folderBtn.type = 'button';
+  folderBtn.addEventListener('click', () => folderInput.click());
+  const filesBtn = h('button', 'tab-button', tr('画像を複数選ぶ', 'Choose several images'));
+  filesBtn.type = 'button';
+  filesBtn.addEventListener('click', () => filesInput.click());
+  folderInput.hidden = true;
+  filesInput.hidden = true;
+  slideRow.append(h('span', 'param-label', tr('スライドショー (曲に合わせて自動で切り替え):', 'Slideshow (switches automatically with the song):')), folderBtn, filesBtn, folderInput, filesInput);
   // 用意された背景 (core/library.ts)。押すとすぐ背景になる
   const libRow = h('div', 'library-row');
   const libButtons: HTMLButtonElement[] = [];
@@ -86,7 +131,44 @@ export function createBackgroundCard(): HTMLElement {
   }
   const status = h('div', 'param-label');
   const body = h('div', 'background-body');
-  root.append(fileRow, h('span', 'param-label', tr('用意された背景から選ぶ:', 'Or pick a built-in background:')), libRow, status, body);
+  root.append(
+    fileRow,
+    slideRow,
+    h(
+      'p',
+      'lyrics-help',
+      tr(
+        `フォルダの中の画像を、ファイル名の順に使います (${MAX_SLIDES} 枚まで)。歌詞の [サビ] などの区切りで必ず切り替わり、その間は小節の頭で切り替わります (サビは速く、イントロ・アウトロはゆっくり。枚数が多いほど速く)。ファイル名に「サビ」「Chorus」「Intro」などの言葉がある画像は、その区切りの間だけ出ます。`,
+        `Uses the images in the folder in file-name order (up to ${MAX_SLIDES}). It always switches at song sections like [Chorus] in the lyrics, and on bar heads in between (faster in the chorus, slower in the intro / outro, faster with more images). Images whose file name contains words like "Chorus", "Intro" or "サビ" only appear in that section.`,
+      ),
+    ),
+    h('span', 'param-label', tr('用意された背景から選ぶ:', 'Or pick a built-in background:')),
+    libRow,
+    status,
+    body,
+  );
+  const onSlides = (picked: HTMLInputElement): void => {
+    const files = [...(picked.files ?? [])];
+    picked.value = '';
+    if (files.length === 0) return;
+    status.textContent = tr(`${files.length} 個のファイルを読み込んでいます…`, `Loading ${files.length} files…`);
+    // プロジェクトを開いたあと (画像を選び直していない) なら、同じ画像を探して当てる。そうでなければ新しいスライドショー
+    const bg = store.background;
+    const restoring = bg?.slides != null && store.slideFiles.some((f) => f == null);
+    const job = restoring
+      ? store.restoreSlides(files).then((r) => tr(`${r.total} 枚のうち ${r.matched} 枚が見つかりました。`, `Found ${r.matched} of ${r.total} images.`))
+      : store.setBackgroundSlides(files).then((r) => (r.skipped > 0 ? tr(`${r.skipped} 個のファイルは使いませんでした (画像でない・大きすぎる・${MAX_SLIDES} 枚を超えた)。`, `Skipped ${r.skipped} files (not images, too large, or over ${MAX_SLIDES}).`) : ''));
+    job
+      .then((note) => {
+        render();
+        if (note) status.textContent = `${status.textContent} ${note}`;
+      })
+      .catch((err: unknown) => {
+        status.textContent = `${tr('読み込めませんでした', 'Could not load')}: ${err instanceof Error ? err.message : String(err)}`;
+      });
+  };
+  folderInput.addEventListener('change', () => onSlides(folderInput));
+  filesInput.addEventListener('change', () => onSlides(filesInput));
 
   input.addEventListener('change', () => {
     const file = input.files?.[0];
@@ -116,6 +198,10 @@ export function createBackgroundCard(): HTMLElement {
     for (const b of libButtons) b.setAttribute('aria-pressed', String(lib != null && bg?.ref === libraryRef(lib) && b.dataset.library === lib.id));
     if (!bg) {
       status.textContent = tr('背景はありません。', 'No background.');
+      return;
+    }
+    if (bg.slides) {
+      renderSlides(bg, bg.slides);
       return;
     }
     if (lib && !file) {
@@ -177,6 +263,102 @@ export function createBackgroundCard(): HTMLElement {
     }
     // ぼかしは画像だけ (動画を毎フレームぼかすのは重いので、今は付けていない)
     for (const def of SLIDERS.filter((d) => d.key !== 'blur' || bg.kind === 'image')) {
+      const { row: r, input: range, setLabel } = sliderRow(def.label, def.help, 0, 1, 0.01);
+      range.value = String(bg[def.key]);
+      setLabel(bg[def.key].toFixed(2));
+      range.addEventListener('input', () => {
+        const v = parseFloat(range.value);
+        store.updateBackground({ [def.key]: v });
+        setLabel(v.toFixed(2));
+      });
+      grid.appendChild(r);
+    }
+    body.appendChild(grid);
+  }
+
+  /** スライドショーのときの欄: 画像の一覧 (区切りの言葉があれば印) と、切り替えの設定 */
+  function renderSlides(bg: BackgroundSettings, slides: BackgroundSlides): void {
+    const files = store.slideFiles;
+    const missing = slides.items.filter((_, i) => !files[i]).length;
+    status.textContent =
+      missing === 0
+        ? tr(`スライドショー: ${slides.items.length} 枚`, `Slideshow: ${slides.items.length} images`)
+        : tr(
+            `スライドショー: ${slides.items.length} 枚のうち ${missing} 枚をまだ選び直していません。同じフォルダを「フォルダを選ぶ」で選び直してください (選び直すまでは、見つかった画像だけで切り替えます)。`,
+            `Slideshow: ${missing} of ${slides.items.length} images have not been picked again. Choose the same folder with "Choose a folder" (until then only the found images are used).`,
+          );
+    const list = h('div', 'slide-list');
+    list.dataset.background = 'slide-list';
+    slides.items.forEach((it, i) => {
+      const cell = h('div', 'slide-item');
+      const f = files[i];
+      if (f) {
+        const img = h('img');
+        img.src = slideThumbUrl(f);
+        img.alt = it.ref;
+        img.loading = 'lazy';
+        cell.appendChild(img);
+      } else cell.appendChild(h('div', 'slide-missing', tr('未選択', 'Not picked')));
+      const kind = sectionKindOf(it.ref);
+      cell.append(h('span', 'slide-name', it.ref));
+      if (kind) cell.append(h('span', 'slide-kind', t2(KIND_NAME[kind])));
+      list.appendChild(cell);
+    });
+    body.appendChild(list);
+
+    const grid = h('div', 'param-grid');
+    const fit = h('select', 'select');
+    for (const [v, label] of [['cover', tr('画面いっぱい (はみ出した部分は切る)', 'Fill the screen (crop the overflow)')], ['contain', tr('全体を収める (余りは黒)', 'Fit inside (black bars)')]] as const) {
+      const o = h('option', '', label);
+      o.value = v;
+      fit.appendChild(o);
+    }
+    fit.value = bg.fit;
+    fit.addEventListener('change', () => store.updateBackground({ fit: fit.value as BackgroundSettings['fit'] }));
+    const trans = h('select', 'select');
+    trans.dataset.background = 'slides-transition';
+    for (const [v, label] of [['fade', tr('じわっと重なる', 'Crossfade')], ['cut', tr('パッと切り替え', 'Cut')]] as const) {
+      const o = h('option', '', label);
+      o.value = v;
+      trans.appendChild(o);
+    }
+    trans.value = slides.transition;
+    const selRow = (label: string, el: HTMLElement): HTMLElement => {
+      const r = h('label', 'param-row');
+      r.append(h('span', 'param-label', label), el);
+      return r;
+    };
+    grid.append(selRow(tr('収め方', 'Fit'), fit), selRow(tr('切り替わり方', 'Transition'), trans));
+    const fadeRow = sliderRow({ ja: '重なる長さ', en: 'Crossfade length' }, { ja: 'じわっと重なるときの長さ (秒)', en: 'How long the crossfade takes (seconds)' }, 0.1, 3, 0.05);
+    fadeRow.input.value = String(slides.fadeSec);
+    fadeRow.setLabel(`${slides.fadeSec.toFixed(2)}${tr('秒', 's')}`);
+    fadeRow.input.addEventListener('input', () => {
+      const v = parseFloat(fadeRow.input.value);
+      store.updateBackgroundSlides({ fadeSec: v });
+      fadeRow.setLabel(`${v.toFixed(2)}${tr('秒', 's')}`);
+    });
+    fadeRow.row.hidden = slides.transition !== 'fade';
+    trans.addEventListener('change', () => {
+      store.updateBackgroundSlides({ transition: trans.value as BackgroundSlides['transition'] });
+      fadeRow.row.hidden = trans.value !== 'fade';
+    });
+    const paceRow = sliderRow(
+      { ja: '切り替えの細かさ', en: 'Switch rate' },
+      { ja: '上げるほど速く (短い間隔で) 切り替わります。0.50 が既定', en: 'Higher switches more often. 0.50 is the default' },
+      0,
+      1,
+      0.01,
+    );
+    paceRow.input.dataset.background = 'slides-pace';
+    paceRow.input.value = String(slides.pace);
+    paceRow.setLabel(slides.pace.toFixed(2));
+    paceRow.input.addEventListener('input', () => {
+      const v = parseFloat(paceRow.input.value);
+      store.updateBackgroundSlides({ pace: v });
+      paceRow.setLabel(v.toFixed(2));
+    });
+    grid.append(fadeRow.row, paceRow.row);
+    for (const def of SLIDERS) {
       const { row: r, input: range, setLabel } = sliderRow(def.label, def.help, 0, 1, 0.01);
       range.value = String(bg[def.key]);
       setLabel(bg[def.key].toFixed(2));

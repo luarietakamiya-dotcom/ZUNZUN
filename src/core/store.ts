@@ -21,6 +21,9 @@ import {
   type CompositionSettings,
   defaultMediaLayer,
   type MediaLayer,
+  defaultSlides,
+  MAX_SLIDES,
+  type BackgroundSlides,
 } from './types';
 import { tr } from './i18n';
 import { fetchLibraryFile, findLibraryItem, LIBRARY, libraryRef } from './library';
@@ -29,6 +32,16 @@ type Listener = () => void;
 
 /** 背景のファイルの大きさの上限 (sha256 をファイル全体から計算するため) */
 export const MAX_BACKGROUND_BYTES = 2 * 2 ** 30;
+/** スライドショーの画像 1 枚の大きさの上限 */
+export const MAX_SLIDE_BYTES = 100 * 2 ** 20;
+
+/** スライドショーに使える画像か (フォルダの中の画像以外のファイルは飛ばす) */
+export function isSlideImage(file: File): boolean {
+  return file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|avif|bmp)$/i.test(file.name);
+}
+
+/** ファイル名の順 (数字は数として: 2 < 10) */
+export const byFileName = (a: File, b: File): number => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 
 /**
  * アプリ全体で 1 つだけ持つ、ごく小さな状態置き場。
@@ -58,6 +71,8 @@ class Store {
   private _background: BackgroundSettings | null = null;
   /** 背景の元のファイル (メモリ上だけ。Project JSON には ref/sha256 だけを保存する) */
   private _backgroundFile: File | null = null;
+  /** スライドショーの画像のファイル (background.slides.items と同じ順。選び直していないものは null) */
+  private _slideFiles: (File | null)[] = [];
   /** 背景を選び直すたびに増える (用意された背景の読み込みが、あとから選んだ背景を上書きしないように) */
   private backgroundGeneration = 0;
   /** 用意された背景を読むときの fetch (テストで差し替える) */
@@ -177,6 +192,63 @@ class Store {
     return this._backgroundFile;
   }
 
+  /** スライドショーの画像のファイル (スライドショーでなければ空) */
+  get slideFiles(): readonly (File | null)[] {
+    return this._slideFiles;
+  }
+
+  /**
+   * スライドショーにする画像を選ぶ (フォルダの中身・複数のファイル)。画像以外は飛ばし、ファイル名の順に並べる (MAX_SLIDES 枚まで)。
+   * 1 枚だけなら今までどおりの 1 枚の背景。見た目の調整値 (暗さ・ぼかしなど) と切り替えの設定は引き継ぐ
+   */
+  async setBackgroundSlides(files: readonly File[]): Promise<{ count: number; skipped: number }> {
+    const images = files.filter(isSlideImage).sort(byFileName);
+    const used = images.slice(0, MAX_SLIDES).filter((f) => f.size <= MAX_SLIDE_BYTES);
+    const skipped = files.length - used.length;
+    if (used.length === 0) throw new Error(tr('画像が見つかりませんでした (PNG / JPEG / WebP など)', 'No images found (PNG / JPEG / WebP etc.)'));
+    if (used.length === 1) {
+      await this.setBackgroundFile(used[0]!, 'image');
+      return { count: 1, skipped };
+    }
+    const hashes = await Promise.all(used.map(async (f) => sha256Hex(await f.arrayBuffer())));
+    const items = used.map((f, i) => ({ ref: f.name, sha256: hashes[i]! }));
+    const cur = this._background;
+    const base = cur && cur.kind === 'image' ? cur : defaultBackground(items[0]!.ref, items[0]!.sha256, 'image');
+    const slides: BackgroundSlides = cur?.slides ? { ...cur.slides, items } : defaultSlides(items);
+    this._background = { ...base, kind: 'image', ref: items[0]!.ref, sha256: items[0]!.sha256, slides };
+    this._backgroundFile = used[0]!;
+    this._slideFiles = used;
+    this.backgroundGeneration++;
+    this.emit();
+    return { count: used.length, skipped };
+  }
+
+  /**
+   * プロジェクトを開いたあと、スライドショーの画像を選び直す。sha256 が合うファイルを、保存した順の場所に当てる。
+   * 戻り値は、合った枚数と、プロジェクトの画像の枚数
+   */
+  async restoreSlides(files: readonly File[]): Promise<{ matched: number; total: number }> {
+    const slides = this._background?.slides;
+    if (!slides) return { matched: 0, total: 0 };
+    const bg = this._background;
+    const bySha = new Map<string, File>();
+    for (const f of files.filter(isSlideImage).filter((f) => f.size <= MAX_SLIDE_BYTES)) bySha.set(await sha256Hex(await f.arrayBuffer()), f);
+    if (this._background !== bg) return { matched: 0, total: slides.items.length };
+    this._slideFiles = slides.items.map((it, i) => bySha.get(it.sha256) ?? this._slideFiles[i] ?? null);
+    this._backgroundFile = this._slideFiles[0] ?? this._slideFiles.find((f) => f != null) ?? null;
+    this.backgroundGeneration++;
+    this.emit();
+    return { matched: this._slideFiles.filter((f) => f != null).length, total: slides.items.length };
+  }
+
+  /** スライドショーの切り替えの設定 (切り替わり方・重なる長さ・細かさ) */
+  updateBackgroundSlides(patch: Partial<Omit<BackgroundSlides, 'items'>>): void {
+    const bg = this._background;
+    if (!bg?.slides) return;
+    this._background = { ...bg, slides: { ...bg.slides, ...patch } };
+    this.emit();
+  }
+
   /**
    * 背景のファイルを選ぶ。同じファイル (sha256 が同じ) を選び直したときは設定をそのまま使い、別のファイルなら
    * 既定の設定で始める (種類が変わったとき以外は、見た目の調整値は引き継ぐ)。
@@ -186,10 +258,11 @@ class Store {
     if (file.size > MAX_BACKGROUND_BYTES) throw new Error(tr(`ファイルが大きすぎます (${(file.size / 2 ** 30).toFixed(1)}GB)。2GB までにしてください`, `The file is too large (${(file.size / 2 ** 30).toFixed(1)} GB). Please keep it under 2 GB`));
     const sha256 = await sha256Hex(await file.arrayBuffer());
     const cur = this._background;
-    if (cur && cur.sha256 === sha256) this._background = { ...cur, ref, kind };
-    else if (cur && cur.kind === kind) this._background = { ...cur, ref, sha256 };
+    if (cur && cur.sha256 === sha256) this._background = { ...cur, ref, kind, slides: null };
+    else if (cur && cur.kind === kind) this._background = { ...cur, ref, sha256, slides: null };
     else this._background = defaultBackground(ref, sha256, kind);
     this._backgroundFile = file;
+    this._slideFiles = [];
     this.backgroundGeneration++;
     this.emit();
   }
@@ -208,7 +281,7 @@ class Store {
    */
   restoreLibraryBackground(): Promise<void> {
     const bg = this._background;
-    if (!bg || this._backgroundFile) return Promise.resolve();
+    if (!bg || this._backgroundFile || bg.slides) return Promise.resolve();
     const item = findLibraryItem(bg.ref, bg.sha256);
     if (!item) return Promise.resolve();
     const gen = this.backgroundGeneration;
@@ -232,6 +305,7 @@ class Store {
   removeBackground(): void {
     this._background = null;
     this._backgroundFile = null;
+    this._slideFiles = [];
     this.backgroundGeneration++;
     this.emit();
   }
@@ -420,6 +494,7 @@ class Store {
     this._rhythm = project.rhythm;
     this._background = project.background;
     this._backgroundFile = null;
+    this._slideFiles = project.background?.slides ? project.background.slides.items.map(() => null) : [];
     this.backgroundGeneration++;
     this.emit();
     // 用意された背景なら、選び直さなくても読み込む (読めなくてもほかには影響させない。今までどおり選び直せる)
