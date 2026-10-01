@@ -138,6 +138,16 @@ describe('SpeakerRackPreset', () => {
     p.dispose();
   });
 
+  it('曲の音の大きさに合わせる: 実際の曲のように小さな高音 (0.01)・音量 (0.15) でも、ツイーター・VU メーター・スペクトラムが動く', () => {
+    const p = makePreset();
+    run(p, 120, () => ({ high: 0.01, rms: 0.15, bands: new Float32Array(64).fill(0.08) }));
+    const i = p.inspect();
+    expect(i.tweeter).toBeGreaterThan(0.3);
+    expect(i.vu).toBeGreaterThan(0.4);
+    expect(i.spectrumLit).toBeGreaterThan(100);
+    p.dispose();
+  });
+
   it('強い拍の頭で箱が少し震え、すぐ収まる', () => {
     const p = makePreset();
     run(p, 1, () => ({ beat: 1, beatIndex: 0 }));

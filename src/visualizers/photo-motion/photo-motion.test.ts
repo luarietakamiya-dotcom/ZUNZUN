@@ -116,6 +116,22 @@ describe('PhotoMotionPreset', () => {
     p.dispose();
   });
 
+  it('曲の音の大きさに合わせる: 実際の曲のように小さな高音・音量・帯域でも、ツイーター・光・スペクトラムが動く', async () => {
+    const p = await makePreset();
+    run(p, 60, () => ({}));
+    const quiet = p.inspect();
+    let tweeter = 0;
+    for (let i = 0; i < 120; i++) {
+      p.update(frame(i / 60, { high: 0.01, rms: 0.15, bands: new Float32Array(64).fill(0.08) }), params());
+      tweeter = Math.max(tweeter, p.inspect().speakers[2]!);
+    }
+    const loud = p.inspect();
+    expect(tweeter).toBeGreaterThan(0.2);
+    expect(loud.regions[1]).toBeGreaterThan(quiet.regions[1]! + 0.2);
+    expect(loud.spectrum).toBeGreaterThan(0.3);
+    p.dispose();
+  });
+
   it('通路の写真では、奥のスピーカーほど遅れてふくらむ', async () => {
     const p = await makePreset(params({ photo: 'speaker-alley' }));
     run(p, 30, () => ({}), params({ photo: 'speaker-alley' }));

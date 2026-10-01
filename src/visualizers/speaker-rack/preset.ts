@@ -4,7 +4,7 @@ import { shapeAudio, shapeBands } from '../../core/visualizer/response';
 import type { AudioFrame, CommonParams, VisualizerInitContext, VisualizerPreset } from '../../core/types';
 import { speakerRackPalette, type SpeakerRackPalette } from './palette';
 import { ALLEY_CAMERA, ALLEY_ROW_DELAY, ALLEY_ROWS, AlleyScene } from './alley-scene';
-import { bandsToBars, DelayLine, follow, makeRadialTexture, PeakMeter, safeDt, stepSpring, type Materials, type Spring } from './parts';
+import { AutoLevel, bandsToBars, DelayLine, follow, makeRadialTexture, PeakMeter, safeDt, stepSpring, type Materials, type Spring } from './parts';
 import { EQ_BANDS, RACK_FIT_HALF_HEIGHT, RACK_FIT_HALF_WIDTH, RACK_LOOK_AT, RackScene, SPECTRUM_BARS } from './rack-scene';
 
 /**
@@ -94,6 +94,13 @@ export class SpeakerRackPreset implements VisualizerPreset {
   private readonly levels = new PeakMeter(2, 0.4, 0.8);
   private readonly levelValues = new Float32Array(2);
   private readonly vu: [number, number] = [0, 0];
+  /** 曲の音の大きさに合わせる (高音・音量・帯域はとくに小さく出るので) */
+  private readonly autoBass = new AutoLevel(0.25);
+  private readonly autoMid = new AutoLevel(0.08);
+  private readonly autoHigh = new AutoLevel(0.006);
+  private readonly autoRms = new AutoLevel(0.03);
+  private readonly autoPeak = new AutoLevel(0.05);
+  private readonly autoBands = new AutoLevel(0.05);
 
   init(ctx: VisualizerInitContext): void {
     this.rng = ctx.rng;
@@ -153,14 +160,18 @@ export class SpeakerRackPreset implements VisualizerPreset {
 
     const a = shapeAudio(frame, params);
     const k = Number.isFinite(params.intensity) ? Math.min(1, Math.max(0, params.intensity)) : 0;
-    const bass = fin(a.bass) * k;
-    const high = fin(a.high) * k;
-    const rms = fin(a.rms);
-    const peak = fin(a.peak);
+    // 曲の音の大きさに合わせてから使う (AutoLevel)
+    const bassN = this.autoBass.update(fin(a.bass), dt);
+    const midN = this.autoMid.update(fin(a.mid), dt);
+    const highN = this.autoHigh.update(fin(a.high), dt);
+    const bass = bassN * k;
+    const high = highN * k;
+    const rms = this.autoRms.update(fin(a.rms), dt);
+    const peak = this.autoPeak.update(fin(a.peak), dt);
 
     // ウーファー: 低音でばねを押す。左右で少しだけ違う混ぜ方
     stepSpring(this.woofer[0], bass, dt, 700, 30);
-    stepSpring(this.woofer[1], bass * 0.94 + fin(a.mid) * k * 0.06, dt, 700, 30);
+    stepSpring(this.woofer[1], bass * 0.94 + midN * k * 0.06, dt, 700, 30);
     this.tweeterEnv = follow(this.tweeterEnv, high, dt, 30, 8);
     this.rmsEnv = follow(this.rmsEnv, rms, dt, 14, 3);
     this.peakEnv = follow(this.peakEnv, peak, dt, 30, 4);
@@ -174,8 +185,14 @@ export class SpeakerRackPreset implements VisualizerPreset {
 
     // 帯域 → スペクトラム・イコライザー
     shapeBands(frame.bands ?? new Float32Array(64), params, this.bands);
-    for (let i = 0; i < this.bands.length; i++) this.bands[i] = fin(this.bands[i]!) * (0.35 + 0.65 * k);
+    let bandMax = 0;
+    for (let i = 0; i < this.bands.length; i++) bandMax = Math.max(bandMax, fin(this.bands[i]!));
+    // 帯域はいちばん強い帯域を基準に、曲の音の大きさに合わせる
+    const bandGain = bandMax > 0 ? this.autoBands.update(bandMax, dt) / bandMax : 0;
+    for (let i = 0; i < this.bands.length; i++) this.bands[i] = fin(fin(this.bands[i]!) * bandGain) * (0.35 + 0.65 * k);
     bandsToBars(this.bands, SPECTRUM_BARS, this.bars);
+    // 耳の感じ方に近づける (小さい値を持ち上げる。本物のスペクトラム表示が dB で出すのと同じ考え)
+    for (let i = 0; i < SPECTRUM_BARS; i++) this.bars[i] = Math.pow(this.bars[i]!, 0.6);
     this.spectrum.update(this.bars, dt);
     for (let i = 0; i < EQ_BANDS; i++) {
       const v = this.spectrum.level[Math.floor(((i + 0.5) / EQ_BANDS) * SPECTRUM_BARS)]!;
@@ -185,8 +202,8 @@ export class SpeakerRackPreset implements VisualizerPreset {
     this.levelValues[1] = Math.max(rms, peak * 0.85);
     this.levels.update(this.levelValues, dt);
     // VU メーター: 左は低音寄り、右は高音寄りを少し混ぜる (左右の振れ方が少し違って見える)
-    this.vu[0] = rms * 0.85 + fin(a.bass) * 0.15;
-    this.vu[1] = rms * 0.85 + fin(a.high) * 0.15;
+    this.vu[0] = rms * 0.85 + bassN * 0.15;
+    this.vu[1] = rms * 0.85 + highN * 0.15;
     // 通路: ウーファーの動きを覚えておき、奥の列ほど遅らせて使う
     this.wave.push(this.woofer[0].x, dt);
     for (let r = 0; r < ALLEY_ROWS; r++) this.rows[r] = this.wave.get(r * ALLEY_ROW_DELAY);

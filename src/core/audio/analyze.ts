@@ -226,10 +226,12 @@ export function analyzeSamples(mono: Float32Array, sampleRate: number, opts: Ana
     const center = f * hop;
     times[f] = center / sampleRate;
 
-    // RMS/peak は窓なしの生サンプル (ホップ幅) から計算する
+    // RMS/peak は窓なしの生サンプル (ホップ幅) から計算する。
+    // 範囲は整数にする: 44.1kHz ÷ 60 = 735 のようにホップ幅が奇数だと hop / 2 が小数になり、
+    // mono[小数] が undefined (= 0 扱い) になって、最初のフレーム以外の RMS/peak がすべて 0 になっていた (2026-10-01 修正)
     let sumSq = 0, pk = 0;
-    const rmsStart = Math.max(0, center - hop / 2);
-    const rmsEnd = Math.min(mono.length, center + hop / 2);
+    const rmsStart = Math.max(0, center - Math.floor(hop / 2));
+    const rmsEnd = Math.min(mono.length, center + Math.ceil(hop / 2));
     for (let i = rmsStart; i < rmsEnd; i++) {
       const v = mono[i] ?? 0;
       sumSq += v * v;

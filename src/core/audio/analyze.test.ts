@@ -28,6 +28,16 @@ function clickTrain(bpm: number, sampleRate: number, seconds: number, offset = 0
 describe('analyzeSamples', () => {
   const sr = 44100;
 
+  it('RMS と peak がすべてのフレームで出る (44.1kHz のようにホップ幅が奇数でも。以前は最初のフレーム以外 0 だった)', () => {
+    for (const rate of [44100, 48000]) {
+      const a = analyzeSamples(sineWave(220, rate, 2, 0.5), rate);
+      const inner = Array.from(a.rms).slice(1, -1);
+      expect(inner.length).toBeGreaterThan(50);
+      for (const v of inner) expect(v, String(rate)).toBeCloseTo(0.5 / Math.SQRT2, 1);
+      for (const v of Array.from(a.peak).slice(1, -1)) expect(v, String(rate)).toBeGreaterThan(0.45);
+    }
+  });
+
   it('makes a 60Hz tone read as bass-dominant', () => {
     const mono = sineWave(60, sr, 3);
     const a = analyzeSamples(mono, sr);

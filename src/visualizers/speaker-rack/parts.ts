@@ -161,6 +161,9 @@ export function driverGeometry(cache: GeometryCache, R: number): DriverGeometry 
   };
 }
 
+/** コーンがいちばん前へ出たときの量 (半径に対する割合)。遠くからでも動きが見えるように 0.12 から上げた */
+export const EXCURSION = 0.2;
+
 /** 前後の動き (−1.2..1.2) を収める */
 const clampExcursion = (e: number): number => (Number.isFinite(e) ? Math.min(1.2, Math.max(-1.2, e)) : 0);
 
@@ -207,16 +210,16 @@ export class Driver {
     this.group.add(this.moving);
   }
 
-  /** 前後の動き (−1..1)。1 = いちばん前 (半径の 12%) */
+  /** 前後の動き (−1..1)。1 = いちばん前 (半径の EXCURSION) */
   setExcursion(e: number): void {
     const x = clampExcursion(e);
-    this.moving.position.z = x * this.radius * 0.12;
+    this.moving.position.z = x * this.radius * EXCURSION;
     this.surround.scale.z = 1 + Math.max(0, x) * 0.9;
     this.surround.position.z = x * this.radius * 0.04;
   }
 
   get excursion(): number {
-    return this.moving.position.z / (this.radius * 0.12);
+    return this.moving.position.z / (this.radius * EXCURSION);
   }
 }
 
@@ -296,7 +299,7 @@ export class DriverField {
       set.ids.forEach((id, k) => {
         const it = this.items[id]!;
         const e = this.excursion[it.group] ?? 0;
-        const off = e * R * 0.12;
+        const off = e * R * EXCURSION;
         set.cone.setMatrixAt(k, this.m.copy(it.base).multiply(this.t.makeTranslation(0, 0, off)));
         set.cap.setMatrixAt(k, this.m.copy(it.base).multiply(this.t.makeTranslation(0, 0, off - R * 0.33)).multiply(this.t.makeScale(1, 1, 0.55)));
         set.surround.setMatrixAt(k, this.m.copy(it.base).multiply(this.t.makeTranslation(0, 0, e * R * 0.04)).multiply(this.t.makeScale(1, 1, 1 + Math.max(0, e) * 0.9)));
@@ -546,3 +549,25 @@ export class DelayLine {
   }
 }
 
+
+/**
+ * 曲の音の大きさに合わせる (オートレベル)。最近のいちばん大きい値を覚えておき、それに対する割合を返す。
+ * 大きい音が来たらすぐ覚え直し、静かな間はゆっくり (release 秒で 6 割ほど) 下げる。floor より小さい値には合わせない
+ * (無音で雑音まで大きく動かないように)。高音は低音よりずっと小さく出る (解析で同じ基準にそろえるため) ので、これで動くようにする
+ */
+export class AutoLevel {
+  private ref: number;
+  constructor(
+    private readonly floor: number,
+    private readonly release = 4,
+  ) {
+    this.ref = floor;
+  }
+  update(value: number, dt: number): number {
+    const v = Number.isFinite(value) ? Math.max(0, value) : 0;
+    if (v > this.ref) this.ref = v;
+    else this.ref += (v - this.ref) * (1 - Math.exp(-safeDt(dt) / this.release));
+    this.ref = Math.max(this.floor, this.ref);
+    return Math.min(1, v / this.ref);
+  }
+}

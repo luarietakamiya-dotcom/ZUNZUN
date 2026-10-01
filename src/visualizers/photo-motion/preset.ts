@@ -53,6 +53,27 @@ function follow(cur: number, target: number, dt: number, up: number, down: numbe
   return cur + (v - cur) * (1 - Math.exp(-(v > cur ? up : down) * dt));
 }
 
+/**
+ * 曲の音の大きさに合わせる (オートレベル)。最近のいちばん大きい値に対する割合を返す。大きい音はすぐ覚え、静かな間はゆっくり下げる。
+ * 高音・音量・帯域は解析で小さく出るので、これで動くようにする (Speaker Rack の AutoLevel と同じ考え。プリセット同士は部品を共有しない約束)
+ */
+class AutoLevel {
+  private ref: number;
+  constructor(
+    private readonly floor: number,
+    private readonly release = 4,
+  ) {
+    this.ref = floor;
+  }
+  update(value: number, dt: number): number {
+    const v = Number.isFinite(value) ? Math.max(0, value) : 0;
+    if (v > this.ref) this.ref = v;
+    else this.ref += (v - this.ref) * (1 - Math.exp(-dt / this.release));
+    this.ref = Math.max(this.floor, this.ref);
+    return Math.min(1, v / this.ref);
+  }
+}
+
 export class PhotoMotionPreset implements VisualizerPreset {
   /** 写真の読み方 (テストで差し替える) */
   static loadTexture: TextureLoaderFn = defaultLoader;
@@ -87,6 +108,10 @@ export class PhotoMotionPreset implements VisualizerPreset {
   private side = 0;
   private readonly bands = new Float32Array(64);
   private readonly bars = new Float32Array(SPECTRUM_BARS);
+  private readonly autoBass = new AutoLevel(0.25);
+  private readonly autoHigh = new AutoLevel(0.006);
+  private readonly autoRms = new AutoLevel(0.03);
+  private readonly autoBands = new AutoLevel(0.05);
 
   constructor() {
     this.placeholder.needsUpdate = true;
@@ -115,11 +140,15 @@ export class PhotoMotionPreset implements VisualizerPreset {
 
     const a = shapeAudio(frame, params);
     const k = fin(params.intensity);
+    // 曲の音の大きさに合わせてから使う (AutoLevel)
+    const bassN = this.autoBass.update(fin(a.bass), dt);
+    const highN = this.autoHigh.update(fin(a.high), dt);
+    const rmsN = this.autoRms.update(fin(a.rms), dt);
     // 低音のばね (細かい刻みで進める)
     let left = dt;
     while (left > 0) {
       const h = Math.min(left, 1 / 240);
-      const acc = 700 * (fin(a.bass) * k - this.spring.x) - 30 * this.spring.v;
+      const acc = 700 * (bassN * k - this.spring.x) - 30 * this.spring.v;
       this.spring.v += acc * h;
       this.spring.x += this.spring.v * h;
       left -= h;
@@ -131,10 +160,10 @@ export class PhotoMotionPreset implements VisualizerPreset {
       this.historyHead = (this.historyHead + 1) % this.history.length;
       this.history[this.historyHead] = this.spring.x;
     }
-    this.highEnv = follow(this.highEnv, fin(a.high) * k, dt, 30, 8);
-    this.rmsEnv = follow(this.rmsEnv, fin(a.rms), dt, 12, 3);
+    this.highEnv = follow(this.highEnv, highN * k, dt, 30, 8);
+    this.rmsEnv = follow(this.rmsEnv, rmsN, dt, 12, 3);
     this.beatEnv = follow(this.beatEnv, fin(a.beat), dt, 20, 5);
-    this.bassSlow = follow(this.bassSlow, fin(a.bass), dt, 3, 1);
+    this.bassSlow = follow(this.bassSlow, bassN, dt, 3, 1);
     if (frame.beatIndex !== this.lastBeat && frame.beatIndex >= 0) {
       this.lastBeat = frame.beatIndex;
       this.side = frame.beatIndex % 2;
@@ -144,13 +173,18 @@ export class PhotoMotionPreset implements VisualizerPreset {
 
     // 帯域 → スペクトラムのバー (低い音の帯域を細かく、上をまとめる)
     shapeBands(frame.bands ?? new Float32Array(64), params, this.bands);
+    let bandMax = 0;
+    for (let i = 0; i < this.bands.length; i++) bandMax = Math.max(bandMax, fin(this.bands[i]!));
+    const bandGain = bandMax > 0 ? this.autoBands.update(bandMax, dt) / bandMax : 0;
+    for (let i = 0; i < this.bands.length; i++) this.bands[i] = fin(fin(this.bands[i]!) * bandGain);
     const total = 56;
     for (let i = 0; i < SPECTRUM_BARS; i++) {
       const s0 = Math.floor(Math.pow(i / SPECTRUM_BARS, 1.6) * total);
       const s1 = Math.max(s0 + 1, Math.floor(Math.pow((i + 1) / SPECTRUM_BARS, 1.6) * total));
       let s = 0;
       for (let j = s0; j < s1; j++) s += fin(this.bands[j]!);
-      const target = fin((s / (s1 - s0)) * (1 + (i / SPECTRUM_BARS) * 0.8) * (0.35 + 0.65 * k));
+      // 耳の感じ方に近づける (小さい値を持ち上げる)
+      const target = fin(Math.pow(fin((s / (s1 - s0)) * (1 + (i / SPECTRUM_BARS) * 0.8)), 0.6) * (0.35 + 0.65 * k));
       this.bars[i] = follow(this.bars[i]!, target, dt, 40, 7);
       const v = Math.round(this.bars[i]! * 255);
       this.bandData[i * 4] = v;
