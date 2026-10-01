@@ -1,5 +1,7 @@
 # ZUNZUN — Claude Code 向けプロジェクト指示
 
+> **言語: 作業の途中の短い説明・状況の報告・ツールの説明文も、すべて日本語で書く。** 英語で書かない（2026-10-01 ユーザー指示。何度も英語になってしまったため、いちばん上に書く）。
+
 ローカル完結型（ブラウザ・外部送信なし）の Music Visualizer + Lyric Motion ツール。
 TypeScript + Vite + Three.js (r180) + WebCodecs/Mediabunny。**ユーザーとのやり取りは日本語で行う。**
 
