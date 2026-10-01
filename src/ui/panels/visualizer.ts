@@ -1,3 +1,4 @@
+import { createMotionApplyNotice } from './motion-apply';
 import { store } from '../../core/store';
 import { type AudioFrame, type CommonParams, defaultView, type OverlayLayer, VIEW_ZOOM_MAX, VIEW_ZOOM_MIN, type ViewSettings } from '../../core/types';
 import { BAND_COUNT } from '../../core/audio';
@@ -121,6 +122,9 @@ export function renderVisualizerPanel(): HTMLElement {
   canvas.className = 'visualizer-canvas';
   canvasWrap.appendChild(canvas);
   el.appendChild(canvasWrap);
+  // 歌詞の時刻だけを変えたあと、歌詞の動きに反映するボタン (Lyrics タブと同じもの)
+  const applyNotice = createMotionApplyNotice();
+  el.appendChild(applyNotice.element);
 
   // このビジュアライザーだけの設定 (manifest.controls)。映像の種類を変えるたびに作り直す
   const presetBox = document.createElement('div');
@@ -365,6 +369,7 @@ export function renderVisualizerPanel(): HTMLElement {
           })
         : null,
     );
+    applyNotice.update();
     host.view = store.view;
     host.composition = store.composition;
     host.media.setConfigs(store.media);

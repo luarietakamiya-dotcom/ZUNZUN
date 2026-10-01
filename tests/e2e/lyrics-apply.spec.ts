@@ -1,0 +1,117 @@
+import { expect, test } from "@playwright/test";
+
+/**
+ * 歌詞の時刻だけを変えたときは、歌詞の動きを自動で作り直さず、「反映」ボタンで作り直す
+ * (自動で作り直すと、タイムラインで少し動かすたびに画面が止まっていた。2026-10-01)。
+ * あわせて、[ ] で囲んだ行 (見出し) が歌詞の行にならないことも見る。
+ */
+
+test.describe.configure({ timeout: 240_000 });
+
+/** 6 秒の試験用の音 (0.5 秒ごとに短い音)。16bit モノラル WAV */
+function testWav(): Buffer {
+  const rate = 22050;
+  const n = rate * 6;
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write("RIFF", 0);
+  buf.writeUInt32LE(36 + n * 2, 4);
+  buf.write("WAVEfmt ", 8);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(rate, 24);
+  buf.writeUInt32LE(rate * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write("data", 36);
+  buf.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) {
+    const t = i / rate;
+    const p = t % 0.5;
+    const v =
+      p < 0.15 ? Math.sin(2 * Math.PI * 220 * t) * Math.exp(-p * 20) * 0.6 : 0;
+    buf.writeInt16LE(Math.round(v * 32767), 44 + i * 2);
+  }
+  return buf;
+}
+
+test("歌詞の時刻だけを変えると「反映」ボタンが出て、押すまで歌詞の動きは作り直さない", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .locator('input[type="file"][accept="audio/*"]')
+    .setInputFiles({
+      name: "test.wav",
+      mimeType: "audio/wav",
+      buffer: testWav(),
+    });
+  await page.waitForFunction(
+    async () => {
+      const { store } = await import("/src/core/store.ts");
+      return store.audio.isLoaded && !!store.audio.analysis;
+    },
+    null,
+    { timeout: 120_000 },
+  );
+  await page.evaluate(async () => {
+    const { store } = await import("/src/core/store.ts");
+    const { defaultLyrics } = await import("/src/core/types.ts");
+    store.setLyrics({
+      ...defaultLyrics(),
+      text: "はじまりの歌\n[サビ]\nつぎの歌",
+      timing: { ...defaultLyrics().timing, lineTimes: { 0: 1, 1: 3 } },
+    });
+  });
+  await page.click('button[data-panel="lyrics"]');
+  const P = "/src/core/lyrics/motion-provider.ts";
+  // 最初の歌詞の動きができるまで待つ
+  const ready = (): Promise<boolean> =>
+    page.evaluate(async (P) => {
+      const p = (await import(P)).previewMotionProvider as unknown as {
+        currentKey: string;
+        isBuilding: boolean;
+      };
+      return p.currentKey !== "" && !p.isBuilding;
+    }, P);
+  await expect.poll(ready, { timeout: 120_000 }).toBe(true);
+  const notice = page.locator('[data-lyrics="motion-apply"]').first();
+  await expect(notice).toBeHidden();
+  // [サビ] は行にならない (タイムラインのブロックは 2 つ)
+  const lines = await page.evaluate(async () => {
+    const { buildLyricsView } = await import("/src/core/lyrics/view.ts");
+    const { store } = await import("/src/core/store.ts");
+    return buildLyricsView(store.lyrics!, 6).parsed.lines.map((l) => l.text);
+  });
+  expect(lines).toEqual(["はじまりの歌", "つぎの歌"]);
+
+  // 時刻だけを変える → しばらく待っても作り直さず、ボタンが出る
+  await page.evaluate(async () => {
+    const { store } = await import("/src/core/store.ts");
+    store.updateLyricsTiming({ lineTimes: { 0: 1.2, 1: 3 } });
+  });
+  await page.waitForTimeout(2000);
+  await expect(notice).toBeVisible();
+  expect(
+    await page.evaluate(
+      async (P) => (await import(P)).previewMotionProvider.hasPendingTiming,
+      P,
+    ),
+  ).toBe(true);
+  // ビジュアライザータブにも出る
+  await page.click('button[data-panel="visualizer"]');
+  await expect(page.locator('[data-lyrics="motion-apply"]')).toBeVisible();
+  // 押すと作り直して、消える
+  await page.locator('[data-lyrics="motion-apply-button"]').click();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (P) => {
+          const { previewMotionProvider: p } = await import(P);
+          return !p.isBuilding && !p.hasPendingTiming;
+        }, P),
+      { timeout: 120_000 },
+    )
+    .toBe(true);
+  await expect(page.locator('[data-lyrics="motion-apply"]')).toBeHidden();
+});

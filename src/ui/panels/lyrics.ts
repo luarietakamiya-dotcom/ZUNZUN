@@ -1,3 +1,4 @@
+import { createMotionApplyNotice } from './motion-apply';
 import { computePeaks, type Peaks } from '../../core/audio/peaks';
 import { tr } from '../../core/i18n';
 import {
@@ -284,9 +285,12 @@ export function renderLyricsPanel(): HTMLElement {
     applyEdit((c, t) => shiftLines(c, t, lines, offset));
     estimateText.textContent = tr(`全体を ${ms(offset)} ずらしました (取り消し: Ctrl+Z)`, `Shifted everything by ${ms(offset)} (undo: Ctrl+Z)`);
   });
+  // 時刻だけを変えたときは、歌詞の動きを「反映」ボタンで作り直す (自動で作り直すと、そのたびに画面が少し止まるため)
+  const applyNotices = [createMotionApplyNotice(), createMotionApplyNotice()];
   const timelineCard = el('div', { className: 'lyrics-card' }, [
     el('h3', { className: 'lyrics-h3', textContent: tr('タイムライン (細かい調整)', 'Timeline (fine tuning)') }),
     timeline.element,
+    applyNotices[0]!.element,
     el('div', { className: 'row-gap lyrics-row-wrap' }, [
       loopBtn,
       el('span', { className: 'param-label', textContent: tr('← → で選んだ行を 10ms ずつ (Shift で 100ms) 動かす、↑ ↓ で行を選ぶ', '← → move the selected line by 10ms (Shift: 100ms), ↑ ↓ select a line') }),
@@ -380,6 +384,7 @@ export function renderLyricsPanel(): HTMLElement {
     el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('スタイル:', 'Style:') }), styleSelect, customBtn, motionStatus]),
     styleEditor.element,
     el('div', { className: 'param-grid lyrics-motion-grid' }, sliderRows),
+    applyNotices[1]!.element,
     motionCanvas,
   ]);
   root.appendChild(motionCard);
@@ -1062,6 +1067,7 @@ export function renderLyricsPanel(): HTMLElement {
     timeline.setSelection(selectedLine, region);
     timeline.draw(t, playing);
     drawMotionPreview(t);
+    for (const n of applyNotices) n.update();
     rhythmEditor.tick(t);
     const playText = playing ? tr('一時停止', 'Pause') : tr('再生', 'Play');
     if (playBtn.textContent !== playText) playBtn.textContent = playText;

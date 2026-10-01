@@ -485,3 +485,8 @@ body {
 .media-list { display: flex; flex-direction: column; gap: 8px; }
 .media-thumb { width: 160px; height: 90px; object-fit: contain; background: #111; border-radius: 4px; cursor: crosshair; }
 .media-chroma { border-top: 1px dashed var(--border); margin-top: 6px; padding-top: 6px; }
+
+/* 歌詞の時刻を「反映」するお知らせ (時刻だけを変えたあとに出る) */
+.motion-apply { padding: 6px 10px; border-left: 3px solid #f0b35a; background: rgba(240, 179, 90, 0.08); border-radius: 4px; }
+.motion-apply .tab-button { border-color: #f0b35a; color: #f0b35a; font-weight: 600; }
+.motion-apply[hidden] { display: none; }

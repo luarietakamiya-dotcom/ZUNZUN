@@ -145,7 +145,7 @@ describe('LyricMotionProvider', () => {
     expect(LyricMotion.create).toHaveBeenCalledTimes(1);
   });
 
-  it('時刻だけの変更 (タイムラインで合わせているとき) は、手を止めて 1.5 秒たってから 1 回だけ作り直す', async () => {
+  it('時刻だけの変更 (タイムラインで合わせているとき) は自動では作り直さず、apply() (反映ボタン) で 1 回だけ作り直す', async () => {
     const stub = stubCreate();
     let now = 0;
     const p = new LyricMotionProvider(() => now);
@@ -154,28 +154,60 @@ describe('LyricMotionProvider', () => {
     p.get(req());
     await stub.resolveAll();
     expect(stub.calls).toBe(1);
+    expect(p.hasPendingTiming).toBe(false);
+    const first = p.get(req());
     const moved = (t: number): MotionRequest => req({ lyrics: lyrics({ timing: { ...defaultLyrics().timing, lineTimes: { '0': t } } }) });
-    // 少しずつ何度も動かす (0.5 秒ごと) 間は作り直さない
+    // 何度動かしても、時間がたっても作り直さない (前のものを出し続ける)
     for (let k = 1; k <= 6; k++) {
-      now = 400 + k * 500;
-      p.get(moved(k * 0.1));
-      now += 400;
-      p.get(moved(k * 0.1));
+      now += 2000;
+      expect(p.get(moved(k / 10))).toBe(first);
     }
     expect(stub.calls).toBe(1);
-    // 手を止めて 1.5 秒たったら作り直す
-    now += 900;
-    p.get(moved(6 * 0.1));
-    expect(stub.calls).toBe(1);
-    now += 300;
-    p.get(moved(6 * 0.1));
+    expect(p.hasPendingTiming).toBe(true);
+    expect(p.isBuilding).toBe(false);
+    // 反映ボタン
+    p.apply();
+    expect(p.isBuilding).toBe(true);
+    p.get(moved(0.6));
     expect(stub.calls).toBe(2);
+    expect(p.hasPendingTiming).toBe(false);
     await stub.resolveAll();
-    // 時刻以外 (文字) の変更は今までどおり 350ms
+    expect(p.get(moved(0.6))).toEqual({ id: 2 });
+    expect(p.hasPendingTiming).toBe(false);
+    // 反映するものが無いときの apply() は何もしない
+    p.apply();
+    p.get(moved(0.6));
+    expect(stub.calls).toBe(2);
+    // 元の時刻に戻したら、反映するものは無くなる
+    p.get(moved(0.7));
+    expect(p.hasPendingTiming).toBe(true);
+    p.get(moved(0.6));
+    expect(p.hasPendingTiming).toBe(false);
+    // 時刻を変えたあとに文字を変えたら、350ms で時刻もまとめて作り直す
+    p.get(moved(0.8));
     const t0 = now;
-    p.get(req({ lyrics: lyrics({ text: 'え', timing: { ...defaultLyrics().timing, lineTimes: { '0': 0.6 } } }) }));
+    const both = req({ lyrics: lyrics({ text: 'え', timing: { ...defaultLyrics().timing, lineTimes: { '0': 0.8 } } }) });
+    p.get(both);
+    expect(p.hasPendingTiming).toBe(false);
     now = t0 + 400;
-    p.get(req({ lyrics: lyrics({ text: 'え', timing: { ...defaultLyrics().timing, lineTimes: { '0': 0.6 } } }) }));
+    p.get(both);
     expect(stub.calls).toBe(3);
+  });
+
+  it('最初に作っている途中で時刻を変えても、できあがったあとは反映ボタンを待つ', async () => {
+    const stub = stubCreate();
+    let now = 0;
+    const p = new LyricMotionProvider(() => now);
+    p.get(req());
+    now = 400;
+    p.get(req());
+    expect(stub.calls).toBe(1);
+    const moved = req({ lyrics: lyrics({ timing: { ...defaultLyrics().timing, lineTimes: { '0': 2 } } }) });
+    p.get(moved);
+    await stub.resolveAll();
+    now = 5000;
+    p.get(moved);
+    expect(stub.calls).toBe(1);
+    expect(p.hasPendingTiming).toBe(true);
   });
 });
