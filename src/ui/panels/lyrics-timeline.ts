@@ -10,7 +10,8 @@ import { tr } from '../../core/i18n';
  * 小節線は、波形の段でつかんで左右にドラッグすると動かせる (離した位置は音の立ち上がり → ビートへ吸着、Shift で吸着なし)。
  *
  * 操作:
- * - 行のブロック: 左端をドラッグで開始、右端で終了、真ん中で行ごと動かす。離した位置は吸着する (Shift を押している間は吸着しない。
+ * - 行のブロック: 左端をドラッグで開始、右端で終了、真ん中で行ごと動かす。吸着するかは Lyrics パネルのチェックで決め
+ *   (最初は切ってある。2026-10-01)、Shift を押している間は逆にする (cb.snap の 2 つ目の引数 = Shift。
  *   設計では Alt/Option だったが、Windows では Alt+Space でウィンドウのメニューが開く件があったので、タップと同じ Shift にそろえた)
  * - ブロックをクリック = その行を選ぶ。何も無いところをクリック = その位置へ移動。何も無いところをドラッグ = 左右に移動
  * - ホイール = 左右に移動、Ctrl+ホイール = 拡大・縮小 (ポインタの位置が中心)
@@ -46,8 +47,8 @@ export interface TimelineCallbacks {
   onSeek(t: number): void;
   /** kind が 'move' のとき value は動かした量 (秒)、それ以外は時刻 (秒)。どちらも吸着済み */
   onDragCommit(kind: DragKind, line: number, value: number): void;
-  /** 吸着 (noSnap のときはそのまま返す) */
-  snap(t: number, noSnap: boolean): number;
+  /** 吸着。shift = Shift を押しているか (吸着のオン・オフを一時的に逆にする。決めるのは呼び出し側) */
+  snap(t: number, shift: boolean): number;
   /** 小節線をドラッグして離したとき (index = barHeads の番号、t = 吸着済みの時刻)。無ければ小節線は動かせない */
   onBarDragCommit?(index: number, t: number): void;
   /** 小節の頭の吸着 (noSnap のときはそのまま返す) */
@@ -136,7 +137,7 @@ export class LyricsTimeline {
     const legend = document.createElement('span');
     legend.className = 'param-label';
     legend.textContent =
-      tr('青い線 = 歌声らしさ / 緑の目盛り = 歌い出しの候補 / 縦の薄い線 = 拍 / 橙の線 = 小節 (波形の段でつかんで動かせます)。ブロックの端をドラッグで始まり・終わり、真ん中で行ごと移動 (Shift を押すと吸着しません)', 'Blue line = voice likelihood / green ticks = possible vocal entries / thin vertical lines = beats / orange lines = bars (drag them in the waveform row). Drag a block edge to set start/end, its middle to move the line (hold Shift to disable snapping)');
+      tr('青い線 = 歌声らしさ / 緑の目盛り = 歌い出しの候補 / 縦の薄い線 = 拍 / 橙の線 = 小節 (波形の段でつかんで動かせます)。ブロックの端をドラッグで始まり・終わり、真ん中で行ごと移動', 'Blue line = voice likelihood / green ticks = possible vocal entries / thin vertical lines = beats / orange lines = bars (drag them in the waveform row). Drag a block edge to set start/end, its middle to move the line');
     const toolbar = document.createElement('div');
     toolbar.className = 'row-gap lyrics-row-wrap';
     toolbar.append(zoomOut, zoomIn, fit, legend);

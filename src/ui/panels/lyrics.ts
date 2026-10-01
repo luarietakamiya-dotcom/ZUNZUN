@@ -160,6 +160,13 @@ function button(label: string, onClick: () => void, className = 'tab-button'): H
   return b;
 }
 
+/**
+ * タイムラインのドラッグで吸着するか (タブをまたいで残す)。最初は切っておく
+ * (2026-10-01 「吸着してる？ちょっと使いづらい」: ドラッグ中に近くの候補・拍へ飛んで、細かく合わせにくかった)。
+ * Shift を押している間は逆になる
+ */
+let timelineSnap = false;
+
 /** 直前の「吸着」の結果。「吸着前に戻す」と、一覧の由来の表示に使う (タブをまたいで残す) */
 let lastSnapAll: { result: SnapAllResult; after: TimingSnapshot } | null = null;
 
@@ -262,13 +269,23 @@ export function renderLyricsPanel(): HTMLElement {
     },
     onDragCommit: (kind, i, value) =>
       applyEdit((c, t) => (kind === 'start' ? moveLineStart(c, t, i, value) : kind === 'end' ? moveLineEnd(c, t, i, value) : moveLine(c, t, i, value))),
-    snap: (t, noSnap) => snapTime(t, snapTargets(), currentLyrics().timing.snapWindowMs / 1000, !noSnap).t,
+    // timeline 側の noSnap は「Shift を押している」。吸着のオン・オフを Shift で一時的に逆にする
+    snap: (t, shift) => snapTime(t, snapTargets(), currentLyrics().timing.snapWindowMs / 1000, timelineSnap !== shift).t,
     // 小節線のドラッグ (R2 の残り)。小節の頭の書き換え・吸着はリズム欄に任せる
     onBarDragCommit: (i, t) => rhythmEditor.moveBar(i, t),
     snapBar: (t, noSnap) => rhythmEditor.snapBar(t, noSnap),
     canDragBars: () => tap == null && !rhythmEditor.isTapping,
   });
   const loopBtn = button(tr('選んだ行をくり返し聞く', 'Loop the selected line'), () => toggleLoop(), 'tab-button lyrics-toggle');
+  const snapCheck = el('input');
+  snapCheck.type = 'checkbox';
+  snapCheck.checked = timelineSnap;
+  snapCheck.dataset.lyrics = 'timeline-snap';
+  snapCheck.addEventListener('change', () => (timelineSnap = snapCheck.checked));
+  const snapLabel = el('label', { className: 'row-gap param-label' }, [
+    snapCheck,
+    tr('ドラッグで吸着する (歌い出しの候補・拍に合わせる。Shift を押している間は逆)', 'Snap while dragging (to vocal entries / beats; hold Shift to invert)'),
+  ]);
   const offsetInput = el('input', { className: 'lyrics-offset-input' });
   offsetInput.type = 'number';
   offsetInput.step = '10';
@@ -291,6 +308,7 @@ export function renderLyricsPanel(): HTMLElement {
     el('h3', { className: 'lyrics-h3', textContent: tr('タイムライン (細かい調整)', 'Timeline (fine tuning)') }),
     timeline.element,
     applyNotices[0]!.element,
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [snapLabel]),
     el('div', { className: 'row-gap lyrics-row-wrap' }, [
       loopBtn,
       el('span', { className: 'param-label', textContent: tr('← → で選んだ行を 10ms ずつ (Shift で 100ms) 動かす、↑ ↓ で行を選ぶ', '← → move the selected line by 10ms (Shift: 100ms), ↑ ↓ select a line') }),

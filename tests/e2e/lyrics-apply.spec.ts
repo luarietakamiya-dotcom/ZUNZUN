@@ -39,13 +39,11 @@ test("歌詞の時刻だけを変えると「反映」ボタンが出て、押�
   page,
 }) => {
   await page.goto("/");
-  await page
-    .locator('input[type="file"][accept="audio/*"]')
-    .setInputFiles({
-      name: "test.wav",
-      mimeType: "audio/wav",
-      buffer: testWav(),
-    });
+  await page.locator('input[type="file"][accept="audio/*"]').setInputFiles({
+    name: "test.wav",
+    mimeType: "audio/wav",
+    buffer: testWav(),
+  });
   await page.waitForFunction(
     async () => {
       const { store } = await import("/src/core/store.ts");
@@ -114,4 +112,75 @@ test("歌詞の時刻だけを変えると「反映」ボタンが出て、押�
     )
     .toBe(true);
   await expect(page.locator('[data-lyrics="motion-apply"]')).toBeHidden();
+});
+
+test("タイムラインのドラッグは最初は吸着しない (置いた所に置ける)。「ドラッグで吸着する」を入れると候補・拍に合う", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .locator('input[type="file"][accept="audio/*"]')
+    .setInputFiles({
+      name: "test.wav",
+      mimeType: "audio/wav",
+      buffer: testWav(),
+    });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const { store } = await import("/src/core/store.ts");
+          return store.audio.isLoaded && !!store.audio.analysis;
+        }),
+      { timeout: 120_000 },
+    )
+    .toBe(true);
+  await page.evaluate(async () => {
+    const { store } = await import("/src/core/store.ts");
+    const { defaultLyrics } = await import("/src/core/types.ts");
+    store.setLyrics({
+      ...defaultLyrics(),
+      text: "はじまりの歌\nつぎの歌",
+      timing: {
+        ...defaultLyrics().timing,
+        lineTimes: { 0: 1, 1: 3 },
+        lineEnds: { 0: 2.5 },
+      },
+    });
+  });
+  await page.click('button[data-panel="lyrics"]');
+  const canvas = page.locator(".lyrics-timeline-canvas");
+  await canvas.scrollIntoViewIfNeeded();
+  const box = (await canvas.boundingBox())!;
+  const start0 = (): Promise<number> =>
+    page.evaluate(async () => {
+      const { store } = await import("/src/core/store.ts");
+      return Number(store.lyrics!.timing.lineTimes["0"]);
+    });
+  // 曲が短いので、曲全体が横幅いっぱいに入る (1 秒 = 横幅 ÷ 6 秒)
+  const pps = box.width / 6;
+  /** 1 行目のブロックの真ん中あたりをつかんで、右へ sec 秒ぶん動かす */
+  const drag = async (sec: number): Promise<void> => {
+    const t = await start0();
+    const x = box.x + t * pps + 40;
+    const dx = sec * pps;
+    const y = box.y + 145;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx / 2, y, { steps: 3 });
+    await page.mouse.move(x + dx, y, { steps: 3 });
+    await page.mouse.up();
+  };
+  await expect(page.locator('[data-lyrics="timeline-snap"]')).not.toBeChecked();
+  // 1 秒 → 1.45 秒 (近くの 1.5 秒に拍・音の立ち上がりがあるが、吸い寄せられない)
+  await drag(0.45);
+  expect(await start0()).toBeCloseTo(1.45, 2);
+  // 吸着を入れると、近くの拍・候補 (0.5 秒ごとの音) に合う
+  await page.locator('[data-lyrics="timeline-snap"]').check();
+  await drag(0.03);
+  const snapped = await start0();
+  expect(
+    Math.abs(snapped - Math.round(snapped * 2) / 2),
+    String(snapped),
+  ).toBeLessThan(0.03);
 });
