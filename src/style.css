@@ -498,3 +498,10 @@ body {
 .slide-missing { display: flex; align-items: center; justify-content: center; }
 .slide-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slide-kind { align-self: flex-start; padding: 0 6px; border-radius: 8px; background: rgba(224, 102, 102, 0.25); color: #f0c0c0; }
+
+/* 歌詞タブの「はじめかた」(3 つの手順) */
+.lyrics-steps .lyrics-step { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; }
+.lyrics-step-mark { flex: none; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; background: #2a2f3a; color: #cfd5df; }
+.lyrics-step-mark.done { background: #3f7d4f; color: #fff; }
+.lyrics-step-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lyrics-tap-controls { margin-top: 8px; }

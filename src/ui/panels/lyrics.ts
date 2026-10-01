@@ -199,6 +199,81 @@ export function renderLyricsPanel(): HTMLElement {
     }),
   );
 
+  // ------------------------------------------------------------ はじめかた (3 つの手順。2026-10-01 「曲 → 歌詞 → タップの導線がつながっていない」)
+  const stepsCard = el('div', { className: 'lyrics-card lyrics-steps' });
+  stepsCard.dataset.lyrics = 'steps';
+  const stepMark = (): HTMLSpanElement => el('span', { className: 'lyrics-step-mark' });
+  const step1Mark = stepMark();
+  const step2Mark = stepMark();
+  const step3Mark = stepMark();
+  const step1Text = el('span', { className: 'param-label' });
+  const step2Text = el('span', { className: 'param-label' });
+  const step3Text = el('span', { className: 'param-label' });
+  const songInput = el('input');
+  songInput.type = 'file';
+  songInput.accept = 'audio/*';
+  songInput.dataset.lyrics = 'step-song';
+  songInput.addEventListener('change', () => {
+    const file = songInput.files?.[0];
+    songInput.value = '';
+    if (!file) return;
+    step1Text.textContent = tr('曲を調べています… (テンポや歌声らしさを調べるので、少しかかります)', 'Analyzing the song… (tempo and voice detection take a moment)');
+    store.audio
+      .load(file)
+      .then(() => {
+        if (root.isConnected) refresh();
+      })
+      .catch((err: unknown) => {
+        step1Text.textContent = `${tr('読み込めませんでした', 'Could not load')}: ${err instanceof Error ? err.message : String(err)}`;
+      });
+  });
+  const toLyricsBtn = button(tr('歌詞の欄へ', 'Go to the lyrics box'), () => {
+    textarea.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    textarea.focus();
+  });
+  const stepTapBtn = button(tr('1 行目からタップを始める', 'Start tapping from line 1'), () => startTap(0), 'lyrics-big-button');
+  stepTapBtn.dataset.lyrics = 'step-tap';
+  const stepRow = (mark: HTMLElement, title: string, text: HTMLElement, ...actions: HTMLElement[]): HTMLElement =>
+    el('div', { className: 'lyrics-step' }, [mark, el('div', { className: 'lyrics-step-body' }, [el('strong', { textContent: title }), text, el('div', { className: 'row-gap lyrics-row-wrap' }, actions)])]);
+  stepsCard.append(
+    el('h3', { className: 'lyrics-h3', textContent: tr('はじめかた', 'Getting started') }),
+    stepRow(step1Mark, tr('曲を読み込む', 'Load the song'), step1Text, songInput),
+    stepRow(step2Mark, tr('歌詞を入れる', 'Enter the lyrics'), step2Text, toLyricsBtn),
+    stepRow(step3Mark, tr('タップで合わせる', 'Sync by tapping'), step3Text, stepTapBtn),
+  );
+  /** 手順の欄の表示 (できた手順に ✓) */
+  function refreshSteps(): void {
+    const loaded = store.audio.isLoaded;
+    const n = view.parsed.lines.length;
+    const synced = view.startSource.filter((src) => src !== 'estimate').length;
+    step1Mark.textContent = loaded ? '✓' : '1';
+    step2Mark.textContent = n > 0 ? '✓' : '2';
+    step3Mark.textContent = n > 0 && synced === n ? '✓' : '3';
+    for (const [m, done] of [
+      [step1Mark, loaded],
+      [step2Mark, n > 0],
+      [step3Mark, n > 0 && synced === n],
+    ] as const)
+      m.classList.toggle('done', done);
+    if (!step1Text.textContent?.startsWith(tr('曲を調べています', 'Analyzing')) || loaded)
+      step1Text.textContent = loaded
+        ? tr(`「${store.audio.fileName}」(ほかの曲にするときも、ここか「音楽」タブで選び直せます)`, `"${store.audio.fileName}" (pick another file here or in the Music tab to change it)`)
+        : tr('曲のファイルを選びます (「音楽」タブで読み込んでも同じです)', 'Choose the song file (same as loading it in the Music tab)');
+    step2Text.textContent =
+      n > 0
+        ? tr(`${n} 行。直すときは下の「歌詞」の欄で`, `${n} lines. Edit them in the lyrics box below`)
+        : tr('下の欄に歌詞を貼りつけるか、LRC / SRT のファイルを読み込みます。[サビ] などの見出しも書けます', 'Paste the lyrics into the box below or load an LRC / SRT file. Headings like [Chorus] are fine too');
+    step3Text.textContent =
+      tap != null
+        ? tr('タップ中です。下の大きな歌詞の表示を見ながら、各行の歌い出しで Space を叩きます', 'Tapping. Watch the big lyrics display below and press Space at the start of each line')
+        : !loaded || n === 0
+          ? tr('曲と歌詞がそろったら、ここから始められます', 'Once the song and lyrics are ready, start here')
+          : synced === 0
+            ? tr('再生が始まるので、各行の歌い出しで Space を叩きます (Esc で止める)。叩いたあと、ずれはタイムラインで直せます', 'Playback starts; press Space at the start of each line (Esc stops). Fix small offsets on the timeline afterwards')
+            : tr(`${n} 行のうち ${synced} 行の時刻が決まっています。ずれはタイムラインで直せます`, `${synced} of ${n} lines are timed. Fix offsets on the timeline`);
+    stepTapBtn.disabled = !loaded || n === 0 || tap != null || rhythmEditor.isTapping;
+  }
+
   // ------------------------------------------------------------ 入力
   const inputCard = el('div', { className: 'lyrics-card' });
   const sourceSelect = el('select', { className: 'select' });
@@ -459,7 +534,7 @@ export function renderLyricsPanel(): HTMLElement {
   }
 
   // ------------------------------------------------------------ タップ同期
-  const tapCard = el('div', { className: 'lyrics-card' });
+  const tapCard = el('div', { className: 'lyrics-tap-controls' });
   const startFirstBtn = button(tr('1 行目からタップ', 'Tap from line 1'), () => startTap(0), 'lyrics-big-button');
   const startSelBtn = button(tr('選んだ行からタップ', 'Tap from selected line'), () => startTap(selectedLine), 'lyrics-big-button');
   const stopBtn = button(tr('中断 (Esc)', 'Stop (Esc)'), () => stopTap());
@@ -487,10 +562,11 @@ export function renderLyricsPanel(): HTMLElement {
     windowLabel.textContent = tr(`吸着で探す範囲: ±${windowRange.value}ms`, `Snap search range: ±${windowRange.value}ms`);
   });
   const tapActive = el('div', { className: 'lyrics-tap-active' }, [tapInfo, el('div', { className: 'row-gap lyrics-row-wrap' }, [tapButton, tapBackBtn, stopBtn]), lastSnap]);
-  tapCard.append(
-    el('h3', { className: 'lyrics-h3', textContent: tr('タップで合わせる', 'Tap sync') }),
-    el('div', { className: 'row-gap lyrics-row-wrap' }, [startFirstBtn, startSelBtn]),
-    tapActive,
+  // タップの始め方と、タップ中の操作は、大きな歌詞の表示のすぐ下に置く (表示とタイムラインを一緒に見ながら叩けるように)
+  tapCard.append(el('div', { className: 'row-gap lyrics-row-wrap' }, [startFirstBtn, startSelBtn]), tapActive);
+  playCard.appendChild(tapCard);
+  const snapCard = el('div', { className: 'lyrics-card' });
+  snapCard.append(
     el('h3', { className: 'lyrics-h3', textContent: tr('吸着 (叩き終えたら)', 'Snap (after tapping)') }),
     el('p', {
       className: 'lyrics-help',
@@ -504,7 +580,6 @@ export function renderLyricsPanel(): HTMLElement {
     snapReport,
     el('label', { className: 'param-row lyrics-window' }, [windowLabel, windowRange]),
   );
-  root.appendChild(tapCard);
 
   // ------------------------------------------------------------ 行の一覧
   const listCard = el('div', { className: 'lyrics-card' });
@@ -542,7 +617,8 @@ export function renderLyricsPanel(): HTMLElement {
 
   // ------------------------------------------------------------ リズム (変拍子, R2)。タイムラインのすぐ下に置く
   const rhythmEditor = createRhythmEditor({ isBusy: () => tap != null, onChange: () => refresh() });
-  timelineCard.after(rhythmEditor.element);
+  // 並び: はじめかた → 歌詞の入力 → 大きな歌詞の表示とタップ → タイムライン → リズム → 吸着 → ボーカルだけの音 → 歌詞の動き → 行の一覧
+  root.append(stepsCard, inputCard, playCard, timelineCard, rhythmEditor.element, snapCard, stemCard.element, motionCard, listCard);
 
   // 歌い出し候補は、ボーカル stem を使うときは stem から (ビートは元の曲から)。core/lyrics/stem.ts
   const snapTargets = (): SyncTargets => lyricSyncTargets(store.audio.analysis, activeStem()?.analysis ?? null);
@@ -667,6 +743,7 @@ export function renderLyricsPanel(): HTMLElement {
     emptyNote.hidden = hasLines;
     tableWrap.hidden = !hasLines;
     rhythmEditor.refresh();
+    refreshSteps();
     if (tap) {
       const i = tap.line;
       const line = view.parsed.lines[i];
@@ -840,6 +917,8 @@ export function renderLyricsPanel(): HTMLElement {
     }
     store.audio.seek(startAt);
     store.audio.play();
+    // 大きな歌詞の表示とタイムラインが一緒に見える所まで動かす
+    playCard.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
   }
 
   function stopTap(): void {
