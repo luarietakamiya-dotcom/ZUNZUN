@@ -221,6 +221,12 @@ export function renderLyricsPanel(): HTMLElement {
       el('li', { textContent: tr('1 行 = 1 行の歌詞。空行で「間」を空ける。# で始まる行はコメント', 'One line = one lyric line. A blank line makes a pause. Lines starting with # are comments') }),
       el('li', { textContent: tr('/ で文字のまとまりを区切る、*強調*、行末の ! でキメ、「歌詞|注釈」で注釈', '/ splits phrases, *emphasis*, a trailing ! makes a hit, "lyric|note" adds a note') }),
       el('li', { textContent: tr('[間奏] / [間奏 8] (8 秒) で歌詞の無い区間。[00:12.34] は LRC のタイムタグ', '[間奏] / [間奏 8] (8 s) marks an instrumental part. [00:12.34] is an LRC time tag') }),
+      el('li', {
+        textContent: tr(
+          '[Intro] [Aメロ] [サビ] [Chorus] [Outro] などの見出しは歌詞に出ず、曲の区切りになります (タイムラインに色の帯で出ます)。そのほかの [ ] で囲んだ所も歌詞には出ません',
+          'Headings like [Intro] [Verse] [Chorus] [Outro] are not shown as lyrics; they mark song sections (colored band on the timeline). Anything else in [ ] is hidden too',
+        ),
+      }),
       el('li', { textContent: tr('行の時刻は行番号で覚えるので、行を足したり消したりすると後ろの行の時刻がずれます', 'Times are stored by line number, so adding or removing lines shifts the times of later lines') }),
     ]),
   ]);
@@ -581,6 +587,7 @@ export function renderLyricsPanel(): HTMLElement {
       loop: loopRegion(),
       rhythm: rhythmEditor.grid(),
       barHeads: rhythmEditor.barHeads(),
+      sections: view.sections,
     });
     shownLine = -2; // 次のフレームでプレビューを描き直す
   }

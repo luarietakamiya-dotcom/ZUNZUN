@@ -2,6 +2,7 @@ import type { AudioAnalysis } from '../audio/analyze';
 import type { LyricsSettings } from '../types';
 import { findOnsetCandidates, refineOnsetTimes, type OnsetCandidate } from './candidates';
 import { parseLyricsSource, type ParsedLyrics } from './parse';
+import { findSections, type Section } from './sections';
 import type { SnapTargets } from './snap';
 import { computeLineTimes, type LineTimes } from './timing';
 
@@ -19,6 +20,8 @@ export interface LyricsView {
   startSource: LineTimeSource[];
   /** 終了を手で決めた行か */
   endManual: boolean[];
+  /** 曲の区切り (歌詞の [Intro] [サビ] などの見出しから。見出しが無ければ空) */
+  sections: Section[];
 }
 
 const hasTime = (map: Record<string, number>, i: number): boolean => {
@@ -35,7 +38,8 @@ export function buildLyricsView(lyrics: LyricsSettings, audioDuration?: number):
     hasTime(lyrics.timing.lineTimes, i) ? 'manual' : allLrc ? 'lrc' : 'estimate',
   );
   const endManual = parsed.lines.map((_, i) => hasTime(lyrics.timing.lineEnds, i));
-  return { parsed, times, startSource, endManual };
+  const sections = findSections(lyrics.text, lyrics.source, parsed.lines, times, audioDuration ?? NaN);
+  return { parsed, times, startSource, endManual, sections };
 }
 
 export interface SyncTargets extends SnapTargets {

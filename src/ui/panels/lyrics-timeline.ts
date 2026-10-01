@@ -1,5 +1,5 @@
 import { peakBetween, type Peaks } from '../../core/audio/peaks';
-import { Viewport, type LineTimeSource, type OnsetCandidate } from '../../core/lyrics';
+import { Viewport, type LineTimeSource, type OnsetCandidate, type Section, type SectionKind } from '../../core/lyrics';
 import type { RhythmGrid } from '../../core/rhythm';
 import { tr } from '../../core/i18n';
 
@@ -38,7 +38,21 @@ export interface TimelineData {
   rhythm: RhythmGrid | null;
   /** 小節の頭 (昇順、normalizeBars 済み)。小節線のドラッグの番号はこの並びの番号 */
   barHeads: readonly number[];
+  /** 曲の区切り (歌詞の [サビ] などの見出しから)。波形の段とブロックの段の間に色の帯で出す */
+  sections?: readonly Section[];
 }
+
+/** 区切りの帯の色と、短い名前 */
+const SECTION_STYLE: Record<SectionKind, { color: string; ja: string; en: string }> = {
+  intro: { color: '#6fa8dc', ja: 'イントロ', en: 'Intro' },
+  verse: { color: '#93c47d', ja: 'Aメロ', en: 'Verse' },
+  prechorus: { color: '#ffd966', ja: 'Bメロ', en: 'Pre-chorus' },
+  chorus: { color: '#e06666', ja: 'サビ', en: 'Chorus' },
+  bridge: { color: '#c27ba0', ja: 'Cメロ', en: 'Bridge' },
+  interlude: { color: '#8e7cc3', ja: '間奏', en: 'Interlude' },
+  outro: { color: '#76a5af', ja: 'アウトロ', en: 'Outro' },
+  other: { color: '#999999', ja: 'その他', en: 'Other' },
+};
 
 export type DragKind = 'start' | 'end' | 'move';
 
@@ -137,7 +151,7 @@ export class LyricsTimeline {
     const legend = document.createElement('span');
     legend.className = 'param-label';
     legend.textContent =
-      tr('青い線 = 歌声らしさ / 緑の目盛り = 歌い出しの候補 / 縦の薄い線 = 拍 / 橙の線 = 小節 (波形の段でつかんで動かせます)。ブロックの端をドラッグで始まり・終わり、真ん中で行ごと移動', 'Blue line = voice likelihood / green ticks = possible vocal entries / thin vertical lines = beats / orange lines = bars (drag them in the waveform row). Drag a block edge to set start/end, its middle to move the line');
+      tr('青い線 = 歌声らしさ / 緑の目盛り = 歌い出しの候補 / 縦の薄い線 = 拍 / 橙の線 = 小節 (波形の段でつかんで動かせます) / 色の帯 = 曲の区切り (歌詞の [サビ] などの見出しから)。ブロックの端をドラッグで始まり・終わり、真ん中で行ごと移動', 'Blue line = voice likelihood / green ticks = possible vocal entries / thin vertical lines = beats / orange lines = bars (drag them in the waveform row) / colored band = song sections (from headings like [Chorus]). Drag a block edge to set start/end, its middle to move the line');
     const toolbar = document.createElement('div');
     toolbar.className = 'row-gap lyrics-row-wrap';
     toolbar.append(zoomOut, zoomIn, fit, legend);
@@ -290,6 +304,26 @@ export class LyricsTimeline {
       if (o.t < t0 || o.t > t1) continue;
       const h = 4 + Math.min(1, o.strength) * 14;
       g.fillRect(Math.round(X(o.t)) - 1, WAVE_TOP + WAVE_H - h, 2, h);
+    }
+
+    // 曲の区切り (波形の段とブロックの段の間の帯。名前は帯の上、波形の段の下の端に)
+    if (d.sections?.length) {
+      g.font = '10px system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif';
+      g.textBaseline = 'alphabetic';
+      for (const sec of d.sections) {
+        if (sec.end < t0 || sec.start > t1) continue;
+        const style = SECTION_STYLE[sec.kind];
+        const x0 = Math.max(0, X(sec.start));
+        const x1 = Math.min(w, X(sec.end));
+        g.fillStyle = style.color;
+        g.globalAlpha = 0.85;
+        g.fillRect(x0, BLOCK_TOP - 6, Math.max(1, x1 - x0 - 1), 4);
+        g.globalAlpha = 1;
+        if (x1 - x0 >= 30) {
+          g.fillStyle = style.color;
+          g.fillText(sec.label || tr(style.ja, style.en), x0 + 3, BLOCK_TOP - 9);
+        }
+      }
     }
 
     // 行のブロック

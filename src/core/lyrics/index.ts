@@ -19,3 +19,5 @@ export type { LineSnap, SnapAllOptions, SnapAllResult } from './snap-all';
 export { MIN_GAP, moveLine, moveLineEnd, moveLineStart, shiftLines, startBounds } from './edit';
 export type { EditContext, TimingSnapshot } from './edit';
 export { MAX_PX_PER_SEC, Viewport } from './viewport';
+export { findSections, sectionAt, sectionKindOf } from './sections';
+export type { Section, SectionKind } from './sections';

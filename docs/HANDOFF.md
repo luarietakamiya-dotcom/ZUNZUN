@@ -393,3 +393,7 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 - 初回はユーザーがリポジトリの設定を 2 つする: Settings → Pages の Source を「GitHub Actions」、Settings → Environments → github-pages の Deployment branches に main-jxttta を足す。
 - `vite.config.ts` の `base` は `ZUNZUN_BASE` (ふだんは `/`)。
 - 残り: ビジュアライザーの設定に「光の強さ」という名前のつまみが 2 つある (共通の光のにじみと、写真に動きの glowAmount)。名前を分ける。
+
+### 2026-10-01 曲の区切り（ARCHITECTURE「曲の区切りと、背景のスライドショー」①）
+- `core/lyrics/sections.ts`: `sectionKindOf`（見出し・ファイル名の言葉 → 種類。英字は前後が英字でないときだけ = universe は verse ではない、`_chorus_01` は chorus）、`findSections`（見出しの行番号 → 歌詞の行の時刻）、`sectionAt`。`buildLyricsView` の `sections`。タイムラインに色の帯（`lyrics-timeline.ts` の `SECTION_STYLE`）。
+- 次は ② 背景のスライドショー。
