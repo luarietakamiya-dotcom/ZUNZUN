@@ -10,11 +10,11 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('shows all 6 tabs and switches panels', async ({ page }) => {
+test('shows all 7 tabs (including Help) and switches panels', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle('ZUNZUN');
 
-  const tabLabels = ['Music', 'Visualizer', 'Lyrics', 'Overlay', 'Settings', 'Export'];
+  const tabLabels = ['Music', 'Visualizer', 'Lyrics', 'Overlay', 'Settings', 'Export', 'Help'];
   for (const label of tabLabels) {
     await expect(page.getByRole('tab', { name: label })).toBeVisible();
   }

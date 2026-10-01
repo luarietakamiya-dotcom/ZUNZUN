@@ -3,7 +3,7 @@ import { PANELS } from './panels';
 import { createTransport } from './transport';
 import { lang, onLangChange, setLang, t2, tr, type Lang } from '../core/i18n';
 
-const TAB_ORDER: PanelId[] = ['music', 'visualizer', 'lyrics', 'overlay', 'settings', 'export'];
+const TAB_ORDER: PanelId[] = ['music', 'visualizer', 'lyrics', 'overlay', 'settings', 'export', 'help'];
 
 /**
  * アプリのシェル (ヘッダーのタブ + 現在のパネル本体) を root にマウントする。
