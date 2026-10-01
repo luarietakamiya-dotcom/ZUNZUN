@@ -5,9 +5,10 @@ import { renderOverlayPanel } from './overlay';
 import { renderSettingsPanel } from './settings';
 import { renderExportPanel } from './export';
 import { renderHelpPanel } from './help';
+import { renderLyricMotionPanel } from './lyric-motion';
 import type { Text2 } from '../../core/i18n';
 
-export type PanelId = 'music' | 'visualizer' | 'lyrics' | 'overlay' | 'settings' | 'export' | 'help';
+export type PanelId = 'music' | 'lyrics' | 'motion' | 'visualizer' | 'overlay' | 'settings' | 'export' | 'help';
 
 export interface PanelDef {
   label: Text2;
@@ -16,9 +17,14 @@ export interface PanelDef {
   render(): HTMLElement;
 }
 
-/** docs/ARCHITECTURE.md の UI 節にある 6 パネルと、「使い方」(2026-10-01)。 */
+/** docs/ARCHITECTURE.md の UI 節にある 6 パネルと、「リリックモーション」「使い方」(2026-10-01)。 */
 export const PANELS: Record<PanelId, PanelDef> = {
   music: { label: { ja: '音楽', en: 'Music' }, hint: { ja: '曲を読み込んで、テンポや音の強さを調べます', en: 'Load a song and analyze its tempo and loudness' }, render: renderMusicPanel },
+  motion: {
+    label: { ja: 'リリックモーション', en: 'Lyric motion' },
+    hint: { ja: '歌詞の動き (スタイル・動きの大きさ・マイスタイル) を決めます', en: 'Choose how the lyrics move (style, motion, my style)' },
+    render: renderLyricMotionPanel,
+  },
   visualizer: {
     label: { ja: 'ビジュアライザー', en: 'Visualizer' },
     hint: { ja: '音に合わせて動く映像を選んで、光や動きを調整します', en: 'Pick the music-reactive visuals and tune light and motion' },

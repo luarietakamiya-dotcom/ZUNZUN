@@ -91,7 +91,7 @@ export class LyricMotionProvider {
   constructor(private readonly now: () => number = () => performance.now()) {}
 
   /** 今の設定に合う (または作り直している間はひとつ前の) LyricMotion。出さない設定なら null */
-  get(req: MotionRequest): LyricMotion | null {
+  get(req: MotionRequest, opts: { build?: boolean } = {}): LyricMotion | null {
     if (!wantsMotion(req)) {
       this.requestedKey = '';
       return null;
@@ -110,6 +110,8 @@ export class LyricMotionProvider {
       this.requestedAt = this.now();
     }
     if (this.building) return this.current;
+    // build: false = 作り直さずに、設定が変わったかだけ覚える (歌詞タブ。作り直しの間は画面が止まるので、打ち込み・ドラッグ中に作らない)
+    if (opts.build === false) return this.current;
     if (this.applyRequested || (!this.timingOnly && this.now() - this.requestedAt >= DEBOUNCE_MS)) {
       this.applyRequested = false;
       this.build(key, req);

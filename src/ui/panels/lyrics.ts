@@ -1,4 +1,4 @@
-import { createMotionApplyNotice } from './motion-apply';
+import { createMotionApplyNotice, previewMotionNow } from './motion-apply';
 import { computePeaks, type Peaks } from '../../core/audio/peaks';
 import { tr } from '../../core/i18n';
 import {
@@ -22,17 +22,13 @@ import {
   type SnapAllResult,
   type SyncTargets,
 } from '../../core/lyrics';
-import { customFromStyle, jizuraStyles, loadJizura, type JizuraApi } from '../../core/lyrics/jizura-adapter';
-import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { MAX_LYRICS_LENGTH } from '../../core/project/validate';
 import { store } from '../../core/store';
-import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsMotion, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
+import { defaultLyrics, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
 import { lyricSyncTargets } from '../../core/lyrics/stem';
 import { createRhythmEditor } from './lyrics-rhythm';
 import { activeStem, createStemCard } from './lyrics-stem';
-import { createStyleEditor } from './lyrics-style-editor';
 import { LyricsTimeline } from './lyrics-timeline';
-import { backgroundPaletteNow } from '../../core/render/palette';
 
 /**
  * Lyrics タブ (L3): 歌詞の入力・読み込み、再生しながらの半自動タップ同期、行ごとの時刻の確認と手入力。
@@ -384,7 +380,7 @@ export function renderLyricsPanel(): HTMLElement {
     estimateText.textContent = tr(`全体を ${ms(offset)} ずらしました (取り消し: Ctrl+Z)`, `Shifted everything by ${ms(offset)} (undo: Ctrl+Z)`);
   });
   // 時刻だけを変えたときは、歌詞の動きを「反映」ボタンで作り直す (自動で作り直すと、そのたびに画面が少し止まるため)
-  const applyNotices = [createMotionApplyNotice(), createMotionApplyNotice()];
+  const applyNotices = [createMotionApplyNotice()];
   const timelineCard = el('div', { className: 'lyrics-card' }, [
     el('h3', { className: 'lyrics-h3', textContent: tr('タイムライン (細かい調整)', 'Timeline (fine tuning)') }),
     timeline.element,
@@ -403,135 +399,6 @@ export function renderLyricsPanel(): HTMLElement {
     el('div', { className: 'row-gap lyrics-row-wrap' }, [estimateBtn, estimateText, applyEstimateBtn]),
   ]);
   root.appendChild(timelineCard);
-
-  // ------------------------------------------------------------ 歌詞モーション (L6)
-  const motionEnabled = el('input');
-  motionEnabled.type = 'checkbox';
-  const styleSelect = el('select', { className: 'select' });
-  const motionStatus = el('span', { className: 'param-label' });
-  const MOTION_SLIDERS: { key: 'motion' | 'decor' | 'density'; label: string; help: string }[] = [
-    { key: 'motion', label: tr('動きの大きさ', 'Motion'), help: tr('歌詞の文字がどれだけ大きく動くか', 'How big the lyric text moves') },
-    { key: 'decor', label: tr('飾りの量', 'Decoration'), help: tr('線や図形などの飾りがどれだけ出るか', 'How many lines, shapes and other decorations appear') },
-    {
-      key: 'density',
-      label: tr('区切りの細かさ', 'Cut density'),
-      help: tr('大きいほど、1 行を細かい場面に分けて次々に見せます', 'Higher splits each line into more, quicker shots'),
-    },
-  ];
-  const motionInputs = new Map<string, { input: HTMLInputElement; label: HTMLSpanElement }>();
-  const updateMotion = (patch: Partial<LyricsMotion>): void => {
-    const base = currentLyrics();
-    store.setLyrics({ ...base, motion: { ...base.motion, ...patch } });
-    refreshMotionControls();
-  };
-  motionEnabled.addEventListener('change', () => updateMotion({ enabled: motionEnabled.checked }));
-  styleSelect.addEventListener('change', () => updateMotion({ style: styleSelect.value }));
-  const sliderRows = MOTION_SLIDERS.map((def) => {
-    const input = el('input');
-    input.type = 'range';
-    input.min = '0';
-    input.max = '1';
-    input.step = '0.01';
-    const label = el('span', { className: 'param-label' });
-    input.addEventListener('input', () => updateMotion({ [def.key]: parseFloat(input.value) }));
-    motionInputs.set(def.key, { input, label });
-    return el('label', { className: 'param-row' }, [label, input, el('span', { className: 'param-help', textContent: def.help })]);
-  });
-  const motionCanvas = el('canvas', { className: 'lyrics-motion-canvas' });
-  motionCanvas.width = 640;
-  motionCanvas.height = 360;
-  const motionCtx = motionCanvas.getContext('2d');
-
-  // オリジナルのスタイル (L7): 今のスタイルを元に作り、色・書体・質感を変える
-  let jz: JizuraApi | null = null;
-  const customBtn = button(tr('このスタイルを元にマイスタイルを作る', 'Make my own style from this'), () => createCustomStyle(), 'tab-button lyrics-custom-button');
-  const styleEditor = createStyleEditor({
-    onChange: (custom) => updateMotion({ custom }),
-    onResetFromBase: (baseKey) => {
-      if (!jz) return;
-      const name = currentLyrics().motion.custom?.name;
-      const fresh = customFromStyle(baseKey, jz.STYLES[baseKey] ?? jz.STYLES.noir!, (c) => jz!.lum(c));
-      updateMotion({ custom: { ...fresh, name: name ?? fresh.name } });
-    },
-    onDelete: () => {
-      const base = currentLyrics().motion.custom?.base ?? 'noir';
-      updateMotion({ custom: null, style: base });
-    },
-  });
-  function createCustomStyle(): void {
-    if (!jz) return;
-    const m = currentLyrics().motion;
-    // すでにマイスタイルがあれば、それを選び直すだけ (作り直すと調整が消えるため)
-    if (m.custom) {
-      updateMotion({ style: CUSTOM_STYLE_KEY });
-      return;
-    }
-    const baseKey = m.style !== CUSTOM_STYLE_KEY && jz.STYLES[m.style] ? m.style : 'noir';
-    updateMotion({ style: CUSTOM_STYLE_KEY, custom: customFromStyle(baseKey, jz.STYLES[baseKey]!, (c) => jz!.lum(c)) });
-  }
-  const motionCard = el('div', { className: 'lyrics-card' }, [
-    el('h3', { className: 'lyrics-h3', textContent: tr('歌詞の動き (歌詞モーション)', 'Lyric motion') }),
-    el('p', {
-      className: 'lyrics-help',
-      textContent:
-        tr(
-          '歌詞を動かしてビジュアライザーの上に重ねます。映像と重ねた見た目は「ビジュアライザー」タブ、書き出しは「書き出し」タブで。書体は Google Fonts から読み込みます (外と通信するのは書体を取ってくるときだけです)。',
-          'Animates the lyrics over the visuals. See the combined result in the Visualizer tab and export in the Export tab. Fonts are loaded from Google Fonts (the only network access).',
-        ),
-    }),
-    el('label', { className: 'row-gap param-label' }, [motionEnabled, tr('ビジュアライザーの上に歌詞の動きを重ねる', 'Show lyric motion over the visuals')]),
-    el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('スタイル:', 'Style:') }), styleSelect, customBtn, motionStatus]),
-    styleEditor.element,
-    el('div', { className: 'param-grid lyrics-motion-grid' }, sliderRows),
-    applyNotices[1]!.element,
-    motionCanvas,
-  ]);
-  root.appendChild(motionCard);
-
-  /** スタイルの一覧は JIZURA を読み込んでから埋める (読み込むまでは今のスタイルだけ出す) */
-  let styleOptions: [string, string][] | null = null;
-  void loadJizura()
-    .then((J) => {
-      jz = J;
-      styleOptions = jizuraStyles(J);
-      styleEditor.setJizura(J);
-      refreshMotionControls();
-    })
-    .catch(() => {
-      motionStatus.textContent = tr('歌詞の動きの仕組み (JIZURA) を読み込めませんでした', 'Could not load the lyric motion engine (JIZURA)');
-    });
-
-  function refreshMotionControls(): void {
-    const m = currentLyrics().motion;
-    motionEnabled.checked = m.enabled;
-    // マイスタイルがあれば、一覧の先頭に「★ 名前」で出す
-    const options: [string, string][] = [
-      ...(m.custom ? [[CUSTOM_STYLE_KEY, `★ ${m.custom.name}`] as [string, string]] : []),
-      ...(styleOptions ?? (m.style !== CUSTOM_STYLE_KEY ? [[m.style, m.style] as [string, string]] : [])),
-    ];
-    const signature = options.map((o) => o.join('=')).join('|');
-    if (styleSelect.dataset.signature !== signature) {
-      styleSelect.dataset.signature = signature;
-      styleSelect.textContent = '';
-      for (const [key, name] of options) {
-        const opt = el('option', { textContent: name });
-        opt.value = key;
-        styleSelect.appendChild(opt);
-      }
-    }
-    styleSelect.value = m.style;
-    const usingCustom = m.style === CUSTOM_STYLE_KEY && m.custom != null;
-    styleEditor.refresh(usingCustom ? m.custom : null);
-    customBtn.hidden = usingCustom;
-    customBtn.textContent = m.custom ? tr(`マイスタイル (${m.custom.name}) を使う`, `Use my style (${m.custom.name})`) : tr('このスタイルを元にマイスタイルを作る', 'Make my own style from this');
-    customBtn.disabled = !jz || !m.enabled;
-    for (const def of MOTION_SLIDERS) {
-      const row = motionInputs.get(def.key)!;
-      row.input.value = String(m[def.key]);
-      row.label.textContent = `${def.label}: ${m[def.key].toFixed(2)}`;
-    }
-    for (const c of [styleSelect, ...[...motionInputs.values()].map((r) => r.input)]) c.disabled = !m.enabled;
-  }
 
   // ------------------------------------------------------------ タップ同期
   const tapCard = el('div', { className: 'lyrics-tap-controls' });
@@ -617,8 +484,9 @@ export function renderLyricsPanel(): HTMLElement {
 
   // ------------------------------------------------------------ リズム (変拍子, R2)。タイムラインのすぐ下に置く
   const rhythmEditor = createRhythmEditor({ isBusy: () => tap != null, onChange: () => refresh() });
-  // 並び: はじめかた → 歌詞の入力 → 大きな歌詞の表示とタップ → タイムライン → リズム → 吸着 → ボーカルだけの音 → 歌詞の動き → 行の一覧
-  root.append(stepsCard, inputCard, playCard, timelineCard, rhythmEditor.element, snapCard, stemCard.element, motionCard, listCard);
+  // 並び: はじめかた → 歌詞の入力 → 大きな歌詞の表示とタップ → タイムライン → リズム → 吸着 → ボーカルだけの音 → 行の一覧
+  // (歌詞の動き (JIZURA) は「リリックモーション」タブ。2026-10-01 「歌詞のメニューだけ縦に長い」)
+  root.append(stepsCard, inputCard, playCard, timelineCard, rhythmEditor.element, snapCard, stemCard.element, listCard);
 
   // 歌い出し候補は、ボーカル stem を使うときは stem から (ビートは元の曲から)。core/lyrics/stem.ts
   const snapTargets = (): SyncTargets => lyricSyncTargets(store.audio.analysis, activeStem()?.analysis ?? null);
@@ -641,7 +509,6 @@ export function renderLyricsPanel(): HTMLElement {
     if (selectedLine >= lineCount) selectedLine = Math.max(0, lineCount - 1);
     renderRows();
     refreshControls();
-    refreshMotionControls();
     // ボーカル stem を使うときは、波形と歌声らしさも stem のものを出す (どこで歌っているかが見やすい)
     const stem = activeStem();
     const analysis = stem?.analysis ?? store.audio.analysis;
@@ -666,44 +533,6 @@ export function renderLyricsPanel(): HTMLElement {
       sections: view.sections,
     });
     shownLine = -2; // 次のフレームでプレビューを描き直す
-  }
-
-  /** 歌詞モーションだけのプレビュー (黒地)。映像と重ねた見た目は Visualizer タブで見る */
-  function drawMotionPreview(t: number): void {
-    if (!motionCtx) return;
-    const motion = store.audio.isLoaded
-      ? previewMotionProvider.get({
-          lyrics: store.lyrics,
-          analysis: store.audio.analysis,
-          projectSeed: store.seed,
-          width: store.exportSettings.width,
-          height: store.exportSettings.height,
-          fps: store.exportSettings.fps,
-          rhythm: store.rhythm,
-          palette: backgroundPaletteNow(store.background, store.backgroundFile),
-        })
-      : null;
-    const status = !store.audio.isLoaded
-      ? tr('曲を読み込むと見本が出ます', 'Load a song to see a preview')
-      : previewMotionProvider.lastError
-        ? `${tr('作れませんでした', 'Could not build')}: ${previewMotionProvider.lastError}`
-        : previewMotionProvider.isBuilding
-          ? tr('準備しています… (書体の読み込みなど)', 'Preparing… (loading fonts etc.)')
-          : '';
-    if (motionStatus.textContent !== status) motionStatus.textContent = status;
-    if (motion) {
-      const h = Math.round((motionCanvas.width * motion.plan.H) / motion.plan.W);
-      if (motionCanvas.height !== h) motionCanvas.height = h;
-    }
-    motionCtx.fillStyle = '#000';
-    motionCtx.fillRect(0, 0, motionCanvas.width, motionCanvas.height);
-    // JIZURA は描く前に canvas を消すので、黒地は別の canvas に重ねずに「描いたあとに下へ敷く」
-    if (motion) {
-      motion.render(motionCtx, t, { fast: true });
-      motionCtx.globalCompositeOperation = 'destination-over';
-      motionCtx.fillRect(0, 0, motionCanvas.width, motionCanvas.height);
-      motionCtx.globalCompositeOperation = 'source-over';
-    }
   }
 
   function refreshControls(): void {
@@ -1170,7 +999,9 @@ export function renderLyricsPanel(): HTMLElement {
     if (region && playing && t >= region.end) store.audio.seek(region.start);
     timeline.setSelection(selectedLine, region);
     timeline.draw(t, playing);
-    drawMotionPreview(t);
+    // 歌詞の動きの見本はリリックモーションのタブだが、時刻を変えたときの「反映」ボタンのために、ここでも今の設定を伝える。
+    // 作り直しはしない (作り直しの間は画面が止まるので、打ち込みやドラッグの邪魔になる。ほかのタブか「反映」で作る)
+    previewMotionNow({ build: false });
     for (const n of applyNotices) n.update();
     rhythmEditor.tick(t);
     const playText = playing ? tr('一時停止', 'Pause') : tr('再生', 'Play');

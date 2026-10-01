@@ -58,7 +58,8 @@ test('歌詞の時刻だけを変えると「反映」ボタンが出て、押�
       timing: { ...defaultLyrics().timing, lineTimes: { 0: 1, 1: 3 } },
     });
   });
-  await page.click('button[data-panel="lyrics"]');
+  // 最初の歌詞の動きはリリックモーションのタブで作る (歌詞タブは作り直さない)
+  await page.click('button[data-panel="motion"]');
   const P = '/src/core/lyrics/motion-provider.ts';
   // 最初の歌詞の動きができるまで待つ
   const ready = (): Promise<boolean> =>
@@ -70,6 +71,7 @@ test('歌詞の時刻だけを変えると「反映」ボタンが出て、押�
       return p.currentKey !== '' && !p.isBuilding;
     }, P);
   await expect.poll(ready, { timeout: 120_000 }).toBe(true);
+  await page.click('button[data-panel="lyrics"]');
   const notice = page.locator('[data-lyrics="motion-apply"]').first();
   await expect(notice).toBeHidden();
   // [サビ] は行にならない (タイムラインのブロックは 2 つ)

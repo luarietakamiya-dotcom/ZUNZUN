@@ -210,4 +210,27 @@ describe('LyricMotionProvider', () => {
     expect(stub.calls).toBe(1);
     expect(p.hasPendingTiming).toBe(true);
   });
+
+  it('build: false なら作り直さず、設定が変わったことだけ覚える (反映ボタンは出る)', async () => {
+    const stub = stubCreate();
+    let now = 0;
+    const p = new LyricMotionProvider(() => now);
+    p.get(req());
+    now = 400;
+    p.get(req());
+    await stub.resolveAll();
+    const moved = req({ lyrics: lyrics({ timing: { ...defaultLyrics().timing, lineTimes: { '0': 3 } } }) });
+    now = 5000;
+    p.get(moved, { build: false });
+    expect(p.hasPendingTiming).toBe(true);
+    // 文字を変えても、build: false の間は作らない
+    const typed = req({ lyrics: lyrics({ text: 'お' }) });
+    p.get(typed, { build: false });
+    now = 9000;
+    p.get(typed, { build: false });
+    expect(stub.calls).toBe(1);
+    // ほかのタブ (build してよい) が呼べば作る
+    p.get(typed);
+    expect(stub.calls).toBe(2);
+  });
 });

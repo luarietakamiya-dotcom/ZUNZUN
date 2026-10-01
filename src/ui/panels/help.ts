@@ -148,7 +148,7 @@ const DETAILS: Block[] = [
         en: 'Vocal-only audio: loading a vocal stem keeps vocal-entry detection from being fooled by guitars or drums',
       },
       { ja: 'リズム (変拍子): 5 拍子・7 拍子の曲は、小節の頭を叩いて決められます', en: 'Rhythm (odd meters): for 5/4, 7/8 etc., tap the bar heads' },
-      { ja: '歌詞の動き: スタイルと、動きの大きさ・飾りの量・区切りの細かさを選びます。「マイスタイル」で色や書体も変えられます', en: 'Lyric motion: choose a style, motion size, decoration and cut density. "My style" changes colors and fonts' },
+      { ja: '歌詞の動き: 「リリックモーション」タブで、スタイルと、動きの大きさ・飾りの量・区切りの細かさを選びます。「マイスタイル」で色や書体も変えられます', en: 'Lyric motion: in the Lyric motion tab, choose a style, motion size, decoration and cut density. "My style" changes colors and fonts' },
     ],
   },
   {
@@ -214,7 +214,7 @@ const DETAILS: Block[] = [
     list: [
       { ja: '映像が音に合わせて動かない → 曲を読み込んで再生しているか、「音への反応のしやすさ」を確かめてください', en: 'Visuals do not react → make sure a song is loaded and playing, and check "Sensitivity"' },
       { ja: '写真が二重に見える → 背景と、写真に動きの写真が重なっています。「背景を外す」を押してください', en: 'The photo looks doubled → the background and Photo Motion photo overlap. Press "Remove background"' },
-      { ja: '歌詞が映像に出ない → 「歌詞の動き」がオンか、「反映」ボタンが出ていないかを確かめてください', en: 'Lyrics do not show → check that lyric motion is on and whether an "Apply" button is waiting' },
+      { ja: '歌詞が映像に出ない → 「リリックモーション」タブの「ビジュアライザーの上に歌詞の動きを重ねる」がオンか、「反映」ボタンが出ていないかを確かめてください', en: 'Lyrics do not show → check "Show lyric motion over the visuals" in the Lyric motion tab and whether an "Apply" button is waiting' },
       { ja: '動きが重い → ほかのタブやアプリを閉じるか、書き出しの画面の大きさを下げてください', en: 'It feels slow → close other tabs and apps, or lower the export size' },
     ],
   },

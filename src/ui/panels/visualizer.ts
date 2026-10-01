@@ -1,12 +1,10 @@
 import { slidePlan, slidePlanKey } from '../../core/render/slideshow';
-import { createMotionApplyNotice } from './motion-apply';
+import { createMotionApplyNotice, previewMotionNow } from './motion-apply';
 import { store } from '../../core/store';
 import { type AudioFrame, type CommonParams, defaultView, type OverlayLayer, VIEW_ZOOM_MAX, VIEW_ZOOM_MIN, type ViewSettings } from '../../core/types';
 import { BAND_COUNT } from '../../core/audio';
-import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { VisualizerHost } from '../../core/visualizer/host';
 import { visualizerRegistry } from '../../visualizers';
-import { backgroundPaletteNow } from '../../core/render/palette';
 import { t2, tr, type Text2 } from '../../core/i18n';
 import { sliderRow } from './panel-helpers';
 import { resolvePresetParams } from '../../core/visualizer/preset-params';
@@ -374,20 +372,7 @@ export function renderVisualizerPanel(): HTMLElement {
     prevT = t;
     // 歌詞モーション: 音源があるときだけ重ねる (音源が無いとダミーの時刻になるため)。
     // 設定が変わってから作り直すまでの間は、ひとつ前の歌詞モーションが表示され続ける
-    host.lyrics.setMotion(
-      store.audio.isLoaded
-        ? previewMotionProvider.get({
-            lyrics: store.lyrics,
-            analysis: store.audio.analysis,
-            projectSeed: store.seed,
-            width: store.exportSettings.width,
-            height: store.exportSettings.height,
-            fps: store.exportSettings.fps,
-            rhythm: store.rhythm,
-            palette: backgroundPaletteNow(store.background, store.backgroundFile),
-          })
-        : null,
-    );
+    host.lyrics.setMotion(previewMotionNow());
     applyNotice.update();
     syncSlides();
     host.view = store.view;
