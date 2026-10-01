@@ -24,7 +24,9 @@ import {
   MAX_SLIDES,
   type BackgroundSlide,
   type BackgroundSlides,
+  type LyricBlank,
 } from '../types';
+import { MAX_BLANKS, normalizeBlanks } from '../lyrics/blanks';
 import { normalizeView } from '../render/view';
 import { normalizeComposition } from '../render/composition';
 import { sanitizePresetParamsMap } from '../visualizer/preset-params';
@@ -193,6 +195,7 @@ function sanitizeLyrics(raw: unknown): LyricsSettings | null {
       lineEnds: sanitizeLineTimeMap(timingRaw.lineEnds),
       snap: typeof timingRaw.snap === 'boolean' ? timingRaw.snap : base.timing.snap,
       snapWindowMs: isFiniteNumber(timingRaw.snapWindowMs) ? Math.round(clamp(timingRaw.snapWindowMs, 0, 1000)) : base.timing.snapWindowMs,
+      ...(Array.isArray(timingRaw.blanks) ? { blanks: sanitizeBlanks(timingRaw.blanks) } : {}),
     },
     motion: sanitizeLyricsMotion(raw.motion),
     stem: sanitizeLyricsStem(raw.stem),
@@ -222,6 +225,16 @@ function sanitizeLyricsMotion(raw: unknown): LyricsMotion {
 }
 
 /** 背景の一枚絵・動画。ファイル名と sha256 (64 桁の 16 進) が無ければ使わない。値は範囲に収め、知らない選択肢は既定に戻す */
+/** 歌詞の空白。始まり・終わりが数で、0.5 秒以上のものだけ (重なりはまとめる) */
+function sanitizeBlanks(raw: unknown[]): LyricBlank[] {
+  const items: LyricBlank[] = [];
+  for (const b of raw.slice(0, MAX_BLANKS * 2)) {
+    if (!isPlainObject(b) || !isFiniteNumber(b.start) || !isFiniteNumber(b.end)) continue;
+    items.push({ start: clamp(b.start, 0, 1e6), end: clamp(b.end, 0, 1e6), mode: b.mode === 'interlude' ? 'interlude' : 'none' });
+  }
+  return normalizeBlanks(items);
+}
+
 function sanitizeBackground(raw: unknown): BackgroundSettings | null {
   if (!isPlainObject(raw)) return null;
   if (typeof raw.ref !== 'string' || raw.ref === '' || typeof raw.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(raw.sha256)) return null;

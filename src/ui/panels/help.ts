@@ -133,6 +133,10 @@ const DETAILS: Block[] = [
         en: 'Drag a block\'s left edge for the start, right edge for the end, and the middle to move the whole line. Snapping is off at first, so blocks stay where you drop them. Turn on "Snap while dragging" to snap to vocal entries (green ticks) or beats (Shift inverts). ← → nudge the selected line by 10 ms (Shift: 100 ms). Ctrl + wheel zooms.',
       },
       {
+        ja: '長い間奏などで歌詞の動きを止めたいときは、その位置で「再生位置から空白を作る」を押します。次の行の始まりまでが空白 (斜線の帯) になり、「何も出さない」か「間奏の動き (飾り・効果だけ)」を選べます。端をドラッグして長さを変え、Delete キーで消せます。',
+        en: 'To stop the lyric motion during a long interlude, press "Make a blank from the playhead" there. Up to the next line becomes a blank (striped band); choose "Show nothing" or "Interlude motion (decorations only)". Drag its edges to resize; Delete removes it.',
+      },
+      {
         ja: '時刻を変えると「反映」ボタンが出ます。歌詞の動きを作り直すには少し時間がかかるので、合わせ終わってから押してください (書き出しはいつも今の時刻で作ります)。',
         en: 'After changing times an "Apply" button appears. Rebuilding the lyric motion takes a moment, so press it when you are done (export always uses the current times).',
       },

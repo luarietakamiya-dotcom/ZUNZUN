@@ -353,6 +353,15 @@ export interface LyricsTiming {
   snap: boolean;
   /** 吸着する範囲 (±ミリ秒) */
   snapWindowMs: number;
+  /** 歌詞の空白 (core/lyrics/blanks.ts)。古いプロジェクトには無い */
+  blanks?: LyricBlank[];
+}
+
+/** 歌詞の空白。'none' = 何も出さない、'interlude' = 歌詞の動きの間奏の場面 (飾りや効果だけ) を出す */
+export interface LyricBlank {
+  start: number;
+  end: number;
+  mode: 'none' | 'interlude';
 }
 
 export interface LyricsSettings {

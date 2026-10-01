@@ -373,6 +373,7 @@ export function renderVisualizerPanel(): HTMLElement {
     // 歌詞モーション: 音源があるときだけ重ねる (音源が無いとダミーの時刻になるため)。
     // 設定が変わってから作り直すまでの間は、ひとつ前の歌詞モーションが表示され続ける
     host.lyrics.setMotion(previewMotionNow());
+    host.lyrics.setBlanks(store.lyrics?.timing.blanks);
     applyNotice.update();
     syncSlides();
     host.view = store.view;

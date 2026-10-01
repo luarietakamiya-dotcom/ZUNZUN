@@ -143,6 +143,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
         await LyricMotion.create(lyricReq.lyrics, job.analysis ? buildJizuraAudio(job.analysis, rhythm) : null, { projectSeed: job.seed, width, height, fps, rhythm, palette }),
       );
     }
+    host.lyrics.setBlanks(job.lyrics?.timing.blanks);
     if (signal.aborted) throw abortError();
 
     const videoSource = new CanvasSource(canvas, { codec: 'avc', bitrate: quality });

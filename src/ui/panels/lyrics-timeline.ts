@@ -1,6 +1,7 @@
 import { peakBetween, type Peaks } from '../../core/audio/peaks';
 import { Viewport, type LineTimeSource, type OnsetCandidate, type Section, type SectionKind } from '../../core/lyrics';
 import type { RhythmGrid } from '../../core/rhythm';
+import type { LyricBlank } from '../../core/types';
 import { tr } from '../../core/i18n';
 
 /**
@@ -40,6 +41,9 @@ export interface TimelineData {
   barHeads: readonly number[];
   /** 曲の区切り (歌詞の [サビ] などの見出しから)。波形の段とブロックの段の間に色の帯で出す */
   sections?: readonly Section[];
+  /** 歌詞の空白 (斜線の帯)。selectedBlank = 選んでいる空白の番号 (-1 = なし) */
+  blanks?: readonly LyricBlank[];
+  selectedBlank?: number;
 }
 
 /** 区切りの帯の色と、短い名前 */
@@ -69,6 +73,9 @@ export interface TimelineCallbacks {
   snapBar?(t: number, noSnap: boolean): number;
   /** 今、小節線を動かしてよいか (小節のタップ中などは false) */
   canDragBars?(): boolean;
+  /** 空白を押したとき (選ぶ) / 端や真ん中をドラッグして離したとき (吸着済みの始まり・終わり) */
+  onBlankSelect?(index: number): void;
+  onBlankCommit?(index: number, start: number, end: number): void;
 }
 
 const HEIGHT = 196;
@@ -102,7 +109,7 @@ const BLOCK_STYLE: Record<LineTimeSource, { fill: string; stroke: string; dash: 
   estimate: { fill: 'rgba(154,161,173,0.08)', stroke: 'rgba(154,161,173,0.45)', dash: [4, 3] },
 };
 
-type Hit = { kind: DragKind; line: number } | { kind: 'bar'; bar: number };
+type Hit = { kind: DragKind; line: number } | { kind: 'bar'; bar: number } | { kind: 'blank'; part: 'start' | 'end' | 'move'; blank: number };
 
 interface DragState {
   pointerId: number;
@@ -364,6 +371,41 @@ export class LyricsTimeline {
       g.restore();
     }
 
+    // 歌詞の空白 (斜線の帯。ドラッグ中は見た目だけ動かす)
+    if (d.blanks?.length) {
+      const pv = this.previewBlank();
+      g.font = '11px system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif';
+      d.blanks.forEach((b0, k) => {
+        const b = pv && pv.index === k ? pv : b0;
+        if (b.end < t0 || b.start > t1) return;
+        const x0 = X(b.start);
+        const x1 = X(b.end);
+        const wpx = Math.max(1, x1 - x0);
+        g.save();
+        g.beginPath();
+        g.rect(x0, BLOCK_TOP, wpx, BLOCK_H);
+        g.clip();
+        g.fillStyle = 'rgba(11,12,15,0.75)';
+        g.fillRect(x0, BLOCK_TOP, wpx, BLOCK_H);
+        g.strokeStyle = b0.mode === 'none' ? 'rgba(255,255,255,0.22)' : 'rgba(142,124,195,0.45)';
+        g.lineWidth = 1;
+        for (let x = x0 - BLOCK_H; x < x1; x += 8) {
+          g.beginPath();
+          g.moveTo(x, BLOCK_TOP + BLOCK_H);
+          g.lineTo(x + BLOCK_H, BLOCK_TOP);
+          g.stroke();
+        }
+        g.fillStyle = COLORS.text;
+        g.fillText(b0.mode === 'none' ? tr('空白 (何も出さない)', 'Blank (nothing)') : tr('空白 (間奏の動き)', 'Blank (interlude motion)'), x0 + 6, BLOCK_TOP + BLOCK_H / 2);
+        g.restore();
+        g.strokeStyle = k === d.selectedBlank ? '#ffffff' : 'rgba(255,255,255,0.5)';
+        g.lineWidth = k === d.selectedBlank ? 2 : 1;
+        g.setLineDash([5, 3]);
+        g.strokeRect(x0 + 0.5, BLOCK_TOP + 0.5, wpx - 1, BLOCK_H - 1);
+        g.setLineDash([]);
+      });
+    }
+
     // 再生位置
     const px = X(t);
     if (px >= 0 && px <= w) {
@@ -401,10 +443,20 @@ export class LyricsTimeline {
     this.vp.clamp();
   }
 
+  /** ドラッグ中の空白の見た目 (ドラッグしていなければ null) */
+  private previewBlank(dr: DragState | null = this.drag): { index: number; start: number; end: number } | null {
+    const b = dr?.dragging && dr.hit?.kind === 'blank' ? this.data?.blanks?.[dr.hit.blank] : undefined;
+    if (!dr || !b || dr.hit?.kind !== 'blank') return null;
+    const part = dr.hit.part;
+    if (part === 'start') return { index: dr.hit.blank, start: Math.min(dr.value, b.end - 0.5), end: b.end };
+    if (part === 'end') return { index: dr.hit.blank, start: b.start, end: Math.max(dr.value, b.start + 0.5) };
+    return { index: dr.hit.blank, start: Math.max(0, b.start + dr.value), end: Math.max(0.5, b.end + dr.value) };
+  }
+
   /** ドラッグ中の行の見た目の時刻 */
   private previewTimes(d: TimelineData): { starts: readonly number[]; ends: readonly number[] } {
     const dr = this.drag;
-    if (!dr?.dragging || !dr.hit || dr.hit.kind === 'bar') return { starts: d.starts, ends: d.ends };
+    if (!dr?.dragging || !dr.hit || dr.hit.kind === 'bar' || dr.hit.kind === 'blank') return { starts: d.starts, ends: d.ends };
     const i = dr.hit.line;
     const starts = d.starts.slice();
     const ends = d.ends.slice();
@@ -449,6 +501,18 @@ export class LyricsTimeline {
       if (Math.abs(x - x1) <= edge) return { line: i, kind: 'end' };
       if (x > x0 && x < x1) return { line: i, kind: 'move' };
     }
+    // 歌詞の空白 (行のブロックが無い所)
+    const blanks = d.blanks ?? [];
+    for (let k = blanks.length - 1; k >= 0; k--) {
+      const b = blanks[k]!;
+      const x0 = this.vp.timeToX(b.start);
+      const x1 = this.vp.timeToX(b.end);
+      if (x < x0 - EDGE_PX / 2 || x > x1 + EDGE_PX / 2) continue;
+      const edge = Math.min(EDGE_PX, (x1 - x0) / 3);
+      if (Math.abs(x - x0) <= edge) return { kind: 'blank', part: 'start', blank: k };
+      if (Math.abs(x - x1) <= edge) return { kind: 'blank', part: 'end', blank: k };
+      if (x > x0 && x < x1) return { kind: 'blank', part: 'move', blank: k };
+    }
     return null;
   }
 
@@ -470,7 +534,7 @@ export class LyricsTimeline {
     if (!dr || dr.pointerId !== e.pointerId) {
       const y = e.clientY - this.canvas.getBoundingClientRect().top;
       const hit = this.hitTest(x, y);
-      this.canvas.style.cursor = !hit ? 'default' : hit.kind === 'move' ? 'grab' : 'ew-resize';
+      this.canvas.style.cursor = !hit ? 'default' : hit.kind === 'move' || (hit.kind === 'blank' && hit.part === 'move') ? 'grab' : 'ew-resize';
       return;
     }
     if (!dr.dragging && Math.abs(x - dr.downX) < DRAG_THRESHOLD) return;
@@ -487,6 +551,16 @@ export class LyricsTimeline {
     if (dr.hit.kind === 'bar') {
       const raw = this.vp.xToTime(x);
       dr.value = this.cb.snapBar ? this.cb.snapBar(raw, noSnap) : raw;
+      return;
+    }
+    if (dr.hit.kind === 'blank') {
+      const b = d.blanks?.[dr.hit.blank];
+      if (!b) return;
+      if (dr.hit.part === 'move') {
+        const raw = b.start + (x - dr.downX) / this.vp.pxPerSec;
+        dr.value = this.cb.snap(raw, noSnap) - b.start;
+        this.canvas.style.cursor = 'grabbing';
+      } else dr.value = this.cb.snap(this.vp.xToTime(x), noSnap);
       return;
     }
     const i = dr.hit.line;
@@ -509,8 +583,17 @@ export class LyricsTimeline {
       // 上と同じ
     }
     if (!dr.dragging) {
-      if (dr.hit && dr.hit.kind !== 'bar') this.cb.onSelect(dr.hit.line);
+      if (dr.hit?.kind === 'blank') this.cb.onBlankSelect?.(dr.hit.blank);
+      else if (dr.hit && dr.hit.kind !== 'bar') this.cb.onSelect(dr.hit.line);
       else this.cb.onSeek(Math.max(0, this.vp.xToTime(dr.downX)));
+      return;
+    }
+    if (dr.hit?.kind === 'blank') {
+      const pv = this.previewBlank(dr);
+      if (pv) {
+        this.cb.onBlankSelect?.(pv.index);
+        this.cb.onBlankCommit?.(pv.index, pv.start, pv.end);
+      }
       return;
     }
     if (dr.hit?.kind === 'bar') {

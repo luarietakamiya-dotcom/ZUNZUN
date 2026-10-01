@@ -417,3 +417,5 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 - `ui/panels/lyric-motion.ts`: 歌詞タブから「歌詞の動き（JIZURA）」の欄を移した（スタイル・マイスタイル・つまみ・黒地の見本）。見本の時刻は共通の再生欄の聞こえている位置。
 - `motion-apply.ts` の `previewMotionNow({ build })`: どのタブからも同じ形で歌詞の動きをもらう。**歌詞タブは `build: false`**（作り直さずに変化だけ覚える。作り直しの間は画面が止まり、打ち込み・ドラッグを取りこぼした。E2E で見つかった）。作るのはリリックモーション・ビジュアライザーのタブと「反映」ボタン。
 - 書き出し: 「書き出しを始める」を押した直後に保存の窓（`showSaveFilePicker`）で場所を聞き、終わったらそこへ書き込む（終わってからでは、ブラウザが保存の窓を開かせない）。窓が無いブラウザは終わったら自動でダウンロード。E2E `export-save.spec.ts`（窓は差し替え）。
+- **歌詞の空白（済）**: ARCHITECTURE「歌詞の空白」。`blanks.ts`（`normalizeBlanks` / `blankAlpha` / `blankFromPlayhead`）・`LyricLayer.setBlanks`・`lyrics-timeline.ts`（斜線の帯、`Hit` の `blank`）・歌詞タブの「再生位置から空白を作る」。E2E は `lyrics-apply.spec.ts` の「歌詞の空白」。
+- **次（計画 C）**: 「背景と素材」タブに、映像のプレビューを固定で置く（グリーンバックの素材をプレビューを見ながら調整したい）。

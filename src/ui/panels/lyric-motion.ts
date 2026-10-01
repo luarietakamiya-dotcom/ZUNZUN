@@ -1,6 +1,7 @@
 import { tr } from '../../core/i18n';
 import { customFromStyle, jizuraStyles, loadJizura, type JizuraApi } from '../../core/lyrics/jizura-adapter';
 import { previewMotionProvider } from '../../core/lyrics/motion-provider';
+import { blankAlpha } from '../../core/lyrics/blanks';
 import { store } from '../../core/store';
 import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsMotion, type LyricsSettings } from '../../core/types';
 import { createStyleEditor } from './lyrics-style-editor';
@@ -185,10 +186,18 @@ export function renderLyricMotionPanel(): HTMLElement {
     motionCtx.fillRect(0, 0, motionCanvas.width, motionCanvas.height);
     // JIZURA は描く前に canvas を消すので、黒地は別の canvas に重ねずに「描いたあとに下へ敷く」
     if (motion) {
-      motion.render(motionCtx, t, { fast: true });
-      motionCtx.globalCompositeOperation = 'destination-over';
-      motionCtx.fillRect(0, 0, motionCanvas.width, motionCanvas.height);
-      motionCtx.globalCompositeOperation = 'source-over';
+      // 歌詞の空白 (何も出さない時間) は描かない。端は黒を重ねてなめらかに消す
+      const a = blankAlpha(store.lyrics?.timing.blanks, t);
+      if (a > 0.001) {
+        motion.render(motionCtx, t, { fast: true });
+        motionCtx.globalCompositeOperation = 'destination-over';
+        motionCtx.fillRect(0, 0, motionCanvas.width, motionCanvas.height);
+        motionCtx.globalCompositeOperation = 'source-over';
+        if (a < 1) {
+          motionCtx.fillStyle = `rgba(0,0,0,${(1 - a).toFixed(3)})`;
+          motionCtx.fillRect(0, 0, motionCanvas.width, motionCanvas.height);
+        }
+      }
     }
   }
 

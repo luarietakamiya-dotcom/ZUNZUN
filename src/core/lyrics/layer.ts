@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type { LyricBlank } from '../types';
+import { blankAlpha } from './blanks';
 import type { LyricMotion } from './jizura-adapter';
 
 /**
@@ -31,6 +33,9 @@ export class LyricLayer {
   private height = 1;
   private readonly resolutionScale: number;
   private readonly fast: boolean;
+  /** 歌詞の濃さ (レイヤーの設定) と、歌詞の空白 (何も出さない時間) */
+  private baseOpacity = 1;
+  private blanks: readonly LyricBlank[] = [];
 
   constructor(opts: LyricLayerOptions = {}) {
     this.resolutionScale = opts.resolutionScale ?? 1;
@@ -46,7 +51,13 @@ export class LyricLayer {
   /** 歌詞の濃さ (0..1) */
   setOpacity(opacity: number): void {
     const o = Math.max(0, Math.min(1, Number.isFinite(opacity) ? opacity : 1));
+    this.baseOpacity = o;
     this.material.opacity = o;
+  }
+
+  /** 歌詞の空白 (core/lyrics/blanks.ts)。何も出さない空白の間は描かない (端はなめらかに消える・戻る) */
+  setBlanks(blanks: readonly LyricBlank[] | undefined): void {
+    this.blanks = blanks ?? [];
   }
 
   get currentMotion(): LyricMotion | null {
@@ -69,6 +80,9 @@ export class LyricLayer {
   /** 時刻 t のコマを描いて重ねる。呼び出し側で canvas を持つ renderer を渡す (オーバーレイと同じく autoClear を止めて描く) */
   render(renderer: THREE.WebGLRenderer, t: number): void {
     if (!this.motion || !this.ctx || !this.texture) return;
+    const a = blankAlpha(this.blanks, t);
+    if (a <= 0.001) return;
+    this.material.opacity = this.baseOpacity * a;
     this.motion.render(this.ctx, t, { fast: this.fast });
     this.texture.needsUpdate = true;
     const prevAutoClear = renderer.autoClear;

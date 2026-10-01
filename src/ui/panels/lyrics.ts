@@ -24,7 +24,8 @@ import {
 } from '../../core/lyrics';
 import { MAX_LYRICS_LENGTH } from '../../core/project/validate';
 import { store } from '../../core/store';
-import { defaultLyrics, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
+import { defaultLyrics, type LyricBlank, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
+import { blankFromPlayhead, normalizeBlanks } from '../../core/lyrics/blanks';
 import { lyricSyncTargets } from '../../core/lyrics/stem';
 import { createRhythmEditor } from './lyrics-rhythm';
 import { activeStem, createStemCard } from './lyrics-stem';
@@ -51,6 +52,8 @@ type TimingSnapshot = Pick<LyricsTiming, 'lineTimes' | 'lineEnds'>;
 const EMPTY_TIMING: TimingSnapshot = { lineTimes: {}, lineEnds: {} };
 const history = new History<TimingSnapshot>(EMPTY_TIMING);
 let selectedLine = 0;
+/** 選んでいる歌詞の空白 (-1 = なし。タブをまたいで残す) */
+let selectedBlank = -1;
 /**
  * 'tap' = タップで合わせる (再生中の Space で記録、プレビューは次の行がいちばん大きい)。
  * 'check' = 確認する (Space は再生/一時停止だけ、プレビューは今の行がいちばん大きい、行を押すと 1 秒前から再生)。
@@ -350,10 +353,45 @@ export function renderLyricsPanel(): HTMLElement {
     snap: (t, shift) => snapTime(t, snapTargets(), currentLyrics().timing.snapWindowMs / 1000, timelineSnap !== shift).t,
     // 小節線のドラッグ (R2 の残り)。小節の頭の書き換え・吸着はリズム欄に任せる
     onBarDragCommit: (i, t) => rhythmEditor.moveBar(i, t),
+    onBlankSelect: (k) => {
+      selectedBlank = k;
+      refresh();
+    },
+    onBlankCommit: (k, start, end) => {
+      const blanks = [...(currentLyrics().timing.blanks ?? [])];
+      if (!blanks[k]) return;
+      blanks[k] = { ...blanks[k]!, start, end };
+      setBlanks(blanks);
+    },
     snapBar: (t, noSnap) => rhythmEditor.snapBar(t, noSnap),
     canDragBars: () => tap == null && !rhythmEditor.isTapping,
   });
   const loopBtn = button(tr('選んだ行をくり返し聞く', 'Loop the selected line'), () => toggleLoop(), 'tab-button lyrics-toggle');
+  // 歌詞の空白 (何も出さない / 間奏の動き)。core/lyrics/blanks.ts
+  const blankBtn = button(tr('再生位置から空白を作る', 'Make a blank from the playhead'), () => makeBlank());
+  blankBtn.dataset.lyrics = 'blank-make';
+  blankBtn.title = tr('再生位置から次の行の始まりまでを空白にします (行の途中なら、その行はそこで終わります)', 'Makes a blank from the playhead to the next line (a line in progress ends there)');
+  const blankMode = el('select', { className: 'select' });
+  blankMode.dataset.lyrics = 'blank-mode';
+  for (const [v, label] of [
+    ['none', tr('何も出さない', 'Show nothing')],
+    ['interlude', tr('間奏の動き (飾り・効果だけ)', 'Interlude motion (decorations only)')],
+  ] as const) {
+    const o = el('option', { textContent: label });
+    o.value = v;
+    blankMode.appendChild(o);
+  }
+  blankMode.addEventListener('change', () => {
+    const blanks = [...(currentLyrics().timing.blanks ?? [])];
+    if (!blanks[selectedBlank]) return;
+    blanks[selectedBlank] = { ...blanks[selectedBlank]!, mode: blankMode.value === 'interlude' ? 'interlude' : 'none' };
+    setBlanks(blanks);
+  });
+  const blankDelBtn = button(tr('この空白を消す (Delete)', 'Remove this blank (Delete)'), () => removeBlank());
+  blankDelBtn.dataset.lyrics = 'blank-delete';
+  const blankInfo = el('span', { className: 'param-label' });
+  const blankRow = el('div', { className: 'row-gap lyrics-row-wrap' }, [blankBtn, blankInfo, blankMode, blankDelBtn]);
+  blankRow.dataset.lyrics = 'blanks';
   const snapCheck = el('input');
   snapCheck.type = 'checkbox';
   snapCheck.checked = timelineSnap;
@@ -385,6 +423,7 @@ export function renderLyricsPanel(): HTMLElement {
     el('h3', { className: 'lyrics-h3', textContent: tr('タイムライン (細かい調整)', 'Timeline (fine tuning)') }),
     timeline.element,
     applyNotices[0]!.element,
+    blankRow,
     el('div', { className: 'row-gap lyrics-row-wrap' }, [snapLabel]),
     el('div', { className: 'row-gap lyrics-row-wrap' }, [
       loopBtn,
@@ -531,7 +570,17 @@ export function renderLyricsPanel(): HTMLElement {
       rhythm: rhythmEditor.grid(),
       barHeads: rhythmEditor.barHeads(),
       sections: view.sections,
+      blanks: lyrics.timing.blanks ?? [],
+      selectedBlank,
     });
+    const blank = (lyrics.timing.blanks ?? [])[selectedBlank];
+    if (!blank) selectedBlank = -1;
+    blankMode.hidden = !blank;
+    blankDelBtn.hidden = !blank;
+    blankBtn.disabled = !store.audio.isLoaded || tap != null;
+    blankInfo.textContent = blank
+      ? tr(`選んだ空白: ${formatTime(blank.start)} 〜 ${formatTime(blank.end)}`, `Selected blank: ${formatTime(blank.start)} – ${formatTime(blank.end)}`)
+      : tr('空白の間は、歌詞の動きを出しません (長い間奏など)。端をドラッグして長さを変えられます', 'No lyric motion during a blank (long interludes etc.). Drag its edges to resize');
     shownLine = -2; // 次のフレームでプレビューを描き直す
   }
 
@@ -838,9 +887,49 @@ export function renderLyricsPanel(): HTMLElement {
     refresh();
   }
 
+  /** 歌詞の空白を書き換える (並べ直し・重なりはまとめる)。歌詞の動きの作り直しは要らない (描くかどうかだけ) */
+  function setBlanks(blanks: LyricBlank[]): void {
+    const dur = store.audio.isLoaded ? store.audio.duration : Infinity;
+    const sel = blanks[selectedBlank];
+    const next = normalizeBlanks(blanks, dur);
+    store.updateLyricsTiming({ blanks: next });
+    selectedBlank = sel ? next.findIndex((b) => b.start <= sel.start + 1e-6 && b.end >= sel.end - 1e-6) : -1;
+    refresh();
+  }
+
+  /** 再生位置から空白を作る。行の途中なら、その行はそこで終わらせる (取り消しの履歴にも積む) */
+  function makeBlank(): void {
+    if (!store.audio.isLoaded) return;
+    const t = store.audio.heardTime;
+    const made = blankFromPlayhead(t, view.times.starts, view.times.ends, store.audio.duration);
+    if (!made) {
+      blankInfo.textContent = tr('ここには空白を作れません (次の行まで 0.5 秒もありません)', 'Cannot make a blank here (less than 0.5 s to the next line)');
+      return;
+    }
+    if (made.cut) {
+      const cut = made.cut;
+      applyEdit((c, tm) => moveLineEnd(c, tm, cut.line, cut.end));
+    }
+    const blanks = [...(currentLyrics().timing.blanks ?? []), made.blank];
+    selectedBlank = blanks.length - 1;
+    setBlanks(blanks);
+  }
+
+  function removeBlank(): void {
+    const blanks = [...(currentLyrics().timing.blanks ?? [])];
+    if (!blanks[selectedBlank]) return;
+    blanks.splice(selectedBlank, 1);
+    selectedBlank = -1;
+    setBlanks(blanks);
+  }
+
   function selectLine(i: number, playFromBefore: boolean): void {
     if (i < 0 || i >= view.parsed.lines.length) return;
     selectedLine = i;
+    if (selectedBlank >= 0) {
+      selectedBlank = -1;
+      refresh();
+    }
     highlightRows(shownLine);
     refreshControls();
     timeline.reveal(view.times.starts[i]!);
@@ -952,6 +1041,11 @@ export function renderLyricsPanel(): HTMLElement {
     if (e.key === 'Escape' && store.audio.isPlaying) {
       e.preventDefault();
       store.audio.pause();
+      return;
+    }
+    if (!mod && e.key === 'Delete' && selectedBlank >= 0) {
+      e.preventDefault();
+      removeBlank();
       return;
     }
     if (!mod && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && view.parsed.lines.length > 0) {

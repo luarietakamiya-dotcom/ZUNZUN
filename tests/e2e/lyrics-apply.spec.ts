@@ -206,3 +206,32 @@ test('はじめかた: 歌詞タブで曲を選び、歌詞を入れ、「1 行�
   await expect(page.locator('.lyrics-timeline-canvas')).toBeInViewport();
   await page.keyboard.press('Escape');
 });
+
+test('歌詞の空白: 再生位置から作ると、次の行の始まりまでが空白になり、行はそこで終わる。種類を選べて、Delete で消せる', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('input[type="file"][accept="audio/*"]').setInputFiles({ name: 'test.wav', mimeType: 'audio/wav', buffer: testWav() });
+  await expect.poll(() => page.evaluate(async () => (await import('/src/core/store.ts')).store.audio.isLoaded)).toBe(true);
+  await page.evaluate(async () => {
+    const { store } = await import('/src/core/store.ts');
+    const { defaultLyrics } = await import('/src/core/types.ts');
+    store.setLyrics({ ...defaultLyrics(), text: 'はじまりの歌\nつぎの歌', timing: { ...defaultLyrics().timing, lineTimes: { 0: 0.5, 1: 4.5 } } });
+    store.audio.seek(2);
+  });
+  await page.click('button[data-panel="lyrics"]');
+  await page.locator('[data-lyrics="blank-make"]').click();
+  const timing = () => page.evaluate(async () => (await import('/src/core/store.ts')).store.lyrics!.timing);
+  await expect.poll(async () => (await timing()).blanks?.length ?? 0).toBe(1);
+  const t1 = await timing();
+  expect(t1.blanks![0]!.start).toBeCloseTo(2, 1);
+  expect(t1.blanks![0]!.end).toBeCloseTo(4.5, 5);
+  expect(t1.blanks![0]!.mode).toBe('none');
+  // 1 行目は空白の始まりで終わる
+  expect(t1.lineEnds['0']).toBeCloseTo(2, 1);
+  // 種類を「間奏の動き」に
+  await page.locator('[data-lyrics="blank-mode"]').selectOption('interlude');
+  await expect.poll(async () => (await timing()).blanks![0]!.mode).toBe('interlude');
+  // Delete で消す
+  await page.locator('[data-lyrics="blank-mode"]').blur();
+  await page.keyboard.press('Delete');
+  await expect.poll(async () => (await timing()).blanks?.length ?? 0).toBe(0);
+});
