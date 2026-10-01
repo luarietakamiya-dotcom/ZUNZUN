@@ -153,6 +153,10 @@ const DETAILS: Block[] = [
       },
       { ja: 'リズム (変拍子): 5 拍子・7 拍子の曲は、小節の頭を叩いて決められます', en: 'Rhythm (odd meters): for 5/4, 7/8 etc., tap the bar heads' },
       { ja: '歌詞の動き: 「リリックモーション」タブで、スタイルと、動きの大きさ・飾りの量・区切りの細かさを選びます。「マイスタイル」で色や書体も変えられます', en: 'Lyric motion: in the Lyric motion tab, choose a style, motion size, decoration and cut density. "My style" changes colors and fonts' },
+      {
+        ja: '区切りで動きを変える: 歌詞に [サビ] [Intro] などの見出しがあると、サビは激しく・イントロやアウトロは静かに動きます。区切りごとの強さは「リリックモーション」タブで選べます',
+        en: 'Motion by section: with headings like [Chorus] or [Intro], the chorus moves harder and the intro / outro calmer. Choose the strength per section in the Lyric motion tab',
+      },
     ],
   },
   {

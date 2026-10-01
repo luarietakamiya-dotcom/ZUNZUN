@@ -7,6 +7,9 @@ import { applyMotionPack, packStyles, registerMotionPacks } from './packs';
 import type { PackJ, PackPalette } from './packs/types';
 import { lyricsForEngine } from './parse';
 import { applyManualEnds } from './timing';
+import { levelFx, mergeSectionPlans, sectionLevels, type MotionFx } from './section-motion';
+import { buildLyricsView } from './view';
+import type { MotionLevel } from '../types';
 import { tr } from '../i18n';
 
 /**
@@ -54,6 +57,9 @@ export interface JizuraPlan {
   style: { schemes: JizuraScheme[] };
   /** J.plan が audio.beats を複製して持つビート (行の中のカットの切れ目の吸着・拍の脈動・演出の env.beat に使う) */
   beats?: number[];
+  /** 動きの大きさなど (描くときにも読む。区切りで動きを変えるときは LyricMotion.render が差し替える) */
+  fx?: Record<string, unknown>;
+  events?: { t: number }[];
 }
 
 export interface JizuraRenderer {
@@ -582,7 +588,15 @@ export class LyricMotion {
   private constructor(
     readonly plan: JizuraPlan,
     private readonly renderer: JizuraRenderer,
+    /** 区切りごとの描くときの fx (区切りで動きを変えないときは null) */
+    private readonly fxSpans: { start: number; end: number; fx: Record<string, unknown> }[] | null = null,
   ) {}
+
+  /** 区切りで動きを変えているか (テスト・表示用) */
+  get sectionLevels(): { start: number; end: number; level: MotionLevel }[] | null {
+    return this.levelSpans;
+  }
+  private levelSpans: { start: number; end: number; level: MotionLevel }[] | null = null;
 
   static async create(lyrics: LyricsSettings, audio: JizuraAudio | null, opts: LyricMotionOptions): Promise<LyricMotion> {
     const J = await loadJizura();
@@ -595,7 +609,30 @@ export class LyricMotion {
       oddMeter: usesOddMeterPack(lyrics.motion, opts.rhythm),
     });
     applyMotionPack(project, lyrics.motion, J as unknown as PackJ, { palette: opts.palette ?? null });
-    const plan = attachRhythm(keepLightTextSchemes(J.plan(project, audio), (c) => J.lum(c)), opts.rhythm ?? null);
+    const makePlan = (fx?: MotionFx): JizuraPlan => {
+      const p = fx ? { ...project, fx: { ...(project.fx as Record<string, unknown>), ...fx } } : project;
+      return attachRhythm(keepLightTextSchemes(J.plan(p, audio), (c) => J.lum(c)), opts.rhythm ?? null);
+    };
+    // 曲の区切り (歌詞の [サビ] などの見出し) ごとに動きの強さを変える (core/lyrics/section-motion.ts)。
+    // 強さごとに段取りを作り、区切りごとにその強さのカットと効果をつなぐ。描くときも区切りの強さの fx を渡す
+    const sections = buildLyricsView(lyrics, audio?.duration).sections;
+    const spans = sectionLevels(sections, lyrics.motion.sections);
+    let plan: JizuraPlan;
+    let fxSpans: { start: number; end: number; fx: Record<string, unknown> }[] | null = null;
+    if (spans) {
+      const pfx = project.fx as Record<string, number>;
+      const base: MotionFx = { motion: pfx.motion ?? lyrics.motion.motion, decor: pfx.decor ?? lyrics.motion.decor, density: pfx.density ?? lyrics.motion.density };
+      const used = new Set(spans.map((sp) => sp.level));
+      const normal = makePlan(levelFx(base, 'normal'));
+      const plans = {
+        normal,
+        calm: used.has('calm') ? makePlan(levelFx(base, 'calm')) : normal,
+        intense: used.has('intense') ? makePlan(levelFx(base, 'intense')) : normal,
+      } as Record<MotionLevel, JizuraPlan & { cuts: { start: number; line?: number }[]; events: { t: number }[] }>;
+      plan = mergeSectionPlans(plans, spans);
+      const planFx = (plan.fx ?? {}) as Record<string, unknown>;
+      fxSpans = spans.map((sp) => ({ start: sp.start, end: sp.end, fx: { ...planFx, ...levelFx(base, sp.level) } }));
+    } else plan = makePlan();
     await prepareFonts(J, plan, lyricsForEngine(lyrics.text, lyrics.source) + HUD_CHARS);
     // 本番の Renderer は書体の準備が終わってから作る (内部のキャッシュに仮の書体の文字を残さない)
     const renderer = withSeededRandom(deriveSeed(seed, 'renderer'), () => {
@@ -604,12 +641,19 @@ export class LyricMotion {
       return r;
     });
     resetLayerCanvas(J, opts.width, opts.height);
-    return new LyricMotion(plan, renderer);
+    const motion = new LyricMotion(plan, renderer, fxSpans);
+    motion.levelSpans = spans;
+    return motion;
   }
 
   /** 時刻 t のコマを ctx の canvas いっぱいに透過で描く。fast = プレビュー向けの軽い描画 (ぼかし等を省く) */
   render(ctx: CanvasRenderingContext2D, t: number, opts: { fast?: boolean } = {}): void {
     const scale = ctx.canvas.width / this.plan.W;
+    if (this.fxSpans) {
+      // 今いる区切りの強さで描く (JIZURA は描くときに plan.fx を読む)
+      const sp = this.fxSpans.find((s) => t >= s.start && t < s.end) ?? this.fxSpans[this.fxSpans.length - 1];
+      if (sp) this.plan.fx = sp.fx;
+    }
     this.renderer.frame(ctx, this.plan, Math.max(0, t), { scale, transparent: true, fast: !!opts.fast });
   }
 }

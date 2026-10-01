@@ -25,7 +25,10 @@ import {
   type BackgroundSlide,
   type BackgroundSlides,
   type LyricBlank,
+  type LyricsSectionMotion,
+  type MotionLevel,
 } from '../types';
+import { SECTION_KINDS } from '../lyrics/section-motion';
 import { MAX_BLANKS, normalizeBlanks } from '../lyrics/blanks';
 import { normalizeView } from '../render/view';
 import { normalizeComposition } from '../render/composition';
@@ -221,10 +224,22 @@ function sanitizeLyricsMotion(raw: unknown): LyricsMotion {
     decor: unit(raw.decor, base.decor),
     density: unit(raw.density, base.density),
     custom: sanitizeCustomStyle(raw.custom),
+    ...(isPlainObject(raw.sections) ? { sections: sanitizeSectionMotion(raw.sections) } : {}),
   };
 }
 
-/** 背景の一枚絵・動画。ファイル名と sha256 (64 桁の 16 進) が無ければ使わない。値は範囲に収め、知らない選択肢は既定に戻す */
+/** 区切りごとの動きの強さ。知らない区切りの種類・強さは捨てる */
+function sanitizeSectionMotion(raw: Record<string, unknown>): LyricsSectionMotion {
+  const levels: Partial<Record<string, MotionLevel>> = {};
+  if (isPlainObject(raw.levels)) {
+    for (const k of SECTION_KINDS) {
+      const v = raw.levels[k];
+      if (v === 'calm' || v === 'normal' || v === 'intense') levels[k] = v;
+    }
+  }
+  return { enabled: typeof raw.enabled === 'boolean' ? raw.enabled : true, levels };
+}
+
 /** 歌詞の空白。始まり・終わりが数で、0.5 秒以上のものだけ (重なりはまとめる) */
 function sanitizeBlanks(raw: unknown[]): LyricBlank[] {
   const items: LyricBlank[] = [];
@@ -235,6 +250,7 @@ function sanitizeBlanks(raw: unknown[]): LyricBlank[] {
   return normalizeBlanks(items);
 }
 
+/** 背景の一枚絵・動画。ファイル名と sha256 (64 桁の 16 進) が無ければ使わない。値は範囲に収め、知らない選択肢は既定に戻す */
 function sanitizeBackground(raw: unknown): BackgroundSettings | null {
   if (!isPlainObject(raw)) return null;
   if (typeof raw.ref !== 'string' || raw.ref === '' || typeof raw.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(raw.sha256)) return null;

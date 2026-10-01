@@ -422,3 +422,9 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
   - プレビューは `ui/panels/live-preview.ts` の `createLivePreview` にまとめ、**ビジュアライザータブも同じものを使う**（前は visualizer.ts の中にあった）。設定は毎フレーム store から読み、ファイル（背景・スライドショーの画像・素材・重ねる画像）が変わったときだけ読み込み直す。暗さ・収め方などは `BackgroundCompositor.updateSettings`、重ねる画像の位置などは `OverlayManager.setConfigs` で読み直さずに当てる（ぼかしは読み込むときにかけるので読み直す）。ビジュアライザーの種類は store の `presetId` に合わせる。
   - `OverlayManager.loadFrom` は足していくだけなので、読み直す前に `clear()`。
   - E2E `tests/e2e/overlay-preview.spec.ts`（下へ動かしてもプレビューが画面の中、グリーンバックの素材が映り「自動で合わせる」で緑が透ける）。
+
+### 2026-10-01 ③ 歌詞の動きを区切りで変える（ARCHITECTURE「曲の区切りと、背景のスライドショー」③）
+- `core/lyrics/section-motion.ts`（強さ 3 段階・既定・`levelFx`・`sectionLevels`・`mergeSectionPlans`）、`jizura-adapter.ts`（強さ別の段取りを作ってつなぐ、描くときに `plan.fx` を切り替える。`LyricMotion.sectionLevels`）、`types.ts` の `LyricsSectionMotion`、`validate.ts` の `sanitizeSectionMotion`、リリックモーションタブの「区切りで動きを変える」欄（`data-motion="sections-on"`、`data-motion-level=<種類>`）。
+- テスト: `section-motion.test.ts`（Vitest）、E2E `tests/e2e/section-motion.spec.ts`（A メロ 4 行・サビ 4 行で、サビの飾りが多い 19 → 30、同じ設定なら同じ段取り、外せば今までどおり）。
+- **ハマったこと**: 最初は「サビの方がカットが多い」で確かめようとしたが、JIZURA は行のカットの数を言葉の区切りの数で頭打ちにするので、短い行では同じ数になった。飾りの数で確かめる。
+- 確かめていないこと: 実際の曲での見た目、書き出した MP4。

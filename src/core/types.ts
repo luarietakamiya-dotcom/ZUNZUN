@@ -404,6 +404,20 @@ export interface LyricsMotion {
   density: number;
   /** オリジナルのスタイル (L7)。style が CUSTOM_STYLE_KEY のときに使う。作っていなければ null */
   custom: LyricsCustomStyle | null;
+  /**
+   * 曲の区切り (歌詞の [サビ] などの見出し) ごとに動きの強さを変える (core/lyrics/section-motion.ts)。
+   * 古いプロジェクトには無い (無いときは変える。区切りの見出しが無い歌詞では何も変わらない)
+   */
+  sections?: LyricsSectionMotion;
+}
+
+/** 動きの強さ: 静か / ふつう / 激しい */
+export type MotionLevel = 'calm' | 'normal' | 'intense';
+
+export interface LyricsSectionMotion {
+  enabled: boolean;
+  /** 区切りの種類 (intro / verse / prechorus / chorus / bridge / interlude / outro / other) ごとの強さ。無い種類は既定 */
+  levels: Partial<Record<string, MotionLevel>>;
 }
 
 /** オリジナルのスタイルを選んでいるときの LyricsMotion.style の値 */

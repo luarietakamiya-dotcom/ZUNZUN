@@ -42,9 +42,16 @@ test('用意された背景: サムネイルを押すと背景になり、プレ
   await expect(bgCard(page)).toContainText('"Speakers and gear rack"');
   await expect(page.locator('.library-thumb[data-library="speaker-rack"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.library-thumb[data-library="stage-lights"]')).toHaveAttribute('aria-pressed', 'false');
-  const after = await previewMean(page);
-  const diff = after.reduce((s, v, i) => s + Math.abs(v - before[i]!), 0);
-  expect(diff, `before ${before} after ${after}`).toBeGreaterThan(10);
+  // 背景の読み込みは非同期なので、混んでいるときは 1 回目に間に合わないことがある。差が出るまで測り直す (基準は同じ)
+  await expect
+    .poll(
+      async () => {
+        const after = await previewMean(page);
+        return after.reduce((s, v, i) => s + Math.abs(v - before[i]!), 0);
+      },
+      { timeout: 30_000, intervals: [500, 1000, 2000] },
+    )
+    .toBeGreaterThan(10);
 });
 
 test('用意された背景を使うプロジェクトを開くと、選び直さなくても背景が読み込まれる', async ({ page }) => {

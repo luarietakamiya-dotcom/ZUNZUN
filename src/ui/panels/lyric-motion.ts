@@ -3,7 +3,10 @@ import { customFromStyle, jizuraStyles, loadJizura, type JizuraApi } from '../..
 import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { blankAlpha } from '../../core/lyrics/blanks';
 import { store } from '../../core/store';
-import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsMotion, type LyricsSettings } from '../../core/types';
+import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsMotion, type LyricsSectionMotion, type LyricsSettings, type MotionLevel } from '../../core/types';
+import { defaultSectionMotion, levelOf, SECTION_KINDS } from '../../core/lyrics/section-motion';
+import type { SectionKind } from '../../core/lyrics/sections';
+import { buildLyricsView } from '../../core/lyrics/view';
 import { createStyleEditor } from './lyrics-style-editor';
 import { createMotionApplyNotice, previewMotionNow } from './motion-apply';
 
@@ -107,6 +110,57 @@ export function renderLyricMotionPanel(): HTMLElement {
     const baseKey = m.style !== CUSTOM_STYLE_KEY && jz.STYLES[m.style] ? m.style : 'noir';
     updateMotion({ style: CUSTOM_STYLE_KEY, custom: customFromStyle(baseKey, jz.STYLES[baseKey]!, (c) => jz!.lum(c)) });
   }
+  // 曲の区切りで動きを変える (core/lyrics/section-motion.ts)
+  const KIND_LABEL: Record<SectionKind, string> = {
+    intro: tr('イントロ', 'Intro'),
+    verse: tr('Aメロ', 'Verse'),
+    prechorus: tr('Bメロ', 'Pre-chorus'),
+    chorus: tr('サビ', 'Chorus'),
+    bridge: tr('Cメロ', 'Bridge'),
+    interlude: tr('間奏', 'Interlude'),
+    outro: tr('アウトロ', 'Outro'),
+    other: tr('その他', 'Other'),
+  };
+  const sectionsOn = el('input');
+  sectionsOn.type = 'checkbox';
+  sectionsOn.dataset.motion = 'sections-on';
+  const sectionSelects = new Map<SectionKind, HTMLSelectElement>();
+  const updateSections = (patch: Partial<LyricsSectionMotion>): void => {
+    const cur = currentLyrics().motion.sections ?? defaultSectionMotion();
+    updateMotion({ sections: { ...cur, ...patch, levels: { ...cur.levels, ...(patch.levels ?? {}) } } });
+  };
+  sectionsOn.addEventListener('change', () => updateSections({ enabled: sectionsOn.checked }));
+  const sectionGrid = el('div', { className: 'param-grid' });
+  for (const kind of SECTION_KINDS) {
+    const sel = el('select', { className: 'select' });
+    sel.dataset.motionLevel = kind;
+    for (const [v, label] of [
+      ['calm', tr('静か', 'Calm')],
+      ['normal', tr('ふつう', 'Normal')],
+      ['intense', tr('激しい', 'Intense')],
+    ] as const) {
+      const o = el('option', { textContent: label });
+      o.value = v;
+      sel.appendChild(o);
+    }
+    sel.addEventListener('change', () => updateSections({ levels: { [kind]: sel.value as MotionLevel } }));
+    sectionSelects.set(kind, sel);
+    sectionGrid.appendChild(el('label', { className: 'param-row' }, [el('span', { className: 'param-label', textContent: KIND_LABEL[kind] }), sel]));
+  }
+  const sectionNote = el('span', { className: 'param-help' });
+  const sectionCard = el('div', { className: 'lyrics-card' }, [
+    el('h3', { className: 'lyrics-h3', textContent: tr('曲の区切りで動きを変える', 'Change the motion by song section') }),
+    el('p', {
+      className: 'lyrics-help',
+      textContent: tr(
+        '歌詞に [イントロ] [サビ] などの見出しがあると、区切りごとに動きの強さを変えます (静か = 動き・飾りが少なく区切りも粗い、激しい = 動き・飾り・区切りの細かさを上げる。基準は上のつまみ)。変えると歌詞の動きを作り直すので、少し時間がかかります。',
+        'With headings like [Intro] [Chorus] in the lyrics, the motion strength changes per section (Calm = less motion and decoration, coarser cuts; Intense = more of everything; based on the sliders above). Changing it rebuilds the lyric motion, which takes a moment.',
+      ),
+    }),
+    el('label', { className: 'row-gap param-label' }, [sectionsOn, tr('曲の区切りで動きを変える', 'Change the motion by song section')]),
+    sectionGrid,
+    sectionNote,
+  ]);
   const noLyrics = el('div', { className: 'placeholder-card' });
   const motionCard = el('div', { className: 'lyrics-card' }, [
     el('label', { className: 'row-gap param-label' }, [motionEnabled, tr('ビジュアライザーの上に歌詞の動きを重ねる', 'Show lyric motion over the visuals')]),
@@ -116,7 +170,7 @@ export function renderLyricMotionPanel(): HTMLElement {
     applyNotice.element,
     motionCanvas,
   ]);
-  root.append(noLyrics, motionCard);
+  root.append(noLyrics, motionCard, sectionCard);
 
   /** スタイルの一覧は JIZURA を読み込んでから埋める (読み込むまでは今のスタイルだけ出す) */
   let styleOptions: [string, string][] | null = null;
@@ -161,6 +215,18 @@ export function renderLyricMotionPanel(): HTMLElement {
       row.label.textContent = `${def.label}: ${m[def.key].toFixed(2)}`;
     }
     for (const c of [styleSelect, ...[...motionInputs.values()].map((r) => r.input)]) c.disabled = !m.enabled;
+    const sm = m.sections ?? defaultSectionMotion();
+    sectionsOn.checked = sm.enabled;
+    sectionsOn.disabled = !m.enabled;
+    for (const [kind, sel] of sectionSelects) {
+      sel.value = levelOf(sm, kind);
+      sel.disabled = !m.enabled || !sm.enabled;
+    }
+    const kinds = new Set(buildLyricsView(currentLyrics(), store.audio.isLoaded ? store.audio.duration : undefined).sections.map((x) => x.kind));
+    sectionNote.textContent =
+      kinds.size === 0
+        ? tr('今の歌詞には区切りの見出しがないので、曲全体が同じ強さです。', 'The current lyrics have no section headings, so the whole song uses one strength.')
+        : tr(`今の歌詞の区切り: ${[...kinds].map((k) => KIND_LABEL[k]).join('・')}`, `Sections in the current lyrics: ${[...kinds].map((k) => KIND_LABEL[k]).join(', ')}`);
     const hasText = currentLyrics().text.trim().length > 0;
     noLyrics.hidden = hasText;
     noLyrics.textContent = tr('まだ歌詞がありません。「歌詞」タブで歌詞を入れると、ここで動きを決められます。', 'No lyrics yet. Enter them in the Lyrics tab to choose how they move here.');
