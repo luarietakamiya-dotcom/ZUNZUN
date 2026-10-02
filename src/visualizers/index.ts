@@ -1,6 +1,7 @@
 import { visualizerRegistry } from '../core/visualizer/registry';
 import { debugBarsModule } from './_debug';
 import { cityScrollModule } from './city-scroll';
+import { cyberSpaceModule } from './cyber-space';
 import { liveStageModule } from './live-stage';
 import { milkyWayModule } from './milky-way';
 import { photoMotionModule } from './photo-motion';
@@ -18,6 +19,7 @@ visualizerRegistry.register(liveStageModule);
 visualizerRegistry.register(speakerRackModule);
 visualizerRegistry.register(photoMotionModule);
 visualizerRegistry.register(cityScrollModule);
+visualizerRegistry.register(cyberSpaceModule);
 visualizerRegistry.register(debugBarsModule);
 
 export { visualizerRegistry };

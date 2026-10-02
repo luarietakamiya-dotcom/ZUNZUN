@@ -177,6 +177,7 @@ const DETAILS: Block[] = [
       { ja: 'Speaker Rack: スピーカーと機材ラックの 3D。コーンが低音で動き、メーターが振れます', en: 'Speaker Rack: 3D speakers and a gear rack. Cones move with the bass, meters swing' },
       { ja: '写真に動き: 写真のスピーカーのコーンや明かりを音で動かします', en: 'Photo Motion: brings the speakers and lights in a photo to life with the music' },
       { ja: '流れる街並み: 横長の街の絵を左か右へ流し続けます。速さ・ぼかし・きらめき・舞うもの (花びら・雪・木の葉・光の粒・紙ふぶき) を選べます', en: 'City Scroll: endlessly scrolls a wide town picture left or right. Choose speed, blur, sparkle and falling things (petals, snow, leaves, light motes, confetti)' },
+      { ja: 'サイバー空間: ネオンの空間の絵を音で光らせます。拍ごとに奥から光の波、低音で奥へ寄り、光の線が飛んできます', en: 'Cyber Space: lights up a neon space picture with the music. Light waves spread from the far end on beats, the bass pushes the view in and light lines fly out' },
     ],
   },
   {
