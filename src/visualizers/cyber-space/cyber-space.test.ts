@@ -45,7 +45,7 @@ function run(p: CyberSpacePreset, frames: number, o: (i: number) => Partial<Audi
 const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 describe('場面の定義と設定', () => {
-  it('空間は 3 つで、消失点は絵の中。設定は空間・ネオン・波・寄る・ワープ・色ずれ・色の移り変わり', () => {
+  it('空間は 3 つで、消失点は絵の中。設定は空間・ネオン・ネオンに沿った効果 4 つ・波・寄る・ワープ・色ずれ・色の移り変わり', () => {
     expect(SCENES.map((s) => s.id)).toEqual(['neon-gate', 'crystal-void', 'sky-hall']);
     for (const s of SCENES) {
       for (const v of s.vp) {
@@ -55,7 +55,7 @@ describe('場面の定義と設定', () => {
       expect(s.gain).toBeGreaterThan(0);
       expect(s.gain).toBeLessThanOrEqual(1);
     }
-    expect(manifest.controls!.map((c) => c.key)).toEqual(['scene', 'neon', 'rings', 'zoom', 'warp', 'rgbSplit', 'colorShift']);
+    expect(manifest.controls!.map((c) => c.key)).toEqual(['scene', 'neon', 'chase', 'sweep', 'colorBeat', 'flicker', 'rings', 'zoom', 'warp', 'rgbSplit', 'colorShift']);
   });
 });
 
@@ -142,6 +142,34 @@ describe('CyberSpacePreset', () => {
     run(p, 60, () => ({}), params({ colorShift: 1 }));
     expect(p.inspect().hue).toBeGreaterThan(0);
     p.dispose();
+  });
+
+  it('ネオンに沿った効果: 走る光は音量で速く進み、回る光は回り続け、拍ごとに水色とピンクが入れ替わる。0 にすると出ない', async () => {
+    const pr = params();
+    const quiet = await makePreset(pr);
+    const loud = await makePreset(pr);
+    run(quiet, 120, () => ({}), pr);
+    run(loud, 120, () => ({ rms: 0.9 }), pr);
+    expect(loud.inspect().chasePhase).toBeGreaterThan(quiet.inspect().chasePhase * 1.5);
+    expect(loud.inspect().chase).toBeGreaterThan(quiet.inspect().chase);
+    expect(quiet.inspect().sweepAngle).toBeGreaterThan(0);
+
+    const p = await makePreset(pr);
+    // 偶数の拍 → 0 (ピンク)、奇数の拍 → 1 (水色)。入れ替わりはなめらか
+    run(p, 30, () => ({ beat: 1, beatIndex: 1 }), pr);
+    expect(p.inspect().colorSide).toBeGreaterThan(0.9);
+    expect(p.inspect().colorBeat).toBeGreaterThan(0.3);
+    p.update(frame(0.6, { beat: 1, beatIndex: 2 }), pr);
+    const mid = p.inspect().colorSide;
+    expect(mid).toBeGreaterThan(0.5);
+    run(p, 30, () => ({ beat: 1, beatIndex: 2 }), pr);
+    expect(p.inspect().colorSide).toBeLessThan(0.1);
+
+    const off = params({ chase: 0, sweep: 0, colorBeat: 0, flicker: 0 });
+    const o = await makePreset(off);
+    run(o, 30, () => ({ rms: 0.9, beat: 1, beatIndex: 1 }), off);
+    expect(o.inspect()).toMatchObject({ chase: 0, sweep: 0, colorBeat: 0, flicker: 0 });
+    for (const x of [quiet, loud, p, o]) x.dispose();
   });
 
   it('同じ seed ならワープの線の並びは同じ、違えば違う。同じ音なら同じ値', async () => {

@@ -9,6 +9,10 @@ import * as THREE from 'three';
  * - 色ずれ: 赤は外へ、青は内へ、vp からの向きにずらす (split)。
  * - ネオン: 明るくて色の濃い所 (mask) だけを、neon の分だけ 1 より明るくする (ブルームでにじむ)。暗い所はそのまま。
  * - 色の移り変わり: ネオンの所だけ色相を hue (ラジアン) だけ回す。
+ * - ネオンに沿った効果 (2026-10-02 ユーザー「絵のネオンに合わせたエフェクト」)。どの絵もネオンの線は vp へ向かう線か vp を囲む輪なので、
+ *   vp を中心にした向き (角度) と距離で作ると線に沿って見える。光らせるのはネオンの所 (mask) だけ:
+ *   走る光 (距離の対数の上を外へ流れる帯。奥行きに合わせて手前ほど広い)・回る光 (角度の上を回る 2 本の腕)・
+ *   色ごとに拍で光る (水色寄りとピンク寄りのネオンを拍ごとに交互に)・ちらつき (升ごとに、ときどき一瞬暗くなる)。
  * - 光の波: 拍ごとに vp から広がる輪 (最大 MAX_RINGS 本)。床に沿って見えるように横長の楕円にする。輪の通る所を明るくする
  *   (ネオンの所ほど強く)。
  * 色はテクスチャを sRGB として読む (線形の値で計算する。しきい値も線形の値)。
@@ -39,11 +43,26 @@ uniform float split;
 uniform float neon;
 uniform float hue;
 uniform float energy;
+uniform float time;
+uniform float chase;
+uniform float chasePhase;
+uniform float sweep;
+uniform float sweepAngle;
+uniform float colorBeat;
+uniform float colorSide;
+uniform float flicker;
+/** これより明るい所を丸め始める (明るい絵は低く) */
+uniform float knee;
 /** 輪: 半径 (絵の高さ = 1), 強さ */
 uniform vec2 rings[MAX_RINGS];
 varying vec2 vUv;
 
 float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+float hash(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
 
 vec3 hueRotate(vec3 c, float a) {
   // YIQ の色の面で回す
@@ -105,11 +124,47 @@ void main() {
     wave += rg.y * exp(-pow((r - rg.x) / w, 2.0));
   }
 
+  // ネオンに沿った効果 (vp を中心にした角度と距離。絵の高さ = 1)
+  vec2 pp = vec2(dir.x * imgAspect, dir.y);
+  float pr = length(pp);
+  float pa = atan(pp.y, pp.x);
+  vec3 base = col;
+  float extra = 0.0;
+  if (chase > 0.001) {
+    // 奥から手前へ流れる帯 (距離の対数の上で等間隔 = 手前ほど広い)。帯の中に細い芯
+    float f = fract(log(pr + 0.03) * 2.2 - chasePhase);
+    float band = smoothstep(0.0, 0.12, f) * (1.0 - smoothstep(0.12, 0.3, f));
+    extra += chase * band * 3.2;
+  }
+  if (sweep > 0.001) {
+    // 角度の上を回る 2 本の腕 (向かい合わせ)
+    float c = cos(pa - sweepAngle);
+    float arm = pow(max(0.0, c), 24.0) + pow(max(0.0, -c), 24.0);
+    extra += sweep * arm * 3.5;
+  }
+  if (colorBeat > 0.001) {
+    // 水色寄り (青・緑が赤より強い) とピンク寄りを、拍ごとに交互に
+    float cyanish = smoothstep(-0.15, 0.15, (base.g + base.b * 0.3) - base.r);
+    float mine = mix(1.0 - cyanish, cyanish, colorSide);
+    extra += colorBeat * mine * 1.8;
+  }
+  float flick = 1.0;
+  if (flicker > 0.001) {
+    // 絵の上の升 (高さの 1/9) ごとに、1/10 秒ずつ「消えるか」を決める。消えるのはまれに、短く
+    vec2 cell = floor(vec2(uv.x * imgAspect, uv.y) * 9.0);
+    float slot = floor(time * 10.0);
+    float h = hash(cell + slot * 0.137);
+    flick = 1.0 - flicker * 0.75 * step(1.0 - 0.06 * flicker, h);
+  }
+  col = mix(col, col * flick, mask);
+  // もう明るい所には足しすぎない (明るい絵で白が広がらないように)
+  col += base * mask * extra * flick * (1.0 - 0.85 * smoothstep(0.25, 0.7, l));
+
   col *= 0.85 + 0.25 * energy;
   col += col * mask * neon;
   col += col * wave * (0.35 + 0.9 * mask) + vec3(0.25, 0.55, 1.0) * wave * 0.05;
   // 白く飛びすぎないように (ブルームには 1 より明るい値が要るので、上だけ丸める)
-  col = col / (1.0 + max(vec3(0.0), col - 1.0) * 0.6);
+  col = col / (1.0 + max(vec3(0.0), col - knee) * (0.6 / knee));
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -132,6 +187,15 @@ export function createCyberMaterial(): THREE.ShaderMaterial {
       neon: { value: 0 },
       hue: { value: 0 },
       energy: { value: 0 },
+      time: { value: 0 },
+      chase: { value: 0 },
+      chasePhase: { value: 0 },
+      sweep: { value: 0 },
+      sweepAngle: { value: 0 },
+      colorBeat: { value: 0 },
+      colorSide: { value: 0 },
+      flicker: { value: 0 },
+      knee: { value: 1 },
       rings: { value: Array.from({ length: MAX_RINGS }, () => new THREE.Vector2(0, 0)) },
     },
   });

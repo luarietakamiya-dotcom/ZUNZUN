@@ -14,6 +14,7 @@ import { createCyberMaterial, createWarpMaterial, MAX_RINGS } from './shaders';
  * - 寄る: 低音のばね (強い音で奥へ寄り、少し行き過ぎて戻る) + 放射状のブレ。
  * - ワープの線: 奥から外へ飛ぶ光の線。音量で速く・明るくなる。
  * - 色ずれ: 低音で大きくなる。色の移り変わり: ネオンの色がゆっくり回る (時刻だけで決まる)。
+ * - ネオンに沿った効果: 走る光 (音量で速く)・回る光 (拍の速さで回る)・色ごとに拍で光る (水色とピンクを交互に)・ちらつき。
  * 画面全体を点滅させない (明るさの変化はなめらかに。光るのはネオンの所と輪の通る所だけ)。光過敏の見張り (flash-safety) に入れている。
  *
  * 乱数は init() の ctx.rng だけ (ワープの線の向き・速さ)。輪は拍の時刻から決まる。
@@ -41,6 +42,13 @@ export interface CyberSpaceInspection {
   energy: number;
   /** 出ている輪の強さ (0 = 出ていない) */
   rings: number[];
+  chase: number;
+  chasePhase: number;
+  sweep: number;
+  sweepAngle: number;
+  colorBeat: number;
+  colorSide: number;
+  flicker: number;
   warpCount: number;
   warpBrightness: number;
 }
@@ -102,6 +110,11 @@ export class CyberSpacePreset implements VisualizerPreset {
   private beatEnv = 0;
   private bassEnv = 0;
   private lastBeat = -1;
+  private chasePhase = 0;
+  private sweepAngle = 0;
+  /** 拍ごとに 0 (ピンク) と 1 (水色) を行き来する。なめらかに (光過敏への配慮) */
+  private side = 0;
+  private sideTarget = 0;
   /** 輪ごとの経過秒 (負 = 出ていない) */
   private readonly ringAge = new Array<number>(MAX_RINGS).fill(-1);
   private ringNext = 0;
@@ -161,7 +174,12 @@ export class CyberSpacePreset implements VisualizerPreset {
       this.lastBeat = frame.beatIndex;
       this.ringAge[this.ringNext] = 0;
       this.ringNext = (this.ringNext + 1) % MAX_RINGS;
+      this.sideTarget = frame.beatIndex % 2;
     }
+    this.side += (this.sideTarget - this.side) * (1 - Math.exp(-14 * dt));
+    // 走る光は音量で速く、回る光は 4 秒で半周 (腕が 2 本なので 1 周ぶんに見える) + 音量で少し速く
+    this.chasePhase = (this.chasePhase + dt * (0.5 + 1.5 * this.rmsEnv)) % 1000;
+    this.sweepAngle = (this.sweepAngle + dt * (Math.PI / 4) * (1 + this.rmsEnv)) % (Math.PI * 2);
     for (let i = 0; i < MAX_RINGS; i++) {
       const age = this.ringAge[i]!;
       if (age >= 0) this.ringAge[i] = age + dt > RING_LIFE ? -1 : age + dt;
@@ -199,6 +217,13 @@ export class CyberSpacePreset implements VisualizerPreset {
       hue: u.hue!.value as number,
       energy: u.energy!.value as number,
       rings: (u.rings!.value as THREE.Vector2[]).map((r) => r.y),
+      chase: u.chase!.value as number,
+      chasePhase: u.chasePhase!.value as number,
+      sweep: u.sweep!.value as number,
+      sweepAngle: u.sweepAngle!.value as number,
+      colorBeat: u.colorBeat!.value as number,
+      colorSide: u.colorSide!.value as number,
+      flicker: u.flicker!.value as number,
       warpCount: this.warp.visible ? this.wGeometry.instanceCount : 0,
       warpBrightness: this.wMaterial.uniforms.brightness!.value as number,
     };
@@ -237,6 +262,7 @@ export class CyberSpacePreset implements VisualizerPreset {
     const vpy = 1 - sc.vp[1];
     (u.vp!.value as THREE.Vector2).set(vpx, vpy);
     u.imgAspect!.value = sc.aspect;
+    u.knee!.value = sc.knee;
 
     // 寄る: 低音のばね + ゆっくりした呼吸 (Camera Motion)
     const zoomK = num(params.zoom, 0.6);
@@ -250,6 +276,16 @@ export class CyberSpacePreset implements VisualizerPreset {
     // 色の移り変わり: 1 で 1 周およそ 40 秒
     u.hue!.value = num(params.colorShift, 0) * ((this.time * Math.PI * 2) / 40);
     u.energy!.value = this.rmsEnv * k;
+    u.time!.value = this.time;
+    // ネオンに沿った効果 (場面の強さ gain の 2 乗を掛ける。明るい絵 (空の神殿) は白が広がりやすいので、ほかの効果よりさらに弱め)
+    const g2 = sc.gain * sc.gain;
+    u.chase!.value = num(params.chase, 0.7) * g2 * (0.35 + 0.65 * this.rmsEnv * (0.4 + 0.6 * k));
+    u.chasePhase!.value = this.chasePhase;
+    u.sweep!.value = num(params.sweep, 0.5) * g2 * (0.4 + 0.6 * this.rmsEnv);
+    u.sweepAngle!.value = this.sweepAngle;
+    u.colorBeat!.value = num(params.colorBeat, 0.6) * g2 * this.beatEnv * k;
+    u.colorSide!.value = this.side;
+    u.flicker!.value = num(params.flicker, 0.2);
     const ringK = num(params.rings, 0.7) * (0.4 + 0.6 * k) * (0.5 + 0.5 * sc.gain);
     const rings = u.rings!.value as THREE.Vector2[];
     for (let i = 0; i < MAX_RINGS; i++) {

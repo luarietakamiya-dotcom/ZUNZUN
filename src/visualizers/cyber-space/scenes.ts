@@ -17,12 +17,14 @@ export interface CyberScene {
   vp: readonly [number, number];
   /** 光らせる強さの倍率 (もともと明るい絵は弱めに。白く飛ばないように) */
   gain: number;
+  /** これより明るい所を丸め始める (1 = ふつう。明るい絵は低くして、白が広がらないように) */
+  knee: number;
 }
 
 export const SCENES: readonly CyberScene[] = [
-  { id: 'neon-gate', name: { ja: 'ネオンのゲート', en: 'Neon gate' }, url: neonGateUrl, aspect: 1672 / 941, vp: [0.5, 0.7], gain: 1 },
-  { id: 'crystal-void', name: { ja: '結晶の宇宙', en: 'Crystal void' }, url: crystalVoidUrl, aspect: 1672 / 941, vp: [0.5, 0.76], gain: 0.85 },
-  { id: 'sky-hall', name: { ja: '空の神殿', en: 'Sky hall' }, url: skyHallUrl, aspect: 1672 / 941, vp: [0.5, 0.665], gain: 0.5 },
+  { id: 'neon-gate', name: { ja: 'ネオンのゲート', en: 'Neon gate' }, url: neonGateUrl, aspect: 1672 / 941, vp: [0.5, 0.7], gain: 1, knee: 1 },
+  { id: 'crystal-void', name: { ja: '結晶の宇宙', en: 'Crystal void' }, url: crystalVoidUrl, aspect: 1672 / 941, vp: [0.5, 0.76], gain: 0.85, knee: 1 },
+  { id: 'sky-hall', name: { ja: '空の神殿', en: 'Sky hall' }, url: skyHallUrl, aspect: 1672 / 941, vp: [0.5, 0.665], gain: 0.5, knee: 0.6 },
 ];
 
 export const sceneById = (id: unknown): CyberScene => SCENES.find((s) => s.id === id) ?? SCENES[0]!;

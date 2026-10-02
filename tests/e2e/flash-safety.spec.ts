@@ -105,6 +105,8 @@ const CASES: [string, Record<string, unknown>][] = [
   ['cyber-space', { scene: 'neon-gate', neon: 1, rings: 1, zoom: 1, warp: 1, rgbSplit: 1 }],
   ['cyber-space', { scene: 'crystal-void', neon: 1, rings: 1, zoom: 1, warp: 1 }],
   ['cyber-space', { scene: 'sky-hall', neon: 1, rings: 1, zoom: 1, warp: 1, colorShift: 1 }],
+  ['cyber-space', { scene: 'neon-gate', neon: 1, chase: 1, sweep: 1, colorBeat: 1, flicker: 1 }],
+  ['cyber-space', { scene: 'sky-hall', neon: 1, chase: 1, sweep: 1, colorBeat: 1, flicker: 1 }],
   ['live-stage', {}],
   ['live-stage', { towardCrowd: 1 }],
   ['live-stage', { towardCrowd: 1, cameraSpot: 'front' }],
