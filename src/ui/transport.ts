@@ -7,6 +7,8 @@ import { onLangChange, tr } from '../core/i18n';
  * ヘッダーはタブを切り替えても作り直されないので、この欄はアプリを開いている間ずっと同じもの (シェルが 1 度だけ作る)。
  * Space キーでも再生/一時停止できる。ただし Lyrics タブでは Space がタップ (記録) なので、そのタブの処理に任せる
  * (spaceHandledByPanel が true を返す間は何もしない)。入力欄にフォーカスがあるときも何もしない。
+ * 画面から外れたら (PC 表示とスマホ表示を切り替えて枠組みを作り直したとき)、キーの受け付けと更新を止める
+ * (残すと、Space 1 回で古い欄と新しい欄の両方が動き、再生してすぐ止まる)。
  */
 
 export interface TransportOptions {
@@ -34,6 +36,7 @@ function button(label: string, title: string, onClick: () => void): HTMLButtonEl
 export function createTransport(opts: TransportOptions): HTMLElement {
   const root = document.createElement('div');
   root.className = 'transport';
+  const life = new AbortController();
   const audio = store.audio;
 
   const playBtn = button('▶', '', () => toggle());
@@ -71,7 +74,7 @@ export function createTransport(opts: TransportOptions): HTMLElement {
   // シークバーをつかんでいる間は、表示の更新で位置を上書きしない
   let dragging = false;
   seek.addEventListener('pointerdown', () => (dragging = true));
-  window.addEventListener('pointerup', () => (dragging = false));
+  window.addEventListener('pointerup', () => (dragging = false), { signal: life.signal });
   seek.addEventListener('input', () => {
     if (audio.isLoaded) audio.seek(parseFloat(seek.value));
   });
@@ -83,10 +86,22 @@ export function createTransport(opts: TransportOptions): HTMLElement {
     // ボタンにフォーカスがあると、ブラウザの標準動作でそのボタンも押されてしまうので止める
     e.preventDefault();
     if (!e.repeat) toggle();
-  });
+  }, { signal: life.signal });
 
   let shown = '';
+  let mounted = false;
   const tick = (): void => {
+    if (!root.isConnected) {
+      // 作った直後 (画面に載る前) は待つ。載ったあとに外れたら片づける
+      if (mounted) {
+        life.abort();
+        offLang();
+        return;
+      }
+      requestAnimationFrame(tick);
+      return;
+    }
+    mounted = true;
     const loaded = audio.isLoaded;
     const playing = audio.isPlaying;
     // 表示は「いまスピーカーから聞こえている位置」(Lyrics タブと同じ)
@@ -108,7 +123,7 @@ export function createTransport(opts: TransportOptions): HTMLElement {
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-  onLangChange(() => {
+  const offLang = onLangChange(() => {
     applyTexts();
     shown = '';
   });

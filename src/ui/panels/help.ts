@@ -279,8 +279,8 @@ export function renderHelpPanel(): HTMLElement {
   h2.textContent = t2({ ja: '使い方', en: 'How to use' });
   const intro = document.createElement('p');
   intro.textContent = t2({
-    ja: 'ZUNZUN3 は、曲に合わせて動く映像と歌詞の動画を、ブラウザの中だけで作る道具です。曲や画像はほかの場所へ送りません。',
-    en: 'ZUNZUN3 makes music videos with reactive visuals and moving lyrics, entirely inside your browser. Your songs and images are never uploaded.',
+    ja: 'ZUNZUN3 は、曲に合わせて動く映像と歌詞の動画を、ブラウザの中だけで作る道具です。曲や画像はほかの場所へ送りません。スマホでは、画面の下のメニューから同じ機能を使えます (アドレスの最後に ?mobile を付けると、いつでもスマホ表示になります)。',
+    en: 'ZUNZUN3 makes music videos with reactive visuals and moving lyrics, entirely inside your browser. Your songs and images are never uploaded. On a phone, the same features are in the menu at the bottom of the screen (add ?mobile to the address to always get the mobile view).',
   });
   root.append(h2, intro);
 

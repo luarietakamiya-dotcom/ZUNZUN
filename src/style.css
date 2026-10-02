@@ -66,6 +66,7 @@ body {
 /* 右上のライセンスへのリンク (言語の切り替えの左) */
 .license-link { margin-left: auto; padding: 4px 8px; font-size: 12px; }
 .license-link + .lang-switch { margin-left: 0; }
+.license-link + .license-link { margin-left: 0; }
 
 /* 表記の言語の切り替え (日本語 / EN) */
 .lang-switch {
@@ -536,3 +537,43 @@ body {
   .overlay-preview { grid-row: 1; top: 0; background: var(--bg); padding: 6px 0; }
   .overlay-preview .visualizer-canvas-wrap { max-width: 420px; }
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * スマホ表示 (ui/mobile-shell.ts)。ここから下は .mobile-shell の中だけに効く (PC 表示は変えない)
+ * ------------------------------------------------------------------------------------------- */
+.mobile-shell { --m-header-h: 53px; display: block; height: auto; min-height: 100%; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+.mobile-shell .m-header {
+  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top));
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.mobile-shell .m-header h1 { font-size: 15px; font-weight: 700; margin: 0; letter-spacing: 0.04em; flex: none; }
+.mobile-shell .m-header h1 .logo-3 { color: #ffd23f; }
+.mobile-shell .transport { margin-left: auto; gap: 4px; flex: 1; justify-content: flex-end; }
+.mobile-shell .transport-seek { flex: 1; width: auto; min-width: 60px; max-width: 200px; }
+.mobile-shell .transport-name { display: none; }
+.mobile-shell .transport-button { padding: 6px 8px; min-height: 36px; }
+.mobile-shell .m-preview { position: sticky; top: calc(var(--m-header-h) + env(safe-area-inset-top)); z-index: 15; background: var(--bg); padding: 6px 12px 8px; border-bottom: 1px solid var(--border); }
+.mobile-shell .m-preview[hidden] { display: none; }
+.mobile-shell .m-preview .visualizer-canvas-wrap { margin: 0 auto; max-width: 100%; max-height: 24vh; width: auto; }
+/* パネルの中のプレビュー (ビジュアライザー・背景と素材) も、下へ動かしても見えるように上に固定する */
+.mobile-shell .m-body .visualizer-canvas-wrap { position: sticky; top: calc(var(--m-header-h) + env(safe-area-inset-top)); z-index: 10; max-height: 30vh; width: auto; margin-left: auto; margin-right: auto; }
+.mobile-shell .m-body .overlay-preview { top: calc(var(--m-header-h) + env(safe-area-inset-top)); }
+.mobile-shell .m-body .overlay-preview .visualizer-canvas-wrap { position: static; }
+.mobile-shell .m-subtabs { display: flex; gap: 4px; overflow-x: auto; padding: 8px 12px 0; scrollbar-width: none; }
+.mobile-shell .m-subtabs[hidden] { display: none; }
+.mobile-shell .m-subtab { flex: none; white-space: nowrap; padding: 8px 14px; font-size: 14px; }
+.mobile-shell .m-body { overflow: visible; padding: 12px; }
+.mobile-shell .m-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0 4px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.mobile-shell .m-tools .lang-switch { margin-left: 0; }
+.mobile-shell .m-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: repeat(5, 1fr);
+  background: #101217; border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom);
+}
+.mobile-shell .m-nav-button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 58px;
+  background: transparent; border: 0; color: var(--fg-dim); font: inherit; cursor: pointer; padding: 6px 2px;
+}
+.mobile-shell .m-nav-button[aria-current="true"] { color: #ffd23f; }
+.mobile-shell .m-nav-icon { font-size: 19px; line-height: 1; }
+.mobile-shell .m-nav-label { font-size: 11px; white-space: nowrap; }

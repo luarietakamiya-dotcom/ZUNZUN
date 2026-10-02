@@ -2,15 +2,23 @@ import type { PanelId } from './panels';
 import { PANELS } from './panels';
 import { createTransport } from './transport';
 import { lang, onLangChange, setLang, t2, tr, type Lang } from '../core/i18n';
+import { isNarrowScreen, setLayout } from './layout';
 
 // 並び: 作る順 (曲 → 歌詞 → 歌詞の動き → 映像 → 背景 → 保存 → 書き出し) と使い方 (2026-10-01 レビュー・ユーザーの声)
 const TAB_ORDER: PanelId[] = ['music', 'lyrics', 'motion', 'visualizer', 'overlay', 'settings', 'export', 'help'];
 
+/** 今のタブ (スマホ表示と切り替えても同じ画面を開けるように、モジュールに置く) */
+let active: PanelId = 'music';
+export const pcActive = (): PanelId => active;
+export function selectPcPanel(id: PanelId): void {
+  active = id;
+}
+
 /**
- * アプリのシェル (ヘッダーのタブ + 現在のパネル本体) を root にマウントする。
- * Step 1 時点ではパネルはすべてプレースホルダー。Step 2 以降で各パネルに機能を足していく。
+ * アプリのシェル (PC 表示。ヘッダーのタブ + 現在のパネル本体) を root にマウントする。
+ * 返す関数で片づける (スマホ表示へ切り替えるとき。layout.ts / main.ts)。
  */
-export function mountShell(root: HTMLElement): void {
+export function mountShell(root: HTMLElement): () => void {
   root.innerHTML = '';
 
   const shell = document.createElement('div');
@@ -39,8 +47,6 @@ export function mountShell(root: HTMLElement): void {
   shell.appendChild(body);
   root.appendChild(shell);
 
-  let active: PanelId = 'music';
-
   // 共通の再生欄 (どのタブでも使える)。Lyrics タブでは Space をタップに使うので、そのタブの処理に任せる
   header.appendChild(createTransport({ spaceHandledByPanel: () => active === 'lyrics' }));
 
@@ -55,6 +61,14 @@ export function mountShell(root: HTMLElement): void {
     body.querySelector('[data-help="license"]')?.scrollIntoView({ block: 'start' });
   });
   header.appendChild(licenseLink);
+
+  // 狭い画面で PC 表示を選んでいるときだけ、スマホ表示へ戻るボタンを出す (ふつうのパソコンの画面には出ない)
+  const mobileLink = document.createElement('button');
+  mobileLink.type = 'button';
+  mobileLink.className = 'tab-button license-link';
+  mobileLink.dataset.shell = 'to-mobile';
+  mobileLink.addEventListener('click', () => setLayout('mobile'));
+  if (isNarrowScreen()) header.appendChild(mobileLink);
 
   // 表記の言語 (日本語 / English)。切り替えるとタブ名と今のタブを作り直す
   const langBox = document.createElement('div');
@@ -74,6 +88,7 @@ export function mountShell(root: HTMLElement): void {
   const syncLang = (): void => {
     langBox.setAttribute('aria-label', tr('表示の言語', 'Language'));
     licenseLink.textContent = tr('ライセンス', 'License');
+    mobileLink.textContent = tr('スマホ表示', 'Mobile view');
     for (const [l, b] of langButtons) b.setAttribute('aria-pressed', String(l === lang()));
     document.documentElement.lang = lang();
   };
@@ -102,8 +117,12 @@ export function mountShell(root: HTMLElement): void {
   };
 
   render();
-  onLangChange(() => {
+  const offLang = onLangChange(() => {
     syncLang();
     render();
   });
+  return () => {
+    offLang();
+    root.innerHTML = '';
+  };
 }
