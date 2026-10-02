@@ -1,4 +1,38 @@
-import { t2, type Text2 } from '../../core/i18n';
+import { t2, tr, type Text2 } from '../../core/i18n';
+
+/**
+ * 曲を選ぶ欄の accept。`audio/*` だけだと、iPhone の Safari では mp3 でもファイルアプリで灰色になって選べないことがあった
+ * (2026-10-02 ユーザーの実機。種類は「MP3 オーディオ」で拡張子も .mp3 だった)。拡張子も並べると、iOS はその拡張子の種類を
+ * はっきり許すので選べる (歌詞タブの「ボーカルだけの音」の欄は前からこの形)。
+ */
+export const AUDIO_ACCEPT = 'audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.opus,.flac,.weba,.mp4,.caf,.aif,.aiff';
+
+/**
+ * 「すべてのファイルから選ぶ」ボタン: 曲を選ぶ欄で絞り込みが効きすぎて選べないときの逃げ道。
+ * 絞り込みの無い別の欄で選んだファイルを、本来の欄 (target) に渡して、その欄の処理 (change) をそのまま動かす。
+ */
+export function anyFileButton(target: HTMLInputElement): HTMLButtonElement {
+  const any = document.createElement('input');
+  any.type = 'file';
+  any.hidden = true;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'tab-button';
+  btn.dataset.anyFile = 'true';
+  btn.textContent = tr('ファイルが選べないときは: すべてのファイルから選ぶ', 'Cannot pick your file? Choose from all files');
+  btn.addEventListener('click', () => any.click());
+  any.addEventListener('change', () => {
+    const file = any.files?.[0];
+    any.value = '';
+    if (!file) return;
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    target.files = dt.files;
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  btn.append(any);
+  return btn;
+}
 
 /** 各パネルの共通の骨組み (タイトル・説明・プレースホルダーカード) を作る小さなヘルパー。 */
 export function panelSkeleton(title: string, description: string, placeholder: string): HTMLElement {

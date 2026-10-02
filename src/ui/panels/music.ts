@@ -1,5 +1,6 @@
 import { store } from '../../core/store';
 import { tr } from '../../core/i18n';
+import { anyFileButton, AUDIO_ACCEPT } from './panel-helpers';
 
 export function renderMusicPanel(): HTMLElement {
   const el = document.createElement('section');
@@ -15,8 +16,12 @@ export function renderMusicPanel(): HTMLElement {
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
-  fileInput.accept = 'audio/*';
+  fileInput.accept = AUDIO_ACCEPT;
   el.appendChild(fileInput);
+  const anyBtn = anyFileButton(fileInput);
+  const anyRow = document.createElement('div');
+  anyRow.append(anyBtn);
+  el.appendChild(anyRow);
 
   const status = document.createElement('div');
   status.className = 'placeholder-card';

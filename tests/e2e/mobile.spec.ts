@@ -98,7 +98,7 @@ test('表示を行き来しても、Space 1 回で再生が 1 回だけ切り替
   await page.setViewportSize(PHONE);
   await page.addInitScript(() => localStorage.setItem('zunzun.lang', 'ja'));
   await page.goto('/');
-  await page.locator('input[type="file"][accept="audio/*"]').first().setInputFiles({ name: 'song.wav', mimeType: 'audio/wav', buffer: testWav() });
+  await page.locator('input[type="file"][accept^="audio/*"]').first().setInputFiles({ name: 'song.wav', mimeType: 'audio/wav', buffer: testWav() });
   await expect.poll(() => page.evaluate(async () => (await import('/src/core/store.ts')).store.audio.isLoaded)).toBe(true);
   // スマホ → PC → スマホ → PC
   await page.locator('.m-nav-button[data-menu="more"]').click();

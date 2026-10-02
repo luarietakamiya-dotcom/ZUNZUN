@@ -36,7 +36,7 @@ function testWav(): Buffer {
 
 test('歌詞の時刻だけを変えると「反映」ボタンが出て、押すまで歌詞の動きは作り直さない', async ({ page }) => {
   await page.goto('/');
-  await page.locator('input[type="file"][accept="audio/*"]').setInputFiles({
+  await page.locator('input[type="file"][accept^="audio/*"]').setInputFiles({
     name: 'test.wav',
     mimeType: 'audio/wav',
     buffer: testWav(),
@@ -110,7 +110,7 @@ test('歌詞の時刻だけを変えると「反映」ボタンが出て、押�
 
 test('タイムラインのドラッグは最初は吸着しない (置いた所に置ける)。「ドラッグで吸着する」を入れると候補・拍に合う', async ({ page }) => {
   await page.goto('/');
-  await page.locator('input[type="file"][accept="audio/*"]').setInputFiles({
+  await page.locator('input[type="file"][accept^="audio/*"]').setInputFiles({
     name: 'test.wav',
     mimeType: 'audio/wav',
     buffer: testWav(),
@@ -209,7 +209,7 @@ test('はじめかた: 歌詞タブで曲を選び、歌詞を入れ、「1 行�
 
 test('歌詞の空白: 再生位置から作ると、次の行の始まりまでが空白になり、行はそこで終わる。種類を選べて、Delete で消せる', async ({ page }) => {
   await page.goto('/');
-  await page.locator('input[type="file"][accept="audio/*"]').setInputFiles({ name: 'test.wav', mimeType: 'audio/wav', buffer: testWav() });
+  await page.locator('input[type="file"][accept^="audio/*"]').setInputFiles({ name: 'test.wav', mimeType: 'audio/wav', buffer: testWav() });
   await expect.poll(() => page.evaluate(async () => (await import('/src/core/store.ts')).store.audio.isLoaded)).toBe(true);
   await page.evaluate(async () => {
     const { store } = await import('/src/core/store.ts');

@@ -27,6 +27,7 @@ import { store } from '../../core/store';
 import { defaultLyrics, type LyricBlank, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
 import { blankFromPlayhead, normalizeBlanks } from '../../core/lyrics/blanks';
 import { lyricSyncTargets } from '../../core/lyrics/stem';
+import { anyFileButton, AUDIO_ACCEPT } from './panel-helpers';
 import { createRhythmEditor } from './lyrics-rhythm';
 import { activeStem, createStemCard } from './lyrics-stem';
 import { LyricsTimeline } from './lyrics-timeline';
@@ -210,7 +211,7 @@ export function renderLyricsPanel(): HTMLElement {
   const step3Text = el('span', { className: 'param-label' });
   const songInput = el('input');
   songInput.type = 'file';
-  songInput.accept = 'audio/*';
+  songInput.accept = AUDIO_ACCEPT;
   songInput.dataset.lyrics = 'step-song';
   songInput.addEventListener('change', () => {
     const file = songInput.files?.[0];
@@ -236,7 +237,7 @@ export function renderLyricsPanel(): HTMLElement {
     el('div', { className: 'lyrics-step' }, [mark, el('div', { className: 'lyrics-step-body' }, [el('strong', { textContent: title }), text, el('div', { className: 'row-gap lyrics-row-wrap' }, actions)])]);
   stepsCard.append(
     el('h3', { className: 'lyrics-h3', textContent: tr('はじめかた', 'Getting started') }),
-    stepRow(step1Mark, tr('曲を読み込む', 'Load the song'), step1Text, songInput),
+    stepRow(step1Mark, tr('曲を読み込む', 'Load the song'), step1Text, songInput, anyFileButton(songInput)),
     stepRow(step2Mark, tr('歌詞を入れる', 'Enter the lyrics'), step2Text, toLyricsBtn),
     stepRow(step3Mark, tr('タップで合わせる', 'Sync by tapping'), step3Text, stepTapBtn),
   );

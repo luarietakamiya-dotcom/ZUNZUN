@@ -2,6 +2,7 @@ import { syncTargetsFor } from '../../core/lyrics';
 import { loadedStem, loadVocalStem, STEM_DURATION_TOLERANCE, stemState, unloadVocalStem, type LoadedStem } from '../../core/lyrics/stem';
 import { store } from '../../core/store';
 import { tr } from '../../core/i18n';
+import { AUDIO_ACCEPT } from './panel-helpers';
 import { defaultLyrics, type LyricsStem } from '../../core/types';
 
 /**
@@ -38,7 +39,7 @@ export function createStemCard(cb: StemCardCallbacks): StemCard {
   const root = h('div', 'lyrics-card lyrics-stem');
   const fileInput = h('input');
   fileInput.type = 'file';
-  fileInput.accept = 'audio/*,.wav,.mp3,.m4a,.aac,.ogg,.flac';
+  fileInput.accept = AUDIO_ACCEPT;
   const removeBtn = h('button', 'tab-button', tr('外す', 'Remove'));
   removeBtn.type = 'button';
   const enabled = h('input');

@@ -53,7 +53,7 @@ test('書き出し: 押すと先に保存する場所を聞く。閉じたら始
     };
   });
   await page.goto('/');
-  await page.locator('input[type="file"][accept="audio/*"]').setInputFiles({ name: 'song.wav', mimeType: 'audio/wav', buffer: testWav() });
+  await page.locator('input[type="file"][accept^="audio/*"]').setInputFiles({ name: 'song.wav', mimeType: 'audio/wav', buffer: testWav() });
   await expect.poll(() => page.evaluate(async () => (await import('/src/core/store.ts')).store.audio.isLoaded)).toBe(true);
   await page.evaluate(async () => (await import('/src/core/store.ts')).store.setExportSettings({ width: 640, height: 360, fps: 30 }));
   const canEncode = await page.evaluate(async () => {

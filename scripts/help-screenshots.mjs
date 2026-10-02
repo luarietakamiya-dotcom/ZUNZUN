@@ -60,7 +60,7 @@ const elShot = async (name, locator, maxH = 2000) => {
 const loaded = () => page.waitForFunction(async () => { const { store } = await import('/src/core/store.ts'); return store.audio.isLoaded && !!store.audio.analysis; }, null, { timeout: 120000 });
 
 // 音楽
-await page.locator('section.panel input[type="file"][accept="audio/*"]').setInputFiles(sampleWav());
+await page.locator('section.panel input[type="file"][accept^="audio/*"]').setInputFiles(sampleWav());
 await loaded();
 await page.waitForTimeout(500);
 await clipShot('music', { x: 0, y: 0, width: 1280, height: 280 });
