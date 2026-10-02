@@ -44,7 +44,11 @@ SOFTWARE.
   Mediabunny のソースファイルを改変した場合はその改変ファイルの公開が必要になる (現状は改変なし)。
 - License text: https://www.mozilla.org/en-US/MPL/2.0/
 
-## 予定（導入時に正式な表記を追記）
+## three.js (MIT)
 
-- three.js — MIT
-- 同梱フォント — SIL Open Font License 1.1
+- Source: https://github.com/mrdoob/three.js
+- 用途: 映像の描画。改変せず npm 依存 (`three`) としてそのまま使用している。License text: `node_modules/three/LICENSE`
+
+## 書体 (SIL Open Font License 1.1)
+
+- JIZURA が使う書体（Noto Sans JP ほか）。同梱せず、Google Fonts から読み込む（上の JIZURA の項を参照）。

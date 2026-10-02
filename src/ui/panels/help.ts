@@ -1,4 +1,5 @@
 import { t2, type Text2 } from '../../core/i18n';
+import licenseText from '../../../LICENSE?raw';
 import backgroundImg from '../../assets/help/background.webp';
 import exportImg from '../../assets/help/export.webp';
 import layersImg from '../../assets/help/layers.webp';
@@ -271,8 +272,8 @@ export function renderHelpPanel(): HTMLElement {
   h2.textContent = t2({ ja: '使い方', en: 'How to use' });
   const intro = document.createElement('p');
   intro.textContent = t2({
-    ja: 'ZUNZUN は、曲に合わせて動く映像と歌詞の動画を、ブラウザの中だけで作る道具です。曲や画像はほかの場所へ送りません。',
-    en: 'ZUNZUN makes music videos with reactive visuals and moving lyrics, entirely inside your browser. Your songs and images are never uploaded.',
+    ja: 'ZUNZUN3 は、曲に合わせて動く映像と歌詞の動画を、ブラウザの中だけで作る道具です。曲や画像はほかの場所へ送りません。',
+    en: 'ZUNZUN3 makes music videos with reactive visuals and moving lyrics, entirely inside your browser. Your songs and images are never uploaded.',
   });
   root.append(h2, intro);
 
@@ -305,6 +306,45 @@ export function renderHelpPanel(): HTMLElement {
       box.appendChild(renderBlock({ ...b, title: { ja: '', en: '' } }, 'h4'));
     } else box.appendChild(renderBlock(b, 'h4'));
   }
-  root.append(quick, detail);
+  root.append(quick, detail, renderLicense());
   return root;
+}
+
+/** ZUNZUN3 本体のライセンス (リポジトリの LICENSE をそのまま出す) と、中で使っているもののライセンス */
+function renderLicense(): HTMLElement {
+  const card = document.createElement('div');
+  card.className = 'help-card';
+  card.dataset.help = 'license';
+  const h = document.createElement('h3');
+  h.className = 'help-heading';
+  h.textContent = t2({ ja: 'ライセンス', en: 'License' });
+  const p = document.createElement('p');
+  p.textContent = t2({
+    ja: 'ZUNZUN3 は MIT ライセンスで公開しています。作った映像の権利は、使った曲・画像の権利者の許可の範囲に従います。',
+    en: 'ZUNZUN3 is released under the MIT License. Rights to the videos you make follow the permissions of the songs and images you use.',
+  });
+  const pre = document.createElement('pre');
+  pre.className = 'help-license';
+  pre.textContent = licenseText;
+  const th = document.createElement('h4');
+  th.textContent = t2({ ja: '中で使っているもの', en: 'Third-party software' });
+  const ul = document.createElement('ul');
+  const items: { name: string; license: string; url: string }[] = [
+    { name: 'JIZURA 字面 (hakoniwa)', license: 'MIT', url: 'https://github.com/852wa/JIZURA' },
+    { name: 'three.js', license: 'MIT', url: 'https://github.com/mrdoob/three.js' },
+    { name: 'Mediabunny', license: 'MPL-2.0', url: 'https://github.com/Vanilagy/mediabunny' },
+    { name: t2({ ja: '歌詞の書体 (Noto Sans JP ほか、Google Fonts)', en: 'Lyric fonts (Noto Sans JP etc., Google Fonts)' }), license: 'SIL Open Font License 1.1', url: 'https://openfontlicense.org' },
+  ];
+  for (const it of items) {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = it.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = it.name;
+    li.append(a, ` — ${it.license}`);
+    ul.appendChild(li);
+  }
+  card.append(h, p, pre, th, ul);
+  return card;
 }

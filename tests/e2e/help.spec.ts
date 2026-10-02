@@ -17,3 +17,16 @@ test('「使い方」タブ: 5 つの手順とくわしい使い方が出て、�
     await expect.poll(() => img.evaluate((el) => (el as HTMLImageElement).complete && (el as HTMLImageElement).naturalWidth > 0)).toBe(true);
   }
 });
+
+test('ロゴは ZUNZUN3 (3 だけ黄色)。「使い方」のいちばん下に MIT ライセンスと、中で使っているもののライセンスが出る', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.app-header h1')).toHaveText('ZUNZUN3');
+  const color = await page.locator('.app-header h1 .logo-3').evaluate((el) => getComputedStyle(el).color);
+  expect(color).toBe('rgb(255, 210, 63)');
+  await page.getByRole('tab').last().click();
+  const lic = page.locator('[data-help="license"]');
+  await expect(lic).toBeVisible();
+  await expect(lic.locator('pre')).toContainText('MIT License');
+  await expect(lic.locator('pre')).toContainText('Copyright (c) 2026 luarietakamiya-dotcom');
+  for (const name of ['JIZURA', 'three.js', 'Mediabunny']) await expect(lic).toContainText(name);
+});

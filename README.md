@@ -1,4 +1,4 @@
-# ZUNZUN
+# ZUNZUN3
 
 ローカル完結型の Music Visualizer + Lyric Motion ツール（開発中）。
 
@@ -10,3 +10,7 @@
 - サードパーティ: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 生成した映像の権利は、使用した音源・画像の権利者の許諾範囲に従います。
+
+## ライセンス
+
+MIT License（[LICENSE](LICENSE)）。中で使っているもののライセンスは [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

@@ -20,7 +20,11 @@ export function mountShell(root: HTMLElement): void {
   header.className = 'app-header';
 
   const title = document.createElement('h1');
-  title.textContent = 'ZUNZUN';
+  // ロゴ: ZUNZUN3 (3 だけ黄色)
+  const three = document.createElement('span');
+  three.className = 'logo-3';
+  three.textContent = '3';
+  title.append('ZUNZUN', three);
   header.appendChild(title);
 
   const tabs = document.createElement('div');

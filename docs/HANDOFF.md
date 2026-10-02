@@ -433,3 +433,7 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 - `.overlay-split` を左右同じ幅に（前はプレビューが 320〜460px）。1900px の画面でプレビューは横 922px、1280px で 612px。狭い画面（1000px 以下）は今までどおり上に固定。
 - 使い方の画像を撮り直し、リリックモーションタブの「区切りで動きを変える」欄の画像（`lyric-motion.webp`）を足した（「そのほかの歌詞の機能」に付ける）。
 - **注意**: 新しい画像を help.ts で読み込む前に撮影スクリプトを動かすと、画像が無くて画面が壊れる。先に仮のファイルを置いてから撮る。
+
+### 2026-10-02 名前を ZUNZUN3 に・MIT ライセンス（ユーザー「左上の ZUNZUN を ZUNZUN3（3 だけ黄色）にして、MIT をどこかに作ろう」）
+- ロゴ: `shell.ts`（`.logo-3` だけ黄色 #ffd23f）。ブラウザのタブの名前（index.html）・README・使い方の最初の文も ZUNZUN3。package.json の `name` は `zunzun` のまま。
+- ライセンス: リポジトリの `LICENSE`（MIT、`Copyright (c) 2026 luarietakamiya-dotcom`）、package.json の `license`。使い方タブのいちばん下の「ライセンス」欄は `LICENSE?raw` をそのまま出す（文面の置き場所は 1 つ）+ 中で使っているもの（JIZURA・three.js・Mediabunny・書体）。THIRD_PARTY_NOTICES の「予定」を正式な項目にした。

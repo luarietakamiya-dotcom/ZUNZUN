@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 
 test('shows all 8 tabs (including Lyric motion and Help) and switches panels', async ({ page }) => {
   await page.goto('/');
-  await expect(page).toHaveTitle('ZUNZUN');
+  await expect(page).toHaveTitle('ZUNZUN3');
 
   const tabLabels = ['Music', 'Lyrics', 'Lyric motion', 'Visualizer', 'Overlay', 'Save', 'Export', 'Help'];
   for (const label of tabLabels) {
