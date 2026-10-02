@@ -44,6 +44,18 @@ export function mountShell(root: HTMLElement): void {
   // 共通の再生欄 (どのタブでも使える)。Lyrics タブでは Space をタップに使うので、そのタブの処理に任せる
   header.appendChild(createTransport({ spaceHandledByPanel: () => active === 'lyrics' }));
 
+  // ライセンス: どの画面からでも 1 回で見られるように、右上に置く (押すと「使い方」タブのライセンス欄へ)
+  const licenseLink = document.createElement('button');
+  licenseLink.type = 'button';
+  licenseLink.className = 'tab-button license-link';
+  licenseLink.dataset.shell = 'license';
+  licenseLink.addEventListener('click', () => {
+    active = 'help';
+    render();
+    body.querySelector('[data-help="license"]')?.scrollIntoView({ block: 'start' });
+  });
+  header.appendChild(licenseLink);
+
   // 表記の言語 (日本語 / English)。切り替えるとタブ名と今のタブを作り直す
   const langBox = document.createElement('div');
   langBox.className = 'lang-switch';
@@ -61,6 +73,7 @@ export function mountShell(root: HTMLElement): void {
   header.appendChild(langBox);
   const syncLang = (): void => {
     langBox.setAttribute('aria-label', tr('表示の言語', 'Language'));
+    licenseLink.textContent = tr('ライセンス', 'License');
     for (const [l, b] of langButtons) b.setAttribute('aria-pressed', String(l === lang()));
     document.documentElement.lang = lang();
   };

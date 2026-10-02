@@ -23,9 +23,12 @@ test('ロゴは ZUNZUN3 (3 だけ黄色)。「使い方」のいちばん下に 
   await expect(page.locator('.app-header h1')).toHaveText('ZUNZUN3');
   const color = await page.locator('.app-header h1 .logo-3').evaluate((el) => getComputedStyle(el).color);
   expect(color).toBe('rgb(255, 210, 63)');
-  await page.getByRole('tab').last().click();
+  // 右上の「ライセンス」から、どのタブにいても使い方のライセンス欄へ飛ぶ
+  await page.getByRole('tab').nth(3).click();
+  await page.locator('[data-shell="license"]').click();
+  await expect(page.getByRole('tab').last()).toHaveAttribute('aria-selected', 'true');
   const lic = page.locator('[data-help="license"]');
-  await expect(lic).toBeVisible();
+  await expect(lic).toBeInViewport();
   await expect(lic.locator(':scope > pre')).toContainText('MIT License');
   await expect(lic.locator(':scope > pre')).toContainText('Copyright (c) 2026 luarietakamiya-dotcom');
   for (const name of ['JIZURA', 'three.js', 'Mediabunny']) await expect(lic).toContainText(name);

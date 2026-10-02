@@ -63,6 +63,10 @@ body {
   border-color: var(--border);
 }
 
+/* 右上のライセンスへのリンク (言語の切り替えの左) */
+.license-link { margin-left: auto; padding: 4px 8px; font-size: 12px; }
+.license-link + .lang-switch { margin-left: 0; }
+
 /* 表記の言語の切り替え (日本語 / EN) */
 .lang-switch {
   display: flex;
