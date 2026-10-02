@@ -519,8 +519,8 @@ body {
 .help-details > summary { cursor: pointer; font-weight: 600; padding: 4px 0; color: #e7e9ee; }
 .help-details[open] > summary { margin-bottom: 4px; }
 
-/* 「背景と素材」タブ: 左に設定、右に固定のプレビュー (狭い画面では上に固定) */
-.overlay-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 460px); gap: 16px; align-items: start; }
+/* 「背景と素材」タブ: 真ん中で分けて、左に設定、右に固定のプレビュー (狭い画面では上に固定) */
+.overlay-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .overlay-controls { min-width: 0; }
 .overlay-preview { position: sticky; top: 8px; z-index: 5; }
 .overlay-preview .visualizer-canvas-wrap { margin-top: 0; max-width: none; }

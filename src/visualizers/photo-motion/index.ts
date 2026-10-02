@@ -33,7 +33,7 @@ export const manifest: VisualizerManifest = {
     {
       type: 'range',
       key: 'glowAmount',
-      label: { ja: '光の強さ', en: 'Glow' },
+      label: { ja: '音で光る強さ', en: 'Light reaction' },
       help: {
         ja: '上げるほど、メーター・LED・照明などの明るい所が音に合わせて強く光ります (暗い所はそのまま)',
         en: 'Higher makes the bright parts (meters, LEDs, lights) glow more with the music (dark parts stay as they are)',

@@ -392,7 +392,7 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 - `.github/workflows/pages.yml`: **main-jxttta に push するたびに**、lint・単体テスト・ビルド (`ZUNZUN_BASE=/ZUNZUN/`) をして https://luarietakamiya-dotcom.github.io/ZUNZUN/ に出す (ユーザー指示。push するたびに公開版も変わるので、途中のものを push するときは気をつける)。
 - 初回はユーザーがリポジトリの設定を 2 つする: Settings → Pages の Source を「GitHub Actions」、Settings → Environments → github-pages の Deployment branches に main-jxttta を足す。
 - `vite.config.ts` の `base` は `ZUNZUN_BASE` (ふだんは `/`)。
-- 残り: ビジュアライザーの設定に「光の強さ」という名前のつまみが 2 つある (共通の光のにじみと、写真に動きの glowAmount)。名前を分ける。
+- 「光の強さ」という名前のつまみが 2 つあった件（済 2026-10-02）: 共通は「光のにじみ」(Bloom)、写真に動きの glowAmount は「音で光る強さ」(Light reaction)。
 
 ### 2026-10-01 曲の区切り（ARCHITECTURE「曲の区切りと、背景のスライドショー」①）
 - `core/lyrics/sections.ts`: `sectionKindOf`（見出し・ファイル名の言葉 → 種類。英字は前後が英字でないときだけ = universe は verse ではない、`_chorus_01` は chorus）、`findSections`（見出しの行番号 → 歌詞の行の時刻）、`sectionAt`。`buildLyricsView` の `sections`。タイムラインに色の帯（`lyrics-timeline.ts` の `SECTION_STYLE`）。
@@ -408,9 +408,9 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 
 ### 2026-10-01 「使い方」タブ（ユーザー指示「簡単な使い方と、詳しい使い方をのせたページを書き出しの横に。画像付き」）
 - `src/ui/panels/help.ts`（`PanelId` に `help`、タブの並びの最後）。かんたんな使い方 5 つの手順（曲 → 映像 → 歌詞とタップ → 背景 → 書き出し）と、くわしい使い方（開け閉めできる項目 11 個）。文は日本語・英語。
-- 画像は `src/assets/help/*.webp`（10 枚・約 320KB。画像の中の文字は日本語）。**画面を変えたら撮り直す**: `npm run dev` を起動してから `node scripts/help-screenshots.mjs [chromium の場所]`（見本の曲・歌詞・画像はスクリプトの中で作る。ユーザーの曲や歌詞は写さない）。文（help.ts）も合わせて直す。
+- 画像は `src/assets/help/*.webp`（11 枚・約 340KB。画像の中の文字は日本語）。**画面を変えたら撮り直す**: `npm run dev` を起動してから `node scripts/help-screenshots.mjs [chromium の場所]`（見本の曲・歌詞・画像はスクリプトの中で作る。ユーザーの曲や歌詞は写さない）。文（help.ts）も合わせて直す。
 - タブが 7 つになって 1280px で上の帯が 2 段になったので、再生の位置のつまみ（180 → 140px）と曲の名前（160 → 120px）を少し短くした。
-- E2E `tests/e2e/help.spec.ts`（タブがいちばん右・5 つの手順・画像 10 枚がすべて読める）。`shell.spec.ts` のタブの数を 7 に。
+- E2E `tests/e2e/help.spec.ts`（タブがいちばん右・5 つの手順・画像 11 枚がすべて読める）。`shell.spec.ts` のタブの数を 7 に。
 
 ### 2026-10-01 タブの並びと「リリックモーション」タブ（レビュー・ユーザーの声）
 - 並び: 音楽・歌詞・**リリックモーション**・ビジュアライザー・背景と素材・**保存**（元「設定」）・書き出し・使い方（`shell.ts` の `TAB_ORDER`、`PanelId` の `motion`）。
@@ -428,3 +428,8 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 - テスト: `section-motion.test.ts`（Vitest）、E2E `tests/e2e/section-motion.spec.ts`（A メロ 4 行・サビ 4 行で、サビの飾りが多い 19 → 30、同じ設定なら同じ段取り、外せば今までどおり）。
 - **ハマったこと**: 最初は「サビの方がカットが多い」で確かめようとしたが、JIZURA は行のカットの数を言葉の区切りの数で頭打ちにするので、短い行では同じ数になった。飾りの数で確かめる。
 - 確かめていないこと: 実際の曲での見た目、書き出した MP4。
+
+### 2026-10-02 「背景と素材」を真ん中で分ける・使い方の画像の撮り直し（ユーザー「真ん中で分けられる？プレビューもうちょっと大きくしたい」）
+- `.overlay-split` を左右同じ幅に（前はプレビューが 320〜460px）。1900px の画面でプレビューは横 922px、1280px で 612px。狭い画面（1000px 以下）は今までどおり上に固定。
+- 使い方の画像を撮り直し、リリックモーションタブの「区切りで動きを変える」欄の画像（`lyric-motion.webp`）を足した（「そのほかの歌詞の機能」に付ける）。
+- **注意**: 新しい画像を help.ts で読み込む前に撮影スクリプトを動かすと、画像が無くて画面が壊れる。先に仮のファイルを置いてから撮る。

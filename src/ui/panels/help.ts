@@ -2,6 +2,7 @@ import { t2, type Text2 } from '../../core/i18n';
 import backgroundImg from '../../assets/help/background.webp';
 import exportImg from '../../assets/help/export.webp';
 import layersImg from '../../assets/help/layers.webp';
+import lyricMotionImg from '../../assets/help/lyric-motion.webp';
 import lyricsInputImg from '../../assets/help/lyrics-input.webp';
 import lyricsStepsImg from '../../assets/help/lyrics-steps.webp';
 import lyricsTapImg from '../../assets/help/lyrics-tap.webp';
@@ -158,6 +159,7 @@ const DETAILS: Block[] = [
         en: 'Motion by section: with headings like [Chorus] or [Intro], the chorus moves harder and the intro / outro calmer. Choose the strength per section in the Lyric motion tab',
       },
     ],
+    image: { src: lyricMotionImg, alt: { ja: '「リリックモーション」タブの「区切りで動きを変える」', en: '"Motion by section" in the Lyric motion tab' } },
   },
   {
     title: { ja: 'ビジュアライザー (映像の種類と設定)', en: 'Visualizer (visual types and settings)' },

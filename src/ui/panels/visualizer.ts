@@ -41,7 +41,7 @@ const NUMERIC_PARAMS: { key: keyof CommonParams; label: Text2; help: Text2; min:
   },
   {
     key: 'glow',
-    label: { ja: '光の強さ', en: 'Glow' },
+    label: { ja: '光のにじみ', en: 'Bloom' },
     help: { ja: '明るい部分のまわりが、ふんわり光って見える量', en: 'How much bright areas bloom with a soft halo' },
     min: 0, max: 1, step: 0.01,
   },

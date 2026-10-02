@@ -82,6 +82,10 @@ await page.click('button[data-panel="visualizer"]');
 await page.click('button[data-panel="lyrics"]');
 await page.waitForTimeout(1000);
 await elShot('lyrics-timeline', page.locator('.lyrics-card').filter({ has: page.locator('.lyrics-timeline-box') }));
+// リリックモーション (区切りで動きを変える)
+await page.click('button[data-panel="motion"]');
+await page.waitForTimeout(1500);
+await elShot('lyric-motion', page.locator('.lyrics-card').filter({ has: page.locator('[data-motion="sections-on"]') }));
 // ビジュアライザー (写真に動き)
 await page.evaluate(async () => (await import('/src/core/store.ts')).store.audio.seek(7.6));
 await page.click('button[data-panel="visualizer"]');

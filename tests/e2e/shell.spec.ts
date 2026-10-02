@@ -63,7 +63,7 @@ test('表記の言語: 日本語に切り替えるとタブ名・設定の名前
   await page.locator('button[data-lang="ja"]').click();
   await expect(page.getByRole('tab', { name: 'ビジュアライザー' })).toBeVisible();
   await page.getByRole('tab', { name: 'ビジュアライザー' }).click();
-  await expect(page.getByText(/^光の強さ: /)).toBeVisible();
+  await expect(page.getByText(/^光のにじみ: /)).toBeVisible();
   await expect(page.getByText('明るい部分のまわりが、ふんわり光って見える量')).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
   // 開き直しても日本語のまま (このブラウザに覚えている)
@@ -72,7 +72,7 @@ test('表記の言語: 日本語に切り替えるとタブ名・設定の名前
   await page.locator('button[data-lang="en"]').click();
   await expect(page.getByRole('tab', { name: 'Music' })).toBeVisible();
   await page.getByRole('tab', { name: 'Visualizer' }).click();
-  await expect(page.getByText(/^Glow: /)).toBeVisible();
+  await expect(page.getByText(/^Bloom: /)).toBeVisible();
 });
 
 test('このビジュアライザーの設定: Live Stage のカメラの場所を選ぶと残り、ほかのビジュアライザーには出ない', async ({ page }) => {
