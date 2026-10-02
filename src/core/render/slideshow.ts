@@ -24,6 +24,8 @@ export interface SlideCue {
   t: number;
   /** 何枚目の画像か (names の番号) */
   index: number;
+  /** その画像が出る区切りの種類 (画像の動きの強さに使う。core/render/slide-motion.ts) */
+  kind?: SectionKind;
 }
 
 const WEIGHT: Record<SectionKind, number> = {
@@ -90,7 +92,7 @@ export function slideSchedule(input: SlideScheduleInput): SlideCue[] {
   const n = input.names.length;
   const duration = Number.isFinite(input.duration) && input.duration > 0 ? input.duration : 0;
   if (n === 0 || duration <= 0) return [];
-  if (n === 1) return [{ t: 0, index: 0 }];
+  if (n === 1) return [{ t: 0, index: 0, kind: input.sections[0]?.kind ?? 'other' }];
   const grid = input.grid.length ? [...input.grid].sort((a, b) => a - b) : [0];
   const sections: Section[] = input.sections.length ? input.sections.map((s) => ({ ...s })) : [{ kind: 'other', label: '', start: 0, end: duration }];
   // 区切りの頭を、すぐ近く (1/4 小節以内) の小節の頭にそろえる
@@ -147,7 +149,7 @@ export function slideSchedule(input: SlideScheduleInput): SlideCue[] {
         index = pool[c % pool.length]!;
       }
       counters.set(key, c + 1);
-      if (index !== prev) cues.push({ t: heads[h]!, index });
+      if (index !== prev) cues.push({ t: heads[h]!, index, kind: s.kind });
       prev = index;
     }
   }
@@ -155,8 +157,8 @@ export function slideSchedule(input: SlideScheduleInput): SlideCue[] {
 }
 
 /** 時刻 t に出す画像と、ひとつ前の画像・切り替えてからの秒数 (じわっと切り替えるとき用) */
-export function slideAt(cues: readonly SlideCue[], t: number): { index: number; prev: number; since: number } {
-  if (cues.length === 0) return { index: -1, prev: -1, since: Infinity };
+export function slideAt(cues: readonly SlideCue[], t: number): { index: number; prev: number; since: number; cue: number } {
+  if (cues.length === 0) return { index: -1, prev: -1, since: Infinity, cue: -1 };
   let k = 0;
   for (let i = cues.length - 1; i >= 0; i--) {
     if (t >= cues[i]!.t) {
@@ -165,7 +167,7 @@ export function slideAt(cues: readonly SlideCue[], t: number): { index: number; 
     }
   }
   const cur = cues[k]!;
-  return { index: cur.index, prev: k > 0 ? cues[k - 1]!.index : -1, since: Math.max(0, t - cur.t) };
+  return { index: cur.index, prev: k > 0 ? cues[k - 1]!.index : -1, since: Math.max(0, t - cur.t), cue: k };
 }
 
 /** 切り替え表を、今のプロジェクトの状態から作るための材料 (プレビューと書き出しで同じものを使う) */

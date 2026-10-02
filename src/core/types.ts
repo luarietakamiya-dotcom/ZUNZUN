@@ -1,4 +1,5 @@
 import type { Text2 } from './i18n';
+import { defaultSlideMotion, type SlideMotionSettings } from './render/slide-motion';
 /**
  * ZUNZUN の中核となる共有型。
  * docs/ARCHITECTURE.md の「Visualizer 共通インターフェース」「Project JSON」に対応する。
@@ -229,12 +230,14 @@ export interface BackgroundSlides {
   fadeSec: number;
   /** 切り替えの細かさ (0..1、0.5 が既定。上げるほど速い) */
   pace: number;
+  /** 画像をゆっくり動かす (ケン・バーンズ効果。core/render/slide-motion.ts)。前のプロジェクトには無い = 動かさない */
+  motion?: SlideMotionSettings;
 }
 
 /** スライドショーの画像の上限 */
 export const MAX_SLIDES = 100;
 
-export const defaultSlides = (items: BackgroundSlide[]): BackgroundSlides => ({ items, transition: 'fade', fadeSec: 0.6, pace: 0.5 });
+export const defaultSlides = (items: BackgroundSlide[]): BackgroundSlides => ({ items, transition: 'fade', fadeSec: 0.6, pace: 0.5, motion: defaultSlideMotion() });
 
 export const defaultBackground = (ref: string, sha256: string, kind: BackgroundSettings['kind']): BackgroundSettings => ({
   ref,

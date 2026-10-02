@@ -4,6 +4,7 @@ import { sectionKindOf, type SectionKind } from '../../core/lyrics/sections';
 import { t2, tr, type Text2 } from '../../core/i18n';
 import { findLibraryItem, LIBRARY, libraryRef } from '../../core/library';
 import { sliderRow } from './panel-helpers';
+import { defaultSlideMotion, type SlideMotionSettings } from '../../core/render/slide-motion';
 
 /**
  * Overlay タブの「背景」欄。一枚絵か動画を選び、収め方・暗さ・ぼかし (画像だけ)・ビジュアライザーの重ね方と濃さ・
@@ -358,6 +359,55 @@ export function createBackgroundCard(): HTMLElement {
       paceRow.setLabel(v.toFixed(2));
     });
     grid.append(fadeRow.row, paceRow.row);
+
+    // 画像の動き (ケン・バーンズ効果。core/render/slide-motion.ts)。前のプロジェクトで設定が無いときは「動かさない」
+    const motion: SlideMotionSettings = slides.motion ?? { ...defaultSlideMotion(), enabled: false };
+    const setMotion = (patch: Partial<SlideMotionSettings>): void => {
+      Object.assign(motion, patch);
+      store.updateBackgroundSlides({ motion: { ...motion } });
+    };
+    const check = (label: string, help: string, key: 'enabled' | 'bySection', data: string): { row: HTMLElement; input: HTMLInputElement } => {
+      const r = h('label', 'param-row');
+      const line = h('span', 'row-gap');
+      const input = h('input');
+      input.type = 'checkbox';
+      input.checked = motion[key];
+      input.dataset.background = data;
+      line.append(input, h('span', 'param-label', label));
+      r.append(line, h('span', 'param-help', help));
+      return { row: r, input };
+    };
+    const onOff = check(tr('画像をゆっくり動かす', 'Slowly move the images'), tr('少し拡大して、寄る・引く・横や斜めに流れる、をゆっくり繰り返します', 'Zooms in a little and slowly pushes in, pulls out or drifts sideways'), 'enabled', 'slides-motion');
+    const amountRow = sliderRow({ ja: '動きの大きさ', en: 'Motion amount' }, { ja: '上げるほど大きく拡大して、大きく動きます (画像の端が少し切れます)', en: 'Higher zooms and moves more (crops a little more of the edges)' }, 0, 1, 0.01);
+    amountRow.input.dataset.background = 'slides-motion-amount';
+    amountRow.input.value = String(motion.amount);
+    amountRow.setLabel(motion.amount.toFixed(2));
+    amountRow.input.addEventListener('input', () => {
+      const v = parseFloat(amountRow.input.value);
+      setMotion({ amount: v });
+      amountRow.setLabel(v.toFixed(2));
+    });
+    const bySection = check(tr('区切りで強さを変える', 'Vary by section'), tr('サビは大きく、イントロ・アウトロはゆっくり動きます (歌詞の [サビ] などの見出しを使います)', 'Bigger in the chorus, gentler in the intro and outro (uses headings like [Chorus] in the lyrics)'), 'bySection', 'slides-motion-section');
+    const beatRow = sliderRow({ ja: '拍で寄る', en: 'Beat push' }, { ja: '拍の直後にほんの少し寄って、すぐ戻ります (0 で寄らない)', en: 'Pushes in very slightly right after each beat (0 = off)' }, 0, 1, 0.01);
+    beatRow.input.dataset.background = 'slides-motion-beat';
+    beatRow.input.value = String(motion.beatPush);
+    beatRow.setLabel(motion.beatPush.toFixed(2));
+    beatRow.input.addEventListener('input', () => {
+      const v = parseFloat(beatRow.input.value);
+      setMotion({ beatPush: v });
+      beatRow.setLabel(v.toFixed(2));
+    });
+    const detail = [amountRow.row, bySection.row, beatRow.row];
+    const showDetail = (): void => {
+      for (const r of detail) r.hidden = !motion.enabled;
+    };
+    onOff.input.addEventListener('change', () => {
+      setMotion({ enabled: onOff.input.checked });
+      showDetail();
+    });
+    bySection.input.addEventListener('change', () => setMotion({ bySection: bySection.input.checked }));
+    showDetail();
+    grid.append(onOff.row, ...detail);
     for (const def of SLIDERS) {
       const { row: r, input: range, setLabel } = sliderRow(def.label, def.help, 0, 1, 0.01);
       range.value = String(bg[def.key]);

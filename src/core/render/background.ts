@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { BackgroundSettings, VisualizerBlend } from '../types';
 import { ExactVideo, PreviewVideo } from './background-video';
 import { slideAt, type SlideCue } from './slideshow';
+import { slideTransform, STILL, type SlideTransform } from './slide-motion';
 import { tr } from '../i18n';
 
 /**
@@ -23,6 +24,8 @@ import { tr } from '../i18n';
  * ひとつ前の画像を重ねて描く (map / map2 と mixAmt)。画像は全部を一度に持たず、今・前・次の画像だけを読み込む
  * (長い辺 SLIDE_MAX_SIDE まで縮める。使わなくなったものは捨てる)。プレビューは読み終わるまで前の絵のまま、
  * 書き出しは advanceExact でそのフレームに要る画像を読み終わるまで待つ。
+ * 画像の動き (slides.motion。core/render/slide-motion.ts): 画像ごとに拡大と位置 (move / move2) を時刻から決めて、
+ * 画面に収めたときにはみ出した分の中で動かす。時刻だけで決まるので、プレビューと書き出しで同じ動きになる。
  */
 
 /** 背景の絵の uv の拡大率。'cover' は画面いっぱい (はみ出しは切る)、'contain' は全体を収める (余りは黒) */
@@ -44,6 +47,9 @@ void main() {
 const BG_FRAG = /* glsl */ `
 uniform sampler2D map;
 uniform vec2 uvScale;
+/** 画像の動き: 拡大, 位置 x, 位置 y (位置は、はみ出した分に対する -1..1) */
+uniform vec3 move;
+uniform vec3 move2;
 /** スライドショーで、じわっと切り替える間のひとつ前の画像 (mixAmt = 今の画像の割合。1 なら map だけ) */
 uniform sampler2D map2;
 uniform vec2 uvScale2;
@@ -51,14 +57,16 @@ uniform float mixAmt;
 /** 暗さと、'over' のときの (1 − 濃さ) を掛けたもの */
 uniform float brightness;
 varying vec2 vUv;
-vec3 sampleFit(sampler2D tex, vec2 scale) {
-  vec2 uv = (vUv - 0.5) * scale + 0.5;
+vec3 sampleFit(sampler2D tex, vec2 scale, vec3 mv) {
+  vec2 s = scale / max(mv.x, 0.001);
+  vec2 room = max(vec2(0.0), (1.0 - s) * 0.5);
+  vec2 uv = (vUv - 0.5) * s + 0.5 + mv.yz * room;
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec3(0.0);
   return texture2D(tex, uv).rgb;
 }
 void main() {
-  vec3 col = sampleFit(map, uvScale);
-  if (mixAmt < 1.0) col = mix(sampleFit(map2, uvScale2), col, mixAmt);
+  vec3 col = sampleFit(map, uvScale, move);
+  if (mixAmt < 1.0) col = mix(sampleFit(map2, uvScale2, move2), col, mixAmt);
   gl_FragColor = vec4(col * brightness, 1.0);
 }
 `;
@@ -145,10 +153,12 @@ export class BackgroundCompositor {
   /** スライドショー: 画像ごとのファイル (選び直していないものは null)・切り替え表・読み込んだ画像 */
   private slideFiles: (File | null)[] | null = null;
   private slideCues: readonly SlideCue[] = [];
+  /** 拍の時刻 (画像の動きの「拍で寄る」用) */
+  private slideBeats: readonly number[] = [];
   private readonly slideTex = new Map<number, Promise<{ texture: THREE.Texture; aspect: number } | null>>();
   private readonly slideReady = new Map<number, { texture: THREE.Texture; aspect: number }>();
   /** いま描いている画像 (読み込み中の画像に切り替わるまでは前のまま) */
-  private shown: { cur: number; prev: number; mix: number } = { cur: -1, prev: -1, mix: 1 };
+  private shown: { cur: number; prev: number; mix: number; move: SlideTransform; move2: SlideTransform } = { cur: -1, prev: -1, mix: 1, move: STILL, move2: STILL };
   /** 書き出しの各フレームの時刻 (スライドショー用) と、次に描くフレームの番号 */
   private exactTimes: readonly number[] | null = null;
   private exactFrame = 0;
@@ -169,6 +179,8 @@ export class BackgroundCompositor {
       uniforms: {
         map: { value: null },
         uvScale: { value: new THREE.Vector2(1, 1) },
+        move: { value: new THREE.Vector3(1, 0, 0) },
+        move2: { value: new THREE.Vector3(1, 0, 0) },
         map2: { value: null },
         uvScale2: { value: new THREE.Vector2(1, 1) },
         mixAmt: { value: 1 },
@@ -197,9 +209,10 @@ export class BackgroundCompositor {
     return this.slideFiles != null;
   }
 
-  /** スライドショーの切り替え表 (core/render/slideshow.ts)。プレビューは変わるたび、書き出しは最初に 1 回 */
-  setSlideCues(cues: readonly SlideCue[]): void {
+  /** スライドショーの切り替え表 (core/render/slideshow.ts) と拍の時刻 (画像の動き用)。プレビューは変わるたび、書き出しは最初に 1 回 */
+  setSlideCues(cues: readonly SlideCue[], beats: readonly number[] = []): void {
     this.slideCues = cues;
+    this.slideBeats = [...beats].filter(Number.isFinite).sort((a, b) => a - b);
   }
 
   /**
@@ -290,7 +303,7 @@ export class BackgroundCompositor {
     const files = this.slideFiles;
     const s = this.settings?.slides;
     if (!files || !s) return;
-    const { index, prev, since } = slideAt(this.slideCues, t);
+    const { index, prev, since, cue } = slideAt(this.slideCues, t);
     const cur = index >= 0 ? index : files.findIndex((f) => f != null);
     if (cur < 0) return;
     const fade = s.transition === 'fade' ? Math.max(0.05, s.fadeSec) : 0;
@@ -303,7 +316,14 @@ export class BackgroundCompositor {
     this.evictSlides(new Set([...want, this.shown.cur, this.shown.prev]));
     if (!this.slideReady.has(cur)) return; // 読み込み中 (プレビュー): 前の絵のまま
     const usePrev = mixAmt < 1 && this.slideReady.has(prev);
-    this.shown = { cur, prev: usePrev ? prev : -1, mix: usePrev ? mixAmt : 1 };
+    // 画像の動き (今の画像は cue 番目の切り替えから、前の画像は cue - 1 番目から)
+    const moveOf = (k: number): SlideTransform => {
+      const c = this.slideCues[k];
+      if (!c) return STILL;
+      const end = this.slideCues[k + 1]?.t ?? Math.max(c.t + 8, t);
+      return slideTransform(s.motion, { cue: k, start: c.t, end, fade, kind: c.kind, t }, this.slideBeats);
+    };
+    this.shown = { cur, prev: usePrev ? prev : -1, mix: usePrev ? mixAmt : 1, move: moveOf(cue), move2: usePrev ? moveOf(cue - 1) : STILL };
     this.applySlides();
   }
 
@@ -346,7 +366,8 @@ export class BackgroundCompositor {
     this.slideTex.clear();
     this.slideFiles = null;
     this.slideCues = [];
-    this.shown = { cur: -1, prev: -1, mix: 1 };
+    this.slideBeats = [];
+    this.shown = { cur: -1, prev: -1, mix: 1, move: STILL, move2: STILL };
     this.exactTimes = null;
     this.exactFrame = 0;
     this.bgMaterial.uniforms.map2!.value = null;
@@ -362,11 +383,15 @@ export class BackgroundCompositor {
     u.map!.value = cur.texture;
     const [sx, sy] = backgroundUvScale(cur.aspect, this.dstAspect, s.fit);
     (u.uvScale!.value as THREE.Vector2).set(sx, sy);
+    const mv = this.shown.move;
+    (u.move!.value as THREE.Vector3).set(mv.zoom, mv.x, mv.y);
     const prev = this.slideReady.get(this.shown.prev);
     if (prev && this.shown.mix < 1) {
       u.map2!.value = prev.texture;
       const [px, py] = backgroundUvScale(prev.aspect, this.dstAspect, s.fit);
       (u.uvScale2!.value as THREE.Vector2).set(px, py);
+      const m2 = this.shown.move2;
+      (u.move2!.value as THREE.Vector3).set(m2.zoom, m2.x, m2.y);
       u.mixAmt!.value = this.shown.mix;
     } else {
       u.map2!.value = null;
@@ -448,6 +473,7 @@ export class BackgroundCompositor {
     else {
       const [sx, sy] = backgroundUvScale(this.srcAspect, this.dstAspect, s.fit);
       (this.bgMaterial.uniforms.uvScale!.value as THREE.Vector2).set(sx, sy);
+      (this.bgMaterial.uniforms.move!.value as THREE.Vector3).set(1, 0, 0);
     }
     const opacity = this.vOpacity;
     const bright = 1 - Math.max(0, Math.min(1, s.dim));

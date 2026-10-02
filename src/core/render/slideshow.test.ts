@@ -42,7 +42,7 @@ describe('slideSchedule (切り替え表)', () => {
 
   it('0 枚なら空、1 枚なら最初から最後まで同じ画像', () => {
     expect(slideSchedule({ names: [], sections: [], grid, duration: 120, pace: 0.5 })).toEqual([]);
-    expect(slideSchedule({ names: ['a.jpg'], sections: [], grid, duration: 120, pace: 0.5 })).toEqual([{ t: 0, index: 0 }]);
+    expect(slideSchedule({ names: ['a.jpg'], sections: [], grid, duration: 120, pace: 0.5 })).toEqual([{ t: 0, index: 0, kind: 'other' }]);
   });
 
   it('小節の頭で切り替え、枚数が多いほど速い (8 小節より遅く、1 小節より速くはしない)', () => {
@@ -68,6 +68,16 @@ describe('slideSchedule (切り替え表)', () => {
     const chorus = Math.min(...gaps(cues, 48, 80));
     expect(chorus).toBeLessThan(verse);
     expect(intro).toBeGreaterThanOrEqual(verse);
+  });
+
+  it('切り替えごとに、その画像が出る区切りの種類を覚えている (画像の動きの強さに使う)', () => {
+    const sections = [sec('intro', 0, 16.3), sec('verse', 16.3, 48.2), sec('chorus', 48.2, 80), sec('outro', 80, 120)];
+    const names = Array.from({ length: 12 }, (_, i) => `p${i}.jpg`);
+    const cues = slideSchedule({ names, sections, grid, duration: 120, pace: 0.5 });
+    for (const c of cues) {
+      const want = c.t < 16 ? 'intro' : c.t < 48 ? 'verse' : c.t < 80 ? 'chorus' : 'outro';
+      expect(c.kind, String(c.t)).toBe(want);
+    }
   });
 
   it('「切り替えの細かさ」を上げると速く、下げると遅く', () => {
@@ -107,9 +117,9 @@ describe('slideAt', () => {
       { t: 4, index: 2 },
       { t: 8, index: 1 },
     ];
-    expect(slideAt(cues, 1)).toEqual({ index: 0, prev: -1, since: 1 });
-    expect(slideAt(cues, 5)).toEqual({ index: 2, prev: 0, since: 1 });
-    expect(slideAt(cues, 8)).toEqual({ index: 1, prev: 2, since: 0 });
+    expect(slideAt(cues, 1)).toEqual({ index: 0, prev: -1, since: 1, cue: 0 });
+    expect(slideAt(cues, 5)).toEqual({ index: 2, prev: 0, since: 1, cue: 1 });
+    expect(slideAt(cues, 8)).toEqual({ index: 1, prev: 2, since: 0, cue: 2 });
     expect(slideAt([], 3).index).toBe(-1);
   });
 });

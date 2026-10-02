@@ -197,8 +197,8 @@ const DETAILS: Block[] = [
         en: 'Use a photo, a video (MP4 / WebM) or one of the 3 built-in backgrounds. Change dim, blur and fit.',
       },
       {
-        ja: 'スライドショー: 「フォルダを選ぶ」か「画像を複数選ぶ」で、ファイル名の順に並べます。歌詞の区切り ([サビ] など) で必ず切り替わり、その間は小節の頭で切り替わります (サビは速く、イントロ・アウトロはゆっくり、枚数が多いほど速く)。ファイル名に「サビ」「Chorus」「Intro」などの言葉がある画像は、その区切りの間だけ出ます。',
-        en: 'Slideshow: "Choose a folder" or "Choose several images" lines them up in file-name order. It always switches at lyric sections ([Chorus] etc.) and on bar heads in between (faster in the chorus, slower in the intro / outro, faster with more images). Images whose names contain words like "Chorus", "Intro" or "サビ" appear only in that section.',
+        ja: 'スライドショー: 「フォルダを選ぶ」か「画像を複数選ぶ」で、ファイル名の順に並べます。歌詞の区切り ([サビ] など) で必ず切り替わり、その間は小節の頭で切り替わります (サビは速く、イントロ・アウトロはゆっくり、枚数が多いほど速く)。ファイル名に「サビ」「Chorus」「Intro」などの言葉がある画像は、その区切りの間だけ出ます。「画像をゆっくり動かす」で、映している間に少し寄ったり流れたりします (区切りで強さを変える・拍で寄るも選べます)。',
+        en: 'Slideshow: "Choose a folder" or "Choose several images" lines them up in file-name order. It always switches at lyric sections ([Chorus] etc.) and on bar heads in between (faster in the chorus, slower in the intro / outro, faster with more images). Images whose names contain words like "Chorus", "Intro" or "サビ" appear only in that section. "Slowly move the images" gently pushes in or drifts while each image is shown (it can also vary by section and push on the beat).',
       },
       {
         ja: 'レイヤー: 背景・ビジュアライザー・歌詞・重ねる画像の重なる順番と重ね方を変えられます。素材の欄では、グリーンバックの素材を置いて「自動で合わせる」で緑を透かせます。このタブには右 (狭い画面では上) にプレビューが固定で出るので、つまみを動かしながら見た目を確かめられます。',

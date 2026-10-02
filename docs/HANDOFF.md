@@ -477,3 +477,10 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 - E2E `tests/e2e/mobile.spec.ts`（5 件: 全メニュー・全パネルで横にはみ出さない、プレビューは 1 つだけ、広い画面は PC 表示のまま、切り替えと記憶、?mobile / ?pc、Space 1 回で 1 回）。
 - 次: M2 各パネルのスマホ用の並べ方の調整（今は横にははみ出さないが、細かい所は未調整）、M3 歌詞のタップ用の大きなボタン、M4 スマホのときのプレビューの軽さ・書き出しの注意書き。
 - 確かめていないこと: 本物のスマホ（iPhone の Safari・Android の Chrome）。ヘッドレス Chromium の 390 × 844 で確かめただけ。
+
+### 2026-10-02 スライドショーの画像の動き（ARCHITECTURE「曲の区切りと、背景のスライドショー」②の追加）
+- `core/render/slide-motion.ts`（+ テスト 6 件）、`slideshow.ts`（`SlideCue.kind`、`slideAt` が何番目の切り替えか `cue` も返す）、`background.ts`（シェーダーの `move` / `move2`、`setSlideCues(cues, beats)`）、`live-preview.ts` / `mp4.ts`（拍を渡す）、`types.ts` / `validate.ts`（`slides.motion`）、`background-card.ts`（「画像をゆっくり動かす」・動きの大きさ・区切りで強さを変える・拍で寄る）。
+- E2E `slideshow.spec.ts` に 2 件（動く・切ると止まる・拍の直後に寄る・プレビューと書き出しで同じ絵 / 設定の欄の表示と保存）。
+- **ついでに直した**: `.param-row` は `display: flex` なので `hidden` を付けても消えなかった（スライドショーの「重なる長さ」も、パッと切り替えのときに前から出たままだった）。`.param-row[hidden] { display: none; }` を足した。
+- 確かめていないこと: 書き出した MP4（書き出しと同じ `advanceExact` の流れは E2E で確認）、実際の写真での見え方。
+

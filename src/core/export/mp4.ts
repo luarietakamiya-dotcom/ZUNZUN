@@ -129,6 +129,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
           rhythm: job.rhythm ?? null,
           duration: job.timeline.duration,
         }),
+        job.analysis?.beats ?? [],
       );
     }
     await host.media.load(job.media ?? [], { exact: true });

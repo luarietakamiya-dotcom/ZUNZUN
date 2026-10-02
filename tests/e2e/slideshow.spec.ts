@@ -128,3 +128,129 @@ test('「背景と素材」タブで画像を複数選ぶと一覧に並び、�
   });
   expect(saved).toEqual(['1_intro.png', '2_サビ.png', '10_街.png']);
 });
+
+test('画像の動き: 映している間にゆっくり動き (切ると止まる)、拍の直後は少し寄る。書き出しの流れでも同じ絵', async ({ page }) => {
+  await page.goto('/');
+  const r = await page.evaluate(async () => {
+    const { VisualizerHost } = await import('/src/core/visualizer/host.ts');
+    const { visualizerRegistry } = await import('/src/visualizers/index.ts');
+    const { defaultCommonParams, defaultBackground, defaultComposition, defaultSlides } = await import('/src/core/types.ts');
+    const { defaultSlideMotion } = await import('/src/core/render/slide-motion.ts');
+    const W = 160;
+    const H = 90;
+    // 模様のある画像 2 枚 (動くと画素が変わるように、縞と丸)
+    const files = await Promise.all(
+      [0, 1].map(async (i) => {
+        const src = document.createElement('canvas');
+        src.width = 320;
+        src.height = 180;
+        const g = src.getContext('2d')!;
+        for (let x = 0; x < 320; x += 20) {
+          g.fillStyle = (x / 20 + i) % 2 ? '#e04040' : '#40a0e0';
+          g.fillRect(x, 0, 20, 180);
+        }
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.arc(160, 90, 40, 0, Math.PI * 2);
+        g.fill();
+        const blob = await new Promise<Blob>((res) => src.toBlob((b) => res(b!), 'image/png'));
+        return new File([blob], `m${i}.png`, { type: 'image/png' });
+      }),
+    );
+    const items = files.map((f, i) => ({ ref: f.name, sha256: String(i).repeat(64) }));
+    const run = async (motion: unknown, exact: boolean, times: number[]): Promise<Uint8ClampedArray[]> => {
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      document.body.appendChild(canvas);
+      const host = new VisualizerHost(canvas, { pixelRatio: 1, preserveDrawingBuffer: true });
+      host.resize(W, H);
+      const params = { ...defaultCommonParams(), intensity: 0 };
+      await host.setPreset(visualizerRegistry.get('_debug-bars')!, 1, params);
+      host.composition = { ...defaultComposition(), visualizerBlend: 'over', visualizerOpacity: 0 };
+      const settings = { ...defaultBackground(items[0]!.ref, items[0]!.sha256, 'image'), dim: 0, slides: { ...defaultSlides(items), transition: 'cut' as const, motion } };
+      await host.background.load(settings, files[0]!, { exact, slideFiles: files });
+      host.background.setSlideCues(
+        [
+          { t: 0, index: 0, kind: 'verse' },
+          { t: 10, index: 1, kind: 'verse' },
+        ],
+        [5],
+      );
+      if (exact) host.background.beginExact(times);
+      const tmp = document.createElement('canvas');
+      tmp.width = W;
+      tmp.height = H;
+      const tg = tmp.getContext('2d')!;
+      const out: Uint8ClampedArray[] = [];
+      for (const t of times) {
+        const frame = { t, dt: 1 / 30, bass: 0, mid: 0, high: 0, rms: 0, peak: 0, beat: 0, beatIndex: -1, spectralEnergy: 0, flux: 0, bands: new Float32Array(64) };
+        if (exact) await host.background.advanceExact();
+        else
+          for (let k = 0; k < 15; k++) {
+            host.render(frame, params);
+            await new Promise((res) => setTimeout(res, 20));
+          }
+        host.render(frame, params);
+        tg.drawImage(canvas, 0, 0);
+        out.push(tg.getImageData(0, 0, W, H).data);
+      }
+      host.dispose();
+      canvas.remove();
+      return out;
+    };
+    const diff = (a: Uint8ClampedArray, b: Uint8ClampedArray): number => {
+      let s = 0;
+      for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i]! - b[i]!) + Math.abs(a[i + 1]! - b[i + 1]!) + Math.abs(a[i + 2]! - b[i + 2]!);
+      return s / (a.length / 4) / 3;
+    };
+    const on = { ...defaultSlideMotion(), beatPush: 0 };
+    const off = { ...on, enabled: false };
+    const beat = { ...on, beatPush: 1 };
+    const [onA, onB] = await run(on, false, [1, 8]);
+    const [offA, offB] = await run(off, false, [1, 8]);
+    const [exA, exB] = await run(on, true, [1, 8]);
+    const [b4, b5] = await run(beat, false, [4.95, 5.0]);
+    const [n4, n5] = await run(on, false, [4.95, 5.0]);
+    return {
+      moved: diff(onA!, onB!),
+      still: diff(offA!, offB!),
+      previewVsExport: Math.max(diff(onA!, exA!), diff(onB!, exB!)),
+      // 拍の直後 (5.0 秒) は、拍で寄らない設定との差が、拍の少し前 (4.95 秒) より大きい
+      beatAt: diff(b5!, n5!),
+      beatBefore: diff(b4!, n4!),
+    };
+  });
+  expect(r.moved, JSON.stringify(r)).toBeGreaterThan(3);
+  expect(r.still, JSON.stringify(r)).toBeLessThan(0.5);
+  expect(r.previewVsExport, JSON.stringify(r)).toBeLessThan(0.5);
+  expect(r.beatAt, JSON.stringify(r)).toBeGreaterThan(r.beatBefore + 0.5);
+});
+
+test('「背景と素材」タブ: スライドショーの「画像をゆっくり動かす」を切ると、大きさ・区切り・拍の設定が隠れ、保存される', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('zunzun.lang', 'ja'));
+  await page.goto('/');
+  await page.click('button[data-panel="overlay"]');
+  const pngs = await page.evaluate(async () =>
+    Promise.all(
+      ['#f00', '#0f0'].map(async (c) => {
+        const s = document.createElement('canvas');
+        s.width = 32;
+        s.height = 18;
+        const g = s.getContext('2d')!;
+        g.fillStyle = c;
+        g.fillRect(0, 0, 32, 18);
+        return s.toDataURL('image/png').split(',')[1]!;
+      }),
+    ),
+  );
+  await page.locator('[data-background="slides-files"]').setInputFiles(pngs.map((b, i) => ({ name: `s${i}.png`, mimeType: 'image/png', buffer: Buffer.from(b, 'base64') })));
+  const onOff = page.locator('[data-background="slides-motion"]');
+  await expect(onOff).toBeChecked();
+  await expect(page.locator('[data-background="slides-motion-amount"]')).toBeVisible();
+  await onOff.uncheck();
+  await expect(page.locator('[data-background="slides-motion-amount"]')).toBeHidden();
+  await expect(page.locator('[data-background="slides-motion-beat"]')).toBeHidden();
+  const saved = await page.evaluate(async () => (await import('/src/core/store.ts')).store.background?.slides?.motion);
+  expect(saved).toMatchObject({ enabled: false });
+});

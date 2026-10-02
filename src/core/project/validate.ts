@@ -30,6 +30,7 @@ import {
 } from '../types';
 import { SECTION_KINDS } from '../lyrics/section-motion';
 import { MAX_BLANKS, normalizeBlanks } from '../lyrics/blanks';
+import { defaultSlideMotion, type SlideMotionSettings } from '../render/slide-motion';
 import { normalizeView } from '../render/view';
 import { normalizeComposition } from '../render/composition';
 import { sanitizePresetParamsMap } from '../visualizer/preset-params';
@@ -267,6 +268,20 @@ function sanitizeBackground(raw: unknown): BackgroundSettings | null {
   };
 }
 
+/** スライドショーの画像の動き。無い (前のプロジェクト)・形が違うときは無し (= 動かさない) */
+function sanitizeSlideMotion(raw: unknown): { motion?: SlideMotionSettings } {
+  if (!isPlainObject(raw)) return {};
+  const d = defaultSlideMotion();
+  return {
+    motion: {
+      enabled: typeof raw.enabled === 'boolean' ? raw.enabled : d.enabled,
+      amount: isFiniteNumber(raw.amount) ? clamp(raw.amount, 0, 1) : d.amount,
+      bySection: typeof raw.bySection === 'boolean' ? raw.bySection : d.bySection,
+      beatPush: isFiniteNumber(raw.beatPush) ? clamp(raw.beatPush, 0, 1) : d.beatPush,
+    },
+  };
+}
+
 /** スライドショー。画像が 2 枚未満なら無し (1 枚の背景として扱う) */
 function sanitizeSlides(raw: unknown): { slides?: BackgroundSlides } {
   if (!isPlainObject(raw) || !Array.isArray(raw.items)) return {};
@@ -283,6 +298,7 @@ function sanitizeSlides(raw: unknown): { slides?: BackgroundSlides } {
       transition: raw.transition === 'cut' ? 'cut' : 'fade',
       fadeSec: isFiniteNumber(raw.fadeSec) ? clamp(raw.fadeSec, 0.1, 3) : base.fadeSec,
       pace: isFiniteNumber(raw.pace) ? clamp(raw.pace, 0, 1) : base.pace,
+      ...sanitizeSlideMotion(raw.motion),
     },
   };
 }

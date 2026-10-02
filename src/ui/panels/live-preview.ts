@@ -112,7 +112,7 @@ export function createLivePreview(opts: { onFrame?: () => void } = {}): LivePrev
     const key = slidePlanKey(input);
     if (key === slideKey) return;
     slideKey = key;
-    host.background.setSlideCues(slidePlan(input));
+    host.background.setSlideCues(slidePlan(input), input.beats);
   };
 
   // 素材レイヤー・重ねる画像 (ファイルを選び直していないものは飛ばす。ファイルが変わったときだけ読み込み直す)

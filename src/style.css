@@ -159,6 +159,8 @@ body {
   flex-direction: column;
   gap: 4px;
 }
+/* 隠した欄は出さない (display: flex が hidden に勝つため。スライドショーの「重なる長さ」「画像の動き」の欄) */
+.param-row[hidden] { display: none; }
 
 .param-label {
   font-size: 12px;

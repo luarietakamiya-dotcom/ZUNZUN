@@ -241,6 +241,18 @@ describe('sanitizeProject', () => {
     expect(sanitizeProject(raw).background?.slides).toBeUndefined();
   });
 
+  it('background.slides.motion (画像の動き): 前のプロジェクト (無し) は動かさないまま。値は範囲に収め、形の違うものは既定', () => {
+    const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
+    const sha = (c: string): string => c.repeat(64);
+    const items = [{ ref: 'a.jpg', sha256: sha('a') }, { ref: 'b.jpg', sha256: sha('b') }];
+    raw.background = { ref: 'a.jpg', sha256: sha('a'), kind: 'image', slides: { items } };
+    expect(sanitizeProject(raw).background?.slides?.motion).toBeUndefined();
+    raw.background = { ref: 'a.jpg', sha256: sha('a'), kind: 'image', slides: { items, motion: { enabled: false, amount: 9, bySection: 'yes', beatPush: -2 } } };
+    expect(sanitizeProject(raw).background?.slides?.motion).toEqual({ enabled: false, amount: 1, bySection: true, beatPush: 0 });
+    raw.background = { ref: 'a.jpg', sha256: sha('a'), kind: 'image', slides: { items, motion: 'fast' } };
+    expect(sanitizeProject(raw).background?.slides?.motion).toBeUndefined();
+  });
+
   it('lyrics.stem: ファイル名と sha256 (64 桁の 16 進) があるときだけ残し、enabled の既定は true', () => {
     const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
     const sha = 'c'.repeat(64);
