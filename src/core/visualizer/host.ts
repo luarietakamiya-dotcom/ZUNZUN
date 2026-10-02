@@ -144,6 +144,10 @@ export class VisualizerHost {
       return;
     }
 
+    // init() を待っている間に resize() が来ても、そのときはまだ this.current が前のプリセットなので、新しいプリセットには
+    // 届かない。今の大きさをもう一度渡す (タブを開き直すと、絵の読み込み中に画面の大きさが決まり、写真に動きが
+    // 作ったときの仮の縦横比のまま拡大されて描かれていた。2026-10-02 ユーザー報告)
+    preset.resize(this.width, this.height);
     const previous = this.current;
     this.current = { preset, moduleId: mod.manifest.id };
     this.postfx.setScene(preset.scene, preset.camera);
