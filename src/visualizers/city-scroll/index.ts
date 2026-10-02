@@ -16,7 +16,7 @@ export const manifest: VisualizerManifest = {
       type: 'select',
       key: 'scene',
       label: { ja: '街並み', en: 'Scene' },
-      help: { ja: 'どの街の絵を流すか。「全部つなげる」は 5 枚を順に流します', en: 'Which town to scroll. "All in a row" scrolls the five pictures one after another' },
+      help: { ja: 'どの街の絵を流すか。「全部つなげる」は全部の絵を順に流します', en: 'Which town to scroll. "All in a row" scrolls all the pictures one after another' },
       options: [...SCENES.map((s) => ({ value: s.id, label: s.name })), { value: ALL_SCENES, label: { ja: '全部つなげる', en: 'All in a row' } }],
       default: SCENES[0]!.id,
     },

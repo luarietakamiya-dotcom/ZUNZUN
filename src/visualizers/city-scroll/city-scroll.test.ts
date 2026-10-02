@@ -50,9 +50,9 @@ const seeds = (p: CityScrollPreset): number[] => {
 };
 
 describe('場面の定義と設定', () => {
-  it('街並みは 5 枚で、「全部つなげる」は 5 枚の並び。設定の項目は場面・向き・速さ・ぼかし・きらめき・舞うもの・量', () => {
-    expect(SCENES.map((s) => s.id)).toEqual(['grand-avenue', 'neon-night', 'old-downtown', 'harbor-town', 'tram-street']);
-    expect(sceneSequence('all')).toHaveLength(5);
+  it('街並みは 6 枚で、「全部つなげる」は 6 枚の並び。設定の項目は場面・向き・速さ・ぼかし・きらめき・舞うもの・量', () => {
+    expect(SCENES.map((s) => s.id)).toEqual(['grand-avenue', 'neon-night', 'old-downtown', 'harbor-town', 'tram-street', 'palace-plaza']);
+    expect(sceneSequence('all')).toHaveLength(6);
     expect(sceneSequence('neon-night').map((s) => s.id)).toEqual(['neon-night']);
     expect(sceneSequence('???').map((s) => s.id)).toEqual(['grand-avenue']);
     expect(manifest.controls!.map((c) => c.key)).toEqual(['scene', 'direction', 'speed', 'blur', 'sparkle', 'particles', 'particleAmount']);
@@ -75,7 +75,7 @@ describe('場面の定義と設定', () => {
 });
 
 describe('CityScrollPreset', () => {
-  it('最初の絵を読んでから描き始める。場面を変えると読み直し、使わなくなった絵は片づける。全部つなげると 5 枚', async () => {
+  it('最初の絵を読んでから描き始める。場面を変えると読み直し、使わなくなった絵は片づける。全部つなげると 6 枚', async () => {
     const p = await makePreset(params({ scene: 'neon-night' }));
     expect(p.inspect()).toMatchObject({ scene: 'neon-night', loaded: true, count: 1 });
     const first = loaded[0]!;
@@ -83,9 +83,9 @@ describe('CityScrollPreset', () => {
     first.addEventListener('dispose', () => (disposed = true));
     p.update(frame(0), params({ scene: 'all' }));
     await settle();
-    expect(p.inspect()).toMatchObject({ scene: 'all', count: 5 });
-    // neon-night は 5 枚の中にあるので読み直さない (4 枚だけ読む)
-    expect(loaded).toHaveLength(5);
+    expect(p.inspect()).toMatchObject({ scene: 'all', count: 6 });
+    // neon-night は 6 枚の中にあるので読み直さない (5 枚だけ読む)
+    expect(loaded).toHaveLength(6);
     expect(disposed).toBe(false);
     p.update(frame(0), params({ scene: 'harbor-town' }));
     await settle();
@@ -203,7 +203,7 @@ describe('CityScrollPreset', () => {
       (m.material as THREE.Material).addEventListener('dispose', () => mat++);
     }
     p.dispose();
-    expect(disposed.size).toBe(5);
+    expect(disposed.size).toBe(6);
     expect(geo).toBe(2);
     expect(mat).toBe(2);
     expect(p.scene.children).toHaveLength(0);
