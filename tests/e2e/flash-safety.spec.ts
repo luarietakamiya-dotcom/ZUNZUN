@@ -100,6 +100,8 @@ const CASES: [string, Record<string, unknown>][] = [
   ['photo-motion', { photo: 'speaker-alley' }],
   ['photo-motion', { photo: 'rack-parts' }],
   ['photo-motion', { photo: 'alley-lights' }],
+  ['city-scroll', { scene: 'neon-night', sparkle: 1, particles: 'lights', particleAmount: 1 }],
+  ['city-scroll', { scene: 'all', sparkle: 1, speed: 1 }],
   ['live-stage', {}],
   ['live-stage', { towardCrowd: 1 }],
   ['live-stage', { towardCrowd: 1, cameraSpot: 'front' }],

@@ -176,6 +176,7 @@ const DETAILS: Block[] = [
       { ja: 'Live Stage: ライブの照明とスモーク。照明の向き・カメラの位置・ステージの機材を選べます', en: 'Live Stage: concert lights and haze. Choose light direction, camera spot and stage gear' },
       { ja: 'Speaker Rack: スピーカーと機材ラックの 3D。コーンが低音で動き、メーターが振れます', en: 'Speaker Rack: 3D speakers and a gear rack. Cones move with the bass, meters swing' },
       { ja: '写真に動き: 写真のスピーカーのコーンや明かりを音で動かします', en: 'Photo Motion: brings the speakers and lights in a photo to life with the music' },
+      { ja: '流れる街並み: 横長の街の絵を左か右へ流し続けます。速さ・ぼかし・きらめき・舞うもの (花びら・雪・木の葉・光の粒・紙ふぶき) を選べます', en: 'City Scroll: endlessly scrolls a wide town picture left or right. Choose speed, blur, sparkle and falling things (petals, snow, leaves, light motes, confetti)' },
     ],
   },
   {
