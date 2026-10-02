@@ -437,3 +437,4 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 ### 2026-10-02 名前を ZUNZUN3 に・MIT ライセンス（ユーザー「左上の ZUNZUN を ZUNZUN3（3 だけ黄色）にして、MIT をどこかに作ろう」）
 - ロゴ: `shell.ts`（`.logo-3` だけ黄色 #ffd23f）。ブラウザのタブの名前（index.html）・README・使い方の最初の文も ZUNZUN3。package.json の `name` は `zunzun` のまま。
 - ライセンス: リポジトリの `LICENSE`（MIT、`Copyright (c) 2026 luarietakamiya-dotcom`）、package.json の `license`。使い方タブのいちばん下の「ライセンス」欄は `LICENSE?raw` をそのまま出す（文面の置き場所は 1 つ）+ 中で使っているもの（JIZURA・three.js・Mediabunny・書体）。THIRD_PARTY_NOTICES の「予定」を正式な項目にした。
+- 中で使っているもののライセンスの全文も使い方タブに載せる（開け閉めできる欄）: JIZURA・three.js（MIT は配る物に著作権表示と許可の文の両方を含めるのが条件。成果物の JS には JIZURA の著作権の 1 行しか残っていなかった）、Mediabunny（MPL-2.0）。three / mediabunny は package.json の exports で LICENSE を出していないので、`node_modules/.../LICENSE?raw` を相対パスで読む。

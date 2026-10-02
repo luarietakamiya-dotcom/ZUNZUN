@@ -26,7 +26,15 @@ test('ロゴは ZUNZUN3 (3 だけ黄色)。「使い方」のいちばん下に 
   await page.getByRole('tab').last().click();
   const lic = page.locator('[data-help="license"]');
   await expect(lic).toBeVisible();
-  await expect(lic.locator('pre')).toContainText('MIT License');
-  await expect(lic.locator('pre')).toContainText('Copyright (c) 2026 luarietakamiya-dotcom');
+  await expect(lic.locator(':scope > pre')).toContainText('MIT License');
+  await expect(lic.locator(':scope > pre')).toContainText('Copyright (c) 2026 luarietakamiya-dotcom');
   for (const name of ['JIZURA', 'three.js', 'Mediabunny']) await expect(lic).toContainText(name);
+  // 中で使っているものの全文 (MIT は本文を含めるのが条件)
+  const boxes = lic.locator('details.help-license-box');
+  await expect(boxes).toHaveCount(3);
+  for (const b of await boxes.all()) await b.evaluate((el) => ((el as HTMLDetailsElement).open = true));
+  await expect(boxes.nth(0)).toContainText('Copyright (c) 2026 hakoniwa');
+  await expect(boxes.nth(0)).toContainText('Permission is hereby granted');
+  await expect(boxes.nth(1)).toContainText('three.js authors');
+  await expect(boxes.nth(2)).toContainText('Mozilla Public License Version 2.0');
 });

@@ -1,5 +1,10 @@
 import { t2, type Text2 } from '../../core/i18n';
 import licenseText from '../../../LICENSE?raw';
+// 中で使っているもののライセンスの全文 (MIT は配る物に本文を含めるのが条件。three / mediabunny は exports で
+// LICENSE を出していないので node_modules を直接読む)
+import mediabunnyLicense from '../../../node_modules/mediabunny/LICENSE?raw';
+import threeLicense from '../../../node_modules/three/LICENSE?raw';
+import jizuraLicense from '../../../vendor/jizura/LICENSE?raw';
 import backgroundImg from '../../assets/help/background.webp';
 import exportImg from '../../assets/help/export.webp';
 import layersImg from '../../assets/help/layers.webp';
@@ -329,10 +334,10 @@ function renderLicense(): HTMLElement {
   const th = document.createElement('h4');
   th.textContent = t2({ ja: '中で使っているもの', en: 'Third-party software' });
   const ul = document.createElement('ul');
-  const items: { name: string; license: string; url: string }[] = [
-    { name: 'JIZURA 字面 (hakoniwa)', license: 'MIT', url: 'https://github.com/852wa/JIZURA' },
-    { name: 'three.js', license: 'MIT', url: 'https://github.com/mrdoob/three.js' },
-    { name: 'Mediabunny', license: 'MPL-2.0', url: 'https://github.com/Vanilagy/mediabunny' },
+  const items: { name: string; license: string; url: string; text?: string }[] = [
+    { name: 'JIZURA 字面 (hakoniwa)', license: 'MIT', url: 'https://github.com/852wa/JIZURA', text: jizuraLicense },
+    { name: 'three.js', license: 'MIT', url: 'https://github.com/mrdoob/three.js', text: threeLicense },
+    { name: 'Mediabunny', license: 'MPL-2.0', url: 'https://github.com/Vanilagy/mediabunny', text: mediabunnyLicense },
     { name: t2({ ja: '歌詞の書体 (Noto Sans JP ほか、Google Fonts)', en: 'Lyric fonts (Noto Sans JP etc., Google Fonts)' }), license: 'SIL Open Font License 1.1', url: 'https://openfontlicense.org' },
   ];
   for (const it of items) {
@@ -343,6 +348,18 @@ function renderLicense(): HTMLElement {
     a.rel = 'noopener noreferrer';
     a.textContent = it.name;
     li.append(a, ` — ${it.license}`);
+    if (it.text) {
+      // 本文は開け閉めできる欄に (Mediabunny の MPL-2.0 は長い)。ソースの場所は上のリンク
+      const box = document.createElement('details');
+      box.className = 'help-license-box';
+      const sum = document.createElement('summary');
+      sum.textContent = t2({ ja: 'ライセンスの全文', en: 'Full license text' });
+      const body = document.createElement('pre');
+      body.className = 'help-license';
+      body.textContent = it.text;
+      box.append(sum, body);
+      li.appendChild(box);
+    }
     ul.appendChild(li);
   }
   card.append(h, p, pre, th, ul);
