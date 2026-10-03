@@ -600,3 +600,22 @@ body {
 .mobile-shell .m-nav-button[aria-current="true"] { color: #ffd23f; }
 .mobile-shell .m-nav-icon { font-size: 19px; line-height: 1; }
 .mobile-shell .m-nav-label { font-size: 11px; white-space: nowrap; }
+
+/* プリセットに画像を入れる欄 (Solar Gate のリングの中など。ui/panels/visualizer.ts) */
+.preset-image-slot {
+  margin-bottom: 14px;
+}
+.preset-image-drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px dashed var(--border, #555);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.preset-image-drop.is-dragover {
+  border-color: var(--accent, #f5c542);
+  background: rgba(245, 197, 66, 0.08);
+}

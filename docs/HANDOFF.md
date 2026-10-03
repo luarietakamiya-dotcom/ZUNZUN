@@ -482,6 +482,14 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 - 光のカーテン・水面 (Reflector)・光だまりは削除。リングは画面の中心 (RING_CENTER_Y = 3) に置き、星は上下とも散らす。`inspect()` から pillarStrength / curtainHeight を外した。
 - 検証したこと: Vitest、スクリーンショットの目視。実機での見た目は未確認。
 
+### 2026-10-03 プリセット専用の画像入れ口 (ユーザー「専用作ろう！」。Solar Gate のリングの中に画像)
+- **設計の追加 (Plan Mode を通さず、ユーザーの「専用作ろう」を受けて実装)**: manifest に `imageSlot` を宣言したプリセットだけが、画像を 1 枚受け取れる。`VisualizerPreset.setImage?(image | null)`。
+- 流れ: Visualizer タブの入れ口 (ファイル選択・ドラッグ&ドロップ、`ui/panels/visualizer.ts` の `buildImageSlot`) → `store.setPresetImageFile` (ファイルはメモリ、`visualizer.image = {ref, sha256}` だけを Project JSON に保存。`sanitizePresetImage` で検証) → ライブプレビュー (`live-preview.ts` の `syncPresetImage`) / 書き出し (`mp4.ts` の `job.presetImage`) が `host.setPresetImage(file)` を呼ぶ → Host がテクスチャを読み込み (背景と同じ `loadBackgroundImage`、2048px まで)、`preset.setImage` に渡す。**テクスチャは Host のもの** (プリセットは dispose で破棄しない)。プリセットを替えても画像は Host が持ち越す。
+- プロジェクトを開いた直後は ref だけでファイルが無い → 入れ口に「同じ画像をもう一度選んでください」、書き出しにも「画像なしで書き出します」の注意 (背景と同じ扱い)。
+- Solar Gate: 画像はリングの内側に丸く (cover)、フレア・リングより奥。設定は「画像の明るさ」(`imageBrightness`) と「音で光る強さ」(`imageBeat`。拍で最大 +25%、なめらか)。入れなければ真っ暗。
+- 他のプリセットにも使えるが、入れ口が要るかは各プリセットで決める (manifest.imageSlot を足すだけ)。
+- 検証したこと: Vitest (Solar Gate・store・保存/読み込み)、E2E (`preset-image.spec.ts`: 画像なし=真っ暗 / 入れる / 外す / プリセットを替えても持ち越し、Visualizer タブの入れ口)、街並みの絵を入れたスクリーンショットの目視。未検証: 実機 GPU・スマホ、画像を入れたまま書き出した MP4 の中身。
+
 ### 2026-10-02 スマホ表示（ユーザー「今のはそのままに、機能をそのまま使えるスマホ用メニューつくれば？」「自動ではなくても、スマホ用インデックスでもいいよ」）
 - **M1 済み**: `ui/layout.ts`（PC 表示 / スマホ表示の選び方。画面の幅 760px 以下で自動、`setLayout` で手で選ぶ、アドレスの `?mobile` / `?pc`、localStorage `zunzun.layout`）、`ui/mobile-shell.ts`（下のメニュー 5 つ: 音楽 / 歌詞 / 映像〔ビジュアライザー・リリックモーション・背景と素材〕/ 書き出し / その他〔保存・使い方 + 言語・ライセンス・PC 表示〕。上は再生欄、音楽・書き出しでは小さなプレビューを上に固定）、`main.ts`（切り替えたら枠組みを作り直し、同じパネルを開く）。パネルの中身は PC 表示と同じものを使い、並べ方は style.css の `.mobile-shell` の中だけで変える。
 - PC 表示: `shell.ts` は片づけ（返す関数）と、狭い画面で PC 表示を選んだときだけ出る「スマホ表示」ボタンを足しただけ。広い画面の見た目は変えていない。今のタブはモジュールに置いた（`pcActive` / `selectPcPanel`）。

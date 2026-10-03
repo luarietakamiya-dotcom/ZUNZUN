@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { shapeAudio, shapeBands } from '../../core/visualizer/response';
-import type { AudioFrame, CommonParams, VisualizerInitContext, VisualizerPreset } from '../../core/types';
+import type { AudioFrame, CommonParams, PresetImageInput, VisualizerInitContext, VisualizerPreset } from '../../core/types';
 import { solarGatePalette, type SolarGatePalette } from './palette';
 import { createFlareMaterial, createPortalMaterial, createSkyMaterial, FRINGE_SECTORS, PLANE_EXTENT } from './shaders';
 import { makeRadialTexture } from './textures';
@@ -52,6 +52,9 @@ export interface SolarGateInspection {
   /** 月食のフレアの強さ (0..) と、燃えている位置 (ラジアン。0 = 右、反時計回り) */
   flareStrength: number;
   flareAngle: number;
+  /** リングの中に画像が出ているか・その明るさの倍率 */
+  imageVisible: boolean;
+  imageBrightness: number;
 }
 
 export class SolarGatePreset implements VisualizerPreset {
@@ -75,6 +78,10 @@ export class SolarGatePreset implements VisualizerPreset {
   private tickGroup!: THREE.Group;
   private tickMaterial!: THREE.MeshBasicMaterial;
   private portalMaterial!: THREE.MeshBasicMaterial;
+  /** リングの中の画像 (Host から setImage で受け取る。テクスチャは Host のもの = ここでは破棄しない) */
+  private imageMaterial!: THREE.MeshBasicMaterial;
+  private imageMesh!: THREE.Mesh;
+  private imageEnv = 0;
 
   // 月食のフレアと、輪のまわりのオーロラの縁
   private flareMaterial!: THREE.ShaderMaterial;
@@ -128,6 +135,7 @@ export class SolarGatePreset implements VisualizerPreset {
     const intensity = THREE.MathUtils.clamp(params.intensity, 0, 1);
     const motion = THREE.MathUtils.clamp(params.motion, 0, 1);
 
+    this.updateImage(dt, a, params);
     this.updateRays(dt, a.bass, intensity);
     this.updateGateLights(dt, a, intensity, motion);
     this.updateParticles(dt, frame, a.high, a.beat, intensity, motion);
@@ -166,6 +174,8 @@ export class SolarGatePreset implements VisualizerPreset {
       cameraDistance: this.baseDistance,
       flareStrength: this.flareMaterial.uniforms.strength!.value as number,
       flareAngle: this.flareAngle,
+      imageVisible: this.imageMesh.visible,
+      imageBrightness: this.imageMaterial.color.r,
     };
   }
 
@@ -263,6 +273,33 @@ export class SolarGatePreset implements VisualizerPreset {
     const portal = new THREE.Mesh(this.track(new THREE.CircleGeometry(RING_RADIUS * 0.97, 128)), this.portalMaterial);
     portal.position.z = -0.02;
     this.gate.add(portal);
+
+    // 画像を入れる面 (真っ暗な面のすぐ前。フレアやリングより奥)。画像が来るまでは隠す
+    this.imageMaterial = this.track(new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false }));
+    this.imageMesh = new THREE.Mesh(this.track(new THREE.CircleGeometry(RING_RADIUS * 0.97, 128)), this.imageMaterial);
+    this.imageMesh.position.z = -0.015;
+    this.imageMesh.visible = false;
+    this.gate.add(this.imageMesh);
+  }
+
+  /** リングの中に画像を入れる (null で外す)。丸い面いっぱいに合わせ、はみ出しは切る */
+  setImage(image: PresetImageInput | null): void {
+    if (!image) {
+      this.imageMaterial.map = null;
+      this.imageMaterial.needsUpdate = true;
+      this.imageMesh.visible = false;
+      return;
+    }
+    const tex = image.texture;
+    const aspect = Number.isFinite(image.aspect) && image.aspect > 0 ? image.aspect : 1;
+    // 真ん中を丸く切り抜く (cover)
+    const rx = aspect > 1 ? 1 / aspect : 1;
+    const ry = aspect < 1 ? aspect : 1;
+    tex.repeat.set(rx, ry);
+    tex.offset.set((1 - rx) / 2, (1 - ry) / 2);
+    this.imageMaterial.map = tex;
+    this.imageMaterial.needsUpdate = true;
+    this.imageMesh.visible = true;
   }
 
   /** 月食のフレアと、輪のまわりのオーロラの縁を描く板 (リングの面に重ねる。リングの半径の PLANE_EXTENT 倍まで) */
@@ -322,6 +359,16 @@ export class SolarGatePreset implements VisualizerPreset {
     this.flareMaterial.uniforms.fringeColor!.value.copy(p.rays);
     this.innerRingMaterial.color.copy(p.ring).multiplyScalar(0.6);
     this.tickMaterial.color.copy(p.ring).multiplyScalar(0.12);
+  }
+
+  /** リングの中の画像の明るさ: 設定の明るさ + 拍でごく少し明るく (なめらかに。光過敏への配慮で最大 +25%) */
+  private updateImage(dt: number, a: ReturnType<typeof shapeAudio>, params: CommonParams & Record<string, unknown>): void {
+    const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? THREE.MathUtils.clamp(v, 0, 1) : d);
+    const base = num(params.imageBrightness, 0.85);
+    const beatAmt = num(params.imageBeat, 0.4);
+    this.imageEnv += (a.beat - this.imageEnv) * (1 - Math.exp(-dt * (a.beat > this.imageEnv ? 14 : 3)));
+    const k = base * (1 + 0.25 * beatAmt * this.imageEnv);
+    this.imageMaterial.color.setRGB(k, k, k);
   }
 
   private updateRays(dt: number, bass: number, intensity: number): void {

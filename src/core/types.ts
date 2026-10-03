@@ -103,7 +103,25 @@ export interface VisualizerPreset {
   init(ctx: VisualizerInitContext): Promise<void> | void;
   update(frame: AudioFrame, params: CommonParams & Record<string, unknown>): void;
   resize(width: number, height: number): void;
+  /**
+   * 画像を受け取る (manifest.imageSlot を持つプリセットだけ。null = 画像なし)。texture は Host が持ち、差し替え・破棄は Host が行う
+   * (プリセットは dispose() で texture を破棄しない)。init() のあと、画像が変わるたびに呼ばれる
+   */
+  setImage?(image: PresetImageInput | null): void;
   dispose(): void;
+}
+
+/** プリセットに渡す画像 (Project JSON には ref + sha256 だけ。ファイルは store がメモリに持つ) */
+export interface PresetImage {
+  ref: string;
+  sha256: string;
+}
+
+/** Host が読み込んで、プリセットの setImage() に渡す画像 */
+export interface PresetImageInput {
+  texture: THREE.Texture;
+  /** 横 / 縦 */
+  aspect: number;
 }
 
 /** プリセットのカタログ情報 (サムネイル選択 UI 用)。 */
@@ -120,6 +138,8 @@ export interface VisualizerManifest {
    * key の名前で入る (core/visualizer/preset-params.ts)。Project JSON の visualizer.params にプリセットごとに保存される
    */
   controls?: PresetControl[];
+  /** 画像を 1 枚入れられるプリセット (Visualizer タブに「画像を入れる」が出る)。例: Solar Gate のリングの中 */
+  imageSlot?: { label: Text2; help: Text2 };
 }
 
 /** プリセットだけの設定 1 つ。名前と説明は日本語 / English (誰が見ても分かるように) */
@@ -157,6 +177,8 @@ export interface ProjectFile {
     params: Record<string, unknown>;
     /** 見え方 (拡大・位置・傾き)。古いプロジェクトには無い (読み込むと既定になる) */
     view?: ViewSettings;
+    /** プリセットに渡す画像 (manifest.imageSlot のあるプリセットだけが使う)。中身は保存せず、ファイル名と sha256 だけ */
+    image?: PresetImage | null;
   };
   overlays: OverlayLayer[];
   /** 歌詞と、その同期タイミング・歌詞モーションの設定。歌詞を使わないプロジェクトは null */

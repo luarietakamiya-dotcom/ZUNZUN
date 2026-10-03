@@ -12,6 +12,7 @@ import {
   defaultComposition,
   type CompositionSettings,
   type MediaLayer,
+  type PresetImage,
 } from '../types';
 
 /** buildProjectFile が必要とする AudioEngine の最小の形 (実体は core/audio/engine.ts の AudioEngine)。 */
@@ -41,6 +42,8 @@ export interface ProjectSourceState {
   background?: BackgroundSettings | null;
   /** ビジュアライザーの見え方 (省略可: 古い呼び出し側・テストのため。省略すると既定) */
   view?: ViewSettings;
+  /** プリセットに渡す画像 (ref + sha256 だけ) */
+  presetImage?: PresetImage | null;
   /** レイヤーの順番と重ね方 (省略可。省略すると既定) */
   composition?: CompositionSettings;
   /** 素材レイヤー (省略可) */
@@ -76,6 +79,7 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
       common: { ...state.params },
       params: JSON.parse(JSON.stringify(state.allPresetParams ?? {})) as Record<string, unknown>,
       view: { ...(state.view ?? defaultView()) },
+      image: state.presetImage ? { ...state.presetImage } : null,
     },
     overlays: state.overlays.map((o) => ({ ...o })),
     lyrics: state.lyrics

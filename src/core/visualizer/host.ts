@@ -2,14 +2,14 @@ import * as THREE from 'three';
 import { LyricLayer } from '../lyrics/layer';
 import { OverlayManager } from '../overlay/manager';
 import { deriveSeed, makeRng } from '../random';
-import { BackgroundCompositor } from '../render/background';
+import { BackgroundCompositor, loadBackgroundImage } from '../render/background';
 import { PostFxStack } from '../render/postfx';
 import { applyView, normalizeView } from '../render/view';
 import { framePlan, normalizeComposition } from '../render/composition';
 import { ScreenCapture } from '../render/screen-capture';
 import { MediaCompositor } from '../render/media';
 import { isMediaLayer } from '../render/composition';
-import { type AudioFrame, type CommonParams, type CompositionSettings, defaultComposition, defaultView, type ViewSettings, type VisualizerPreset } from '../types';
+import { type AudioFrame, type CommonParams, type CompositionSettings, type PresetImageInput, defaultComposition, defaultView, type ViewSettings, type VisualizerPreset } from '../types';
 import type { VisualizerModule } from './registry';
 
 export interface VisualizerHostOptions {
@@ -55,6 +55,9 @@ export class VisualizerHost {
   readonly background = new BackgroundCompositor();
   /** 素材レイヤー (画像・動画、グリーンバックの素材など)。読み込むのは呼び出し側 (media.load)、設定は毎フレーム media.setConfigs */
   readonly media = new MediaCompositor();
+  /** プリセットに渡している画像 (manifest.imageSlot のあるプリセット用)。テクスチャは Host が持ち、差し替え・dispose で破棄する */
+  private presetImage: (PresetImageInput & { file: File }) | null = null;
+  private presetImageGeneration = 0;
   private _view: ViewSettings = defaultView();
   private _composition: CompositionSettings = defaultComposition();
   /** レイヤーの順番を組み替えたときに、ビジュアライザーの絵を写し取っておく所 */
@@ -153,6 +156,36 @@ export class VisualizerHost {
     this.postfx.setScene(preset.scene, preset.camera);
     this.postfx.configure(mod.manifest.post ?? {});
     previous?.preset.dispose();
+    // 画像を入れられるプリセットには、読み込み済みの画像を渡す (プリセットを替えても、画像は持ち越す)
+    preset.setImage?.(this.presetImage ? { texture: this.presetImage.texture, aspect: this.presetImage.aspect } : null);
+  }
+
+  /**
+   * プリセットに渡す画像を読み込んで当てる (null で外す)。同じファイルなら何もしない。
+   * プリセットが setImage を持たないときは、読み込むだけ (あとでそのプリセットに替えたときに使う)。
+   * 読み込みの途中で別の画像が来たら、古い方は捨てる。失敗したら例外 (呼び出し側で表示する)
+   */
+  async setPresetImage(file: File | null): Promise<void> {
+    if (file && this.presetImage?.file === file) return;
+    const gen = ++this.presetImageGeneration;
+    if (!file) {
+      this.applyPresetImage(null);
+      return;
+    }
+    const { texture, aspect } = await loadBackgroundImage(file, 0, 2048);
+    if (gen !== this.presetImageGeneration) {
+      texture.dispose();
+      return;
+    }
+    this.applyPresetImage({ texture, aspect, file });
+  }
+
+  private applyPresetImage(next: (PresetImageInput & { file: File }) | null): void {
+    const old = this.presetImage;
+    this.presetImage = next;
+    this.current?.preset.setImage?.(next ? { texture: next.texture, aspect: next.aspect } : null);
+    // プリセットが古いテクスチャを使い終えてから破棄する (setImage で差し替わったあと)
+    old?.texture.dispose();
   }
 
   /**
@@ -211,8 +244,11 @@ export class VisualizerHost {
 
   dispose(): void {
     this.generation++; // 進行中の setPreset() の結果を無効化する
+    this.presetImageGeneration++;
     this.current?.preset.dispose();
     this.current = null;
+    this.presetImage?.texture.dispose();
+    this.presetImage = null;
     this.postfx.dispose();
     this.lyrics.dispose();
     this.overlay.dispose();

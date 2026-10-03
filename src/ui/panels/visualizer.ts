@@ -67,6 +67,78 @@ const COLOR_THEMES: { id: string; label: Text2 }[] = [
   { id: 'mono', label: { ja: 'モノクロ', en: 'Mono' } },
 ];
 
+/**
+ * 画像を入れる欄 (manifest.imageSlot のあるプリセットだけ。Solar Gate のリングの中など)。
+ * ファイルを選ぶか、ここへドラッグ&ドロップ。ファイルは Project JSON に入れず、ファイル名と sha256 だけを保存する
+ * (開き直したときは、同じ画像を選び直す)。見た目の調整 (暗さなど) は、この下の「このビジュアライザーの設定」に出る。
+ */
+function buildImageSlot(slot: { label: Text2; help: Text2 }): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'preset-image-slot';
+  box.dataset.presetImage = 'slot';
+  const title = document.createElement('h3');
+  title.textContent = t2(slot.label);
+  const help = document.createElement('p');
+  help.className = 'param-help';
+  help.textContent = t2(slot.help);
+
+  const zone = document.createElement('div');
+  zone.className = 'preset-image-drop';
+  zone.dataset.presetImage = 'drop';
+  const status = document.createElement('span');
+  status.className = 'param-help';
+  status.setAttribute('role', 'status');
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.dataset.presetImage = 'input';
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'tab-button';
+  remove.dataset.presetImage = 'remove';
+  remove.textContent = tr('画像を外す', 'Remove image');
+  zone.append(
+    document.createTextNode(tr('ここに画像をドラッグ&ドロップ、または:', 'Drop an image here, or:')),
+    input,
+    remove,
+  );
+
+  const refresh = (): void => {
+    const cur = store.presetImage;
+    remove.hidden = cur == null;
+    if (!cur) status.textContent = tr('画像はまだ入っていません (リングの中は真っ暗です)。', 'No image yet (the inside of the ring stays black).');
+    else if (!store.presetImageFile) status.textContent = tr(`「${cur.ref}」を使っていたプロジェクトです。同じ画像をもう一度選んでください。`, `This project used "${cur.ref}". Please choose the same image again.`);
+    else status.textContent = tr(`使っている画像: ${cur.ref}`, `Image in use: ${cur.ref}`);
+  };
+  const pick = (file: File | undefined): void => {
+    if (!file) return;
+    store.setPresetImageFile(file).then(refresh, (e: unknown) => {
+      status.textContent = e instanceof Error ? e.message : String(e);
+    });
+  };
+  input.addEventListener('change', () => {
+    pick(input.files?.[0]);
+    input.value = '';
+  });
+  remove.addEventListener('click', () => {
+    store.removePresetImage();
+    refresh();
+  });
+  zone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    zone.classList.add('is-dragover');
+  });
+  zone.addEventListener('dragleave', () => zone.classList.remove('is-dragover'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('is-dragover');
+    pick(e.dataTransfer?.files?.[0]);
+  });
+  refresh();
+  box.append(title, help, zone, status);
+  return box;
+}
+
 export function renderVisualizerPanel(): HTMLElement {
   const el = document.createElement('section');
   el.className = 'panel';
@@ -215,7 +287,9 @@ export function renderVisualizerPanel(): HTMLElement {
 
   const buildPresetControls = (id: string): void => {
     presetBox.textContent = '';
-    const controls = visualizerRegistry.get(id)?.manifest.controls ?? [];
+    const manifest = visualizerRegistry.get(id)?.manifest;
+    const controls = manifest?.controls ?? [];
+    if (manifest?.imageSlot) presetBox.appendChild(buildImageSlot(manifest.imageSlot));
     if (controls.length === 0) return;
     const title = document.createElement('h3');
     title.textContent = tr('このビジュアライザーの設定', 'Settings for this visualizer');

@@ -16,6 +16,7 @@ import {
   type OverlayLayer,
   type ProjectFile,
   type BackgroundSettings,
+  type PresetImage,
   type RhythmSettings,
   type ViewSettings,
   type MediaLayer,
@@ -252,6 +253,13 @@ function sanitizeBlanks(raw: unknown[]): LyricBlank[] {
 }
 
 /** 背景の一枚絵・動画。ファイル名と sha256 (64 桁の 16 進) が無ければ使わない。値は範囲に収め、知らない選択肢は既定に戻す */
+/** プリセットに渡す画像 (ref + sha256 だけ。形が違うときは無し) */
+function sanitizePresetImage(raw: unknown): PresetImage | null {
+  if (!isPlainObject(raw)) return null;
+  if (typeof raw.ref !== 'string' || raw.ref === '' || typeof raw.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(raw.sha256)) return null;
+  return { ref: raw.ref.slice(0, 512), sha256: raw.sha256 };
+}
+
 function sanitizeBackground(raw: unknown): BackgroundSettings | null {
   if (!isPlainObject(raw)) return null;
   if (typeof raw.ref !== 'string' || raw.ref === '' || typeof raw.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(raw.sha256)) return null;
@@ -455,6 +463,7 @@ export function sanitizeProject(raw: unknown): ProjectFile {
       common: sanitizeCommonParams(visualizerRaw.common),
       params: sanitizePresetParamsMap(visualizerRaw.params),
       view: normalizeView(isPlainObject(visualizerRaw.view) ? (visualizerRaw.view as Partial<ViewSettings>) : null),
+      image: sanitizePresetImage(visualizerRaw.image),
     },
     overlays: sanitizeOverlays(raw.overlays),
     lyrics: sanitizeLyrics(raw.lyrics),

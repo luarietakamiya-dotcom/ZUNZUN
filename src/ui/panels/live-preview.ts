@@ -77,6 +77,15 @@ export function createLivePreview(opts: { onFrame?: () => void } = {}): LivePrev
     void host.setPreset(mod, store.seed, renderParamsNow());
   };
 
+  // プリセットに渡す画像 (ファイルが変わったときだけ読み込み直す)
+  let imageFile: File | null | undefined;
+  const syncPresetImage = (): void => {
+    const f = store.presetImageFile;
+    if (f === imageFile) return;
+    imageFile = f;
+    void host.setPresetImage(f).catch(() => {});
+  };
+
   // 背景 (ファイルが変わったときだけ読み込み直す。暗さなどは設定だけ当てる)
   let bgKey: unknown[] = [Symbol('none')];
   let bgSettings: BackgroundSettings | null = null;
@@ -171,6 +180,7 @@ export function createLivePreview(opts: { onFrame?: () => void } = {}): LivePrev
     opts.onFrame?.();
     syncPreset();
     syncBackground();
+    syncPresetImage();
     syncSlides();
     syncMedia();
     syncOverlays();

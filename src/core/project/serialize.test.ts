@@ -146,3 +146,29 @@ describe('buildProjectFile', () => {
     expect(sanitizeProject(JSON.parse(JSON.stringify(project)))).toEqual(project);
   });
 });
+
+describe('プリセットに渡す画像 (visualizer.image)', () => {
+  const sha = 'a'.repeat(64);
+
+  it('ref と sha256 だけを保存し (複製)、無ければ null。保存 → 読み込みで同じになる', () => {
+    const image = { ref: 'moon.png', sha256: sha };
+    const file = buildProjectFile(state({ presetImage: image }));
+    expect(file.visualizer.image).toEqual(image);
+    expect(file.visualizer.image).not.toBe(image);
+    expect(buildProjectFile(state()).visualizer.image).toBeNull();
+    expect(sanitizeProject(JSON.parse(JSON.stringify(file))).visualizer.image).toEqual(image);
+  });
+
+  it('壊れた値・前のプロジェクト (image なし) は null になる', () => {
+    const raw = JSON.parse(JSON.stringify(buildProjectFile(state()))) as { visualizer: Record<string, unknown> };
+    delete raw.visualizer.image;
+    expect(sanitizeProject(raw).visualizer.image).toBeNull();
+    raw.visualizer.image = { ref: '', sha256: sha };
+    expect(sanitizeProject(raw).visualizer.image).toBeNull();
+    raw.visualizer.image = { ref: 'a.png', sha256: 'xyz' };
+    expect(sanitizeProject(raw).visualizer.image).toBeNull();
+    raw.visualizer.image = 'a.png';
+    expect(sanitizeProject(raw).visualizer.image).toBeNull();
+  });
+});
+

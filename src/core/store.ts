@@ -24,6 +24,7 @@ import {
   defaultSlides,
   MAX_SLIDES,
   type BackgroundSlides,
+  type PresetImage,
 } from './types';
 import { tr } from './i18n';
 import { fetchLibraryFile, findLibraryItem, LIBRARY, libraryRef } from './library';
@@ -73,6 +74,10 @@ class Store {
   private _backgroundFile: File | null = null;
   /** スライドショーの画像のファイル (background.slides.items と同じ順。選び直していないものは null) */
   private _slideFiles: (File | null)[] = [];
+  /** プリセットに渡す画像 (Solar Gate のリングの中など。manifest.imageSlot のあるプリセットだけが使う) */
+  private _presetImage: PresetImage | null = null;
+  /** その元のファイル (メモリ上だけ。Project JSON には ref/sha256 だけを保存する) */
+  private _presetImageFile: File | null = null;
   /** 背景を選び直すたびに増える (用意された背景の読み込みが、あとから選んだ背景を上書きしないように) */
   private backgroundGeneration = 0;
   /** 用意された背景を読むときの fetch (テストで差し替える) */
@@ -310,6 +315,43 @@ class Store {
     this.emit();
   }
 
+  /** プリセットに渡す画像の設定 (ref + sha256)。無ければ null */
+  get presetImage(): PresetImage | null {
+    return this._presetImage;
+  }
+
+  /** その元のファイル。Project JSON を読み込んだ直後など、まだ選び直していなければ null */
+  get presetImageFile(): File | null {
+    return this._presetImageFile;
+  }
+
+  /** プリセットに渡す画像を選ぶ (画像のファイルだけ。大きすぎるものは断る) */
+  async setPresetImageFile(file: File): Promise<void> {
+    if (!isSlideImage(file)) throw new Error(tr('画像のファイルを選んでください (PNG / JPEG / WebP など)', 'Please choose an image file (PNG / JPEG / WebP etc.)'));
+    if (file.size > MAX_SLIDE_BYTES) throw new Error(tr(`画像が大きすぎます (${(file.size / 2 ** 20).toFixed(0)}MB)`, `The image is too large (${(file.size / 2 ** 20).toFixed(0)} MB)`));
+    const sha256 = await sha256Hex(await file.arrayBuffer());
+    this._presetImage = { ref: file.name, sha256 };
+    this._presetImageFile = file;
+    this.emit();
+  }
+
+  /** プロジェクトを開いたあと、同じ画像 (sha256 が合うもの) を選び直したときだけ当てる。合えば true */
+  async restorePresetImage(file: File): Promise<boolean> {
+    const cur = this._presetImage;
+    if (!cur) return false;
+    const sha = await sha256Hex(await file.arrayBuffer());
+    if (this._presetImage !== cur || sha !== cur.sha256) return false;
+    this._presetImageFile = file;
+    this.emit();
+    return true;
+  }
+
+  removePresetImage(): void {
+    this._presetImage = null;
+    this._presetImageFile = null;
+    this.emit();
+  }
+
   /** Export タブの書き出し設定 (サイズ/fps/画質)。Project JSON の export に保存される。 */
   get exportSettings(): ExportSettings {
     return this._exportSettings;
@@ -492,6 +534,8 @@ class Store {
     this._exportSettings = { ...project.export };
     this._lyrics = project.lyrics;
     this._rhythm = project.rhythm;
+    this._presetImage = project.visualizer.image ?? null;
+    this._presetImageFile = null;
     this._background = project.background;
     this._backgroundFile = null;
     this._slideFiles = project.background?.slides ? project.background.slides.items.map(() => null) : [];

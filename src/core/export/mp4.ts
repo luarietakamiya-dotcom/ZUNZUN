@@ -44,6 +44,8 @@ export interface Mp4ExportJob {
   rhythm?: RhythmSettings | null;
   /** 背景の一枚絵・動画 (設定と元のファイル)。スライドショーなら slideFiles も。省略 = 背景なし */
   background?: { config: BackgroundSettings; file: File; slideFiles?: readonly (File | null)[] } | null;
+  /** プリセットに渡す画像 (リングの中など。省略 = 無し) */
+  presetImage?: File | null;
   /** ビジュアライザーの見え方 (拡大・位置・傾き)。省略 = そのまま */
   view?: ViewSettings;
   /** レイヤーの順番と重ね方。省略 = 既定 */
@@ -112,6 +114,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
   try {
     host.resize(width, height);
     await host.setPreset(job.preset, job.seed, job.params);
+    if (job.presetImage && job.preset.manifest.imageSlot) await host.setPresetImage(job.presetImage);
     if (job.view) host.view = job.view;
     if (job.composition) host.composition = job.composition;
     await host.overlay.loadFrom(job.overlays);

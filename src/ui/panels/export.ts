@@ -153,6 +153,7 @@ function createRunnerFromStore(): { runner: ExportRunner; fileName: string } {
         analysis,
         rhythm,
         background,
+        presetImage: preset.manifest.imageSlot ? store.presetImageFile : null,
         view: { ...store.view },
         composition: JSON.parse(JSON.stringify(store.composition)),
         media: store.media.flatMap((m) => {
@@ -323,7 +324,10 @@ export function renderExportPanel(): HTMLElement {
     } else {
       const missing = store.overlays.filter((o) => !store.getOverlayFile(o.id)).length;
       const bgMissing = store.background != null && store.backgroundFile == null;
+      const imgSlot = visualizerRegistry.get(store.presetId ?? '')?.manifest.imageSlot;
+      const imgMissing = imgSlot != null && store.presetImage != null && store.presetImageFile == null;
       const notes = [
+        imgMissing ? tr(`ビジュアライザーの画像「${store.presetImage!.ref}」をまだ選び直していません (「ビジュアライザー」タブ)。画像なしで書き出します。`, `The visualizer image "${store.presetImage!.ref}" has not been picked again (Visualizer tab). Exporting without it.`) : '',
         missing > 0 ? tr(`まだ選び直していない重ねる画像が ${missing} 個あります (「背景と素材」タブ)。それらは書き出しに入りません。`, `${missing} overlay image(s) have not been picked again (Overlay tab) and will be left out.`) : '',
         bgMissing ? tr(`背景「${store.background!.ref}」をまだ選び直していません (「背景と素材」タブ)。背景なしで書き出します。`, `The background "${store.background!.ref}" has not been picked again (Overlay tab). Exporting without it.`) : '',
       ].filter(Boolean);

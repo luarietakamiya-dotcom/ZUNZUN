@@ -1,4 +1,4 @@
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { makeRng } from '../../core/random';
 import { defaultCommonParams, type AudioFrame, type CommonParams } from '../../core/types';
@@ -111,6 +111,66 @@ describe('SolarGatePreset', () => {
       if (m && /Curtain|Floor|Pool/.test(m.name)) names.push(m.name);
     });
     expect(names).toEqual([]);
+  });
+
+  describe('リングの中の画像 (setImage)', () => {
+    const tex = (): THREE.Texture => new THREE.Texture();
+
+    it('画像が無いあいだは出さず (真っ暗)、入れると出て、null で外せる', () => {
+      const p = makePreset();
+      expect(p.inspect().imageVisible).toBe(false);
+      p.setImage({ texture: tex(), aspect: 1.5 });
+      p.update(frame(0), params());
+      expect(p.inspect().imageVisible).toBe(true);
+      p.setImage(null);
+      expect(p.inspect().imageVisible).toBe(false);
+    });
+
+    it('縦横比が違っても、真ん中を丸く切り抜く (はみ出しは切る・縦長も横長も)', () => {
+      const p = makePreset();
+      const wide = tex();
+      p.setImage({ texture: wide, aspect: 2 });
+      expect(wide.repeat.x).toBeCloseTo(0.5, 6);
+      expect(wide.repeat.y).toBe(1);
+      expect(wide.offset.x).toBeCloseTo(0.25, 6);
+      const tall = tex();
+      p.setImage({ texture: tall, aspect: 0.5 });
+      expect(tall.repeat.y).toBeCloseTo(0.5, 6);
+      expect(tall.repeat.x).toBe(1);
+      expect(tall.offset.y).toBeCloseTo(0.25, 6);
+      // 壊れた縦横比でも NaN にならない
+      const bad = tex();
+      p.setImage({ texture: bad, aspect: Number.NaN });
+      expect(Number.isFinite(bad.repeat.x) && Number.isFinite(bad.repeat.y)).toBe(true);
+    });
+
+    it('明るさは設定どおり。拍ではごく少しだけ (最大 +25%) 明るくなり、0 なら動かない', () => {
+      const withBeat = makePreset();
+      const steady = makePreset();
+      withBeat.setImage({ texture: tex(), aspect: 1 });
+      steady.setImage({ texture: tex(), aspect: 1 });
+      const pBeat = { ...params(), imageBrightness: 0.8, imageBeat: 1 } as Params;
+      const pSteady = { ...params(), imageBrightness: 0.8, imageBeat: 0 } as Params;
+      run(withBeat, 30, () => ({ beat: 1, beatIndex: 0 }), pBeat);
+      run(steady, 30, () => ({ beat: 1, beatIndex: 0 }), pSteady);
+      expect(steady.inspect().imageBrightness).toBeCloseTo(0.8, 6);
+      expect(withBeat.inspect().imageBrightness).toBeGreaterThan(0.8);
+      expect(withBeat.inspect().imageBrightness).toBeLessThanOrEqual(0.8 * 1.25 + 1e-9);
+      const dark = makePreset();
+      dark.setImage({ texture: tex(), aspect: 1 });
+      run(dark, 5, () => ({ beat: 1 }), { ...params(), imageBrightness: 0 } as Params);
+      expect(dark.inspect().imageBrightness).toBe(0);
+    });
+
+    it('dispose しても、Host から受け取ったテクスチャは破棄しない (Host のもの)', () => {
+      const p = makePreset();
+      const t = tex();
+      let disposed = false;
+      t.addEventListener('dispose', () => (disposed = true));
+      p.setImage({ texture: t, aspect: 1 });
+      p.dispose();
+      expect(disposed).toBe(false);
+    });
   });
 
   it('同じ seed・同じ音声なら粒子の配置まで完全に一致し、seed が違えば変わる (書き出しの再現性)', () => {
