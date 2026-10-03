@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { shapeAudio, shapeBands } from '../../core/visualizer/response';
 import type { AudioFrame, CommonParams, VisualizerInitContext, VisualizerPreset } from '../../core/types';
-import { createTwinMaterial, MAX_WAVES, STRIP_BARS, WOOFER_RINGS } from './shaders';
+import { createTwinMaterial, MAX_BURSTS, STRIP_BARS, WOOFER_RINGS } from './shaders';
 
 /**
  * Twin Speakers — 背景の絵に重ねて使う、スピーカー 2 台のエフェクト (ユーザー要望 2026-10-03「スピーカー 2 つバージョン」)。
@@ -12,8 +12,9 @@ import { createTwinMaterial, MAX_WAVES, STRIP_BARS, WOOFER_RINGS } from './shade
  * - bass: 両方のウーファーが動く。左は低音そのまま、右は低音を少し弱め、中音を足す (左右で動きが違う)。
  *   その動きが 7 本のリングを中心から外へ、時間差をつけて伝わる。立ち上がりは速く、戻りはゆっくり (光過敏への配慮)。
  * - beat: 拍が変わるたびに、強く鳴る側が左右で入れ替わる (「交互に鳴らす」の量で、もう片方がどれだけ控えめになるか)。
- *   強く鳴った側のウーファーから、圧力波が広がって薄れる (同時に 5 本まで)。波は先頭が鋭く (R・G・B がずれた縁)、内側へ長い尾と余韻の輪を引き、
- *   最初に速く遠くでゆっくり広がる。反対側のキャビネットに届くと、その輪郭とウーファーの縁が光る (左右の掛け合い。2026-10-03「波動がださい」で作り直し)。
+ *   強く鳴った側のウーファーの縁から、粒が放射状に飛び出し、彗星のような尾を引いて薄れる (同時に 4 回分まで)。粒は小さいので背景の絵が隠れない
+ *   (2026-10-03 ユーザー「波動がださい」「波動で画面が見えなくなる」で、広がる輪から変えた)。反対側のスピーカーの方を向いた粒は遠くまで飛び、
+ *   反対側のキャビネットの手前まで届く。届くと、その輪郭とウーファーの縁が光る (左右の掛け合い)。
  * - high: ツイーター (上の小さなコーン) が光る。右の台のほうが少し強い。
  * - 帯域 (bands): 足元の 16 本の棒。左の台は低〜中域、右の台は中〜高域。
  * - intensity: 全体の明るさ。
@@ -29,11 +30,13 @@ const TOTAL_HEIGHT = 4.5;
 const HISTORY_STEP = 1 / 60;
 const RING_DELAY_STEPS = 2;
 const HISTORY_LENGTH = WOOFER_RINGS * RING_DELAY_STEPS + 2;
-/** 波の広がり方 (2026-10-03 作り直し): 最初に速く、遠くでゆっくり (イージング)。半径 = 1 + WAVE_REACH × (1 - exp(-経過秒 × WAVE_RATE)) */
-const WAVE_REACH = 3.2;
-const WAVE_RATE = 1.5;
-const WAVE_FADE = 1.0;
-/** 波が反対側のキャビネットの手前 (キャビネットの半幅ぶん手前) に届いたとき、そこが光る強さ (波の明るさにかける) と、戻る速さ */
+/** 粒の飛び方 (最初に速く、遠くでゆっくり): 半径 = 1.08 + 飛ぶ距離 × (1 - exp(-経過秒 × BURST_RATE))。薄れる速さと、消える時間 */
+const BURST_RATE = 1.5;
+const BURST_FADE = 0.9;
+const BURST_LIFE = 3.2;
+/** 反対側のスピーカーの方を向いた粒が飛ぶ距離の、いちばん遠い上限 (スピーカーの半径の倍数。間隔を広げたときでも、画面を横切りすぎない) */
+const BURST_REACH_MAX = 8;
+/** 粒が反対側のキャビネットの手前 (キャビネットの半幅ぶん手前) に届いたとき、そこが光る強さ (粒の明るさにかける) と、戻る速さ */
 const HIT_GAIN = 1.1;
 const RIM_DECAY = 4.5;
 
@@ -61,13 +64,13 @@ export interface SpeakerTwinInspection {
   rings: { left: number[]; right: number[] };
   /** 足元のイコライザーの棒 */
   strip: { left: number[]; right: number[] };
-  /** いま出ている波の数と、波の中心が左右どちらか (-1 = 左、1 = 右) */
-  waveCount: number;
-  waveSides: number[];
-  /** 波が届いて光る、左右のキャビネットの輪郭の強さ (0 .. 1.2) */
+  /** いま飛んでいる粒 (1 回分) の数と、出た側 (-1 = 左、1 = 右) */
+  burstCount: number;
+  burstSides: number[];
+  /** 粒が届いて光る、左右のキャビネットの輪郭の強さ (0 .. 1.2) */
   rim: { left: number; right: number };
-  /** いま出ている波の半径 (スピーカーの半径 = 1) */
-  waveRadii: number[];
+  /** いま飛んでいる粒の先頭 (反対側へ向かう、いちばん遠くへ飛ぶ粒) の半径 (スピーカーの半径 = 1) */
+  burstRadii: number[];
   /** スピーカーの半径と、左右の中心 (画面の高さの半分 = 1) */
   radius: number;
   centers: { left: { x: number; y: number }; right: { x: number; y: number } };
@@ -99,15 +102,22 @@ export class SpeakerTwinPreset implements VisualizerPreset {
   private readonly histL = new Float32Array(HISTORY_LENGTH);
   private readonly histR = new Float32Array(HISTORY_LENGTH);
   private historyClock = 0;
-  private readonly waveR = new Float32Array(MAX_WAVES);
-  private readonly waveA = new Float32Array(MAX_WAVES);
-  private readonly waveSide = new Int8Array(MAX_WAVES);
-  private readonly waveAge = new Float32Array(MAX_WAVES);
-  /** 波が反対側に届いたか (1 つの波につき 1 回だけ光らせる) */
-  private readonly waveHit = new Uint8Array(MAX_WAVES);
+  /** 粒の先頭 (反対側へ向かう、いちばん遠くへ飛ぶ粒) の半径 */
+  private readonly burstLead = new Float32Array(MAX_BURSTS);
+  private readonly burstAmp = new Float32Array(MAX_BURSTS);
+  private readonly burstSide = new Int8Array(MAX_BURSTS);
+  private readonly burstAge = new Float32Array(MAX_BURSTS);
+  private readonly burstPhase = new Float32Array(MAX_BURSTS);
+  private readonly burstSalt = new Float32Array(MAX_BURSTS);
+  /** 反対側の方を向いた粒が飛ぶ距離 (スピーカーの半径の倍数。出た時点の配置から決める) */
+  private readonly burstReach = new Float32Array(MAX_BURSTS);
+  /** 粒が反対側に届いたか (1 回分につき 1 回だけ光らせる) */
+  private readonly burstHit = new Uint8Array(MAX_BURSTS);
   private rimL = 0;
   private rimR = 0;
-  private nextWave = 0;
+  private nextBurst = 0;
+  /** 粒の飛ぶ速さに使う Motion */
+  private motion = 0.6;
   private lastBeatIndex = -1;
   private readonly stripL = new Float32Array(STRIP_BARS);
   private readonly stripR = new Float32Array(STRIP_BARS);
@@ -167,35 +177,42 @@ export class SpeakerTwinPreset implements VisualizerPreset {
     this.histL[0] = this.capL;
     this.histR[0] = this.capR;
 
-    // 拍の波: 強く鳴った側のウーファーから
-    if (newBeat && beatIndex >= 0 && beat > 0.25) {
-      const i = this.nextWave;
-      this.nextWave = (this.nextWave + 1) % MAX_WAVES;
-      this.waveR[i] = 1.0;
-      this.waveAge[i] = 0;
-      this.waveHit[i] = 0;
-      this.waveSide[i] = strongRight ? 1 : -1;
-      this.waveA[i] = Math.min(0.85, (0.3 + 0.5 * bass + 0.3 * beat) * (0.6 + 0.8 * intensity));
-    }
-    // 波: イージングで広がる (Motion で全体が速くなる)。反対側のキャビネットに届いたら、そこの輪郭が光る (1 つの波につき 1 回)
+    // 拍で飛ぶ粒: 強く鳴った側のウーファーの縁から (反対側のスピーカーの方を向いた粒は遠くまで飛ぶ)。
+    // 反対側のキャビネットの手前の端に届いたら、そこの輪郭が光る (1 回分につき 1 回。左右の掛け合い)
     const lay = this.layout(params);
-    const reach = (2 * lay.dx) / lay.radius - HALF_WIDTH; // 反対側のキャビネットの手前の端までの、スピーカーの半径の倍数
-    const rate = WAVE_RATE * (0.7 + 0.6 * motion);
+    this.motion = motion;
+    const gap = (2 * lay.dx) / lay.radius - HALF_WIDTH; // 反対側のキャビネットの手前の端までの、スピーカーの半径の倍数
+    const reachTo = Math.min(BURST_REACH_MAX, Math.max(2.2, gap - 1.08));
+    if (newBeat && beatIndex >= 0 && beat > 0.25) {
+      const i = this.nextBurst;
+      this.nextBurst = (this.nextBurst + 1) % MAX_BURSTS;
+      this.burstLead[i] = 1.08;
+      this.burstAge[i] = 0;
+      this.burstHit[i] = 0;
+      this.burstSide[i] = strongRight ? 1 : -1;
+      // 拍ごとに粒の向きを少しずつ回す (黄金角。乱数は使わない)
+      this.burstPhase[i] = (beatIndex * 2.399963) % (Math.PI * 2);
+      this.burstSalt[i] = (beatIndex * 7.31) % 97;
+      this.burstReach[i] = reachTo;
+      this.burstAmp[i] = Math.min(0.85, (0.3 + 0.5 * bass + 0.3 * beat) * (0.6 + 0.8 * intensity));
+    }
+    const rate = BURST_RATE * (0.7 + 0.6 * motion);
     this.rimL = follow(this.rimL, 0, dt, 1, RIM_DECAY);
     this.rimR = follow(this.rimR, 0, dt, 1, RIM_DECAY);
-    for (let i = 0; i < MAX_WAVES; i++) {
-      if (this.waveA[i]! <= 0) continue;
-      this.waveAge[i] = this.waveAge[i]! + dt;
-      this.waveR[i] = 1 + WAVE_REACH * (1 - Math.exp(-this.waveAge[i]! * rate));
-      this.waveA[i] = this.waveA[i]! * Math.exp(-WAVE_FADE * dt);
-      if (!this.waveHit[i] && this.waveR[i]! >= reach) {
-        this.waveHit[i] = 1;
-        const hit = Math.min(1.2, this.waveA[i]! * HIT_GAIN);
-        // 右から出た波 (side = 1) は左を、左から出た波は右を光らせる
-        if (this.waveSide[i]! > 0) this.rimL = Math.max(this.rimL, hit);
+    for (let i = 0; i < MAX_BURSTS; i++) {
+      if (this.burstAmp[i]! <= 0) continue;
+      this.burstAge[i] = this.burstAge[i]! + dt;
+      this.burstLead[i] = 1.08 + this.burstReach[i]! * (1 - Math.exp(-this.burstAge[i]! * rate));
+      this.burstAmp[i] = this.burstAmp[i]! * Math.exp(-BURST_FADE * dt);
+      // 反対側のキャビネットの手前の端に、先頭の粒が届いたら光らせる
+      if (!this.burstHit[i] && this.burstLead[i]! >= gap) {
+        this.burstHit[i] = 1;
+        const hit = Math.min(1.2, this.burstAmp[i]! * HIT_GAIN);
+        // 右から出た粒 (side = 1) は左を、左から出た粒は右を光らせる
+        if (this.burstSide[i]! > 0) this.rimL = Math.max(this.rimL, hit);
         else this.rimR = Math.max(this.rimR, hit);
       }
-      if (this.waveA[i]! < 0.02) this.waveA[i] = 0;
+      if (this.burstAmp[i]! < 0.02 || this.burstAge[i]! > BURST_LIFE) this.burstAmp[i] = 0;
     }
 
     // 足元のイコライザー: 左は低〜中域 (0..30)、右は中〜高域 (16..46)
@@ -223,14 +240,14 @@ export class SpeakerTwinPreset implements VisualizerPreset {
     const u = this.material.uniforms;
     const cl = u.cL!.value as THREE.Vector2;
     const cr = u.cR!.value as THREE.Vector2;
-    const waveSides: number[] = [];
-    const waveRadii: number[] = [];
-    let waveCount = 0;
-    for (let i = 0; i < MAX_WAVES; i++) {
-      if (this.waveA[i]! > 0) {
-        waveCount++;
-        waveSides.push(this.waveSide[i]!);
-        waveRadii.push(this.waveR[i]!);
+    const burstSides: number[] = [];
+    const burstRadii: number[] = [];
+    let burstCount = 0;
+    for (let i = 0; i < MAX_BURSTS; i++) {
+      if (this.burstAmp[i]! > 0) {
+        burstCount++;
+        burstSides.push(this.burstSide[i]!);
+        burstRadii.push(this.burstLead[i]!);
       }
     }
     return {
@@ -238,10 +255,10 @@ export class SpeakerTwinPreset implements VisualizerPreset {
       tweeter: { left: this.twL, right: this.twR },
       rings: { left: Array.from(u.exL!.value as Float32Array), right: Array.from(u.exR!.value as Float32Array) },
       strip: { left: Array.from(this.stripL), right: Array.from(this.stripR) },
-      waveCount,
-      waveSides,
+      burstCount,
+      burstSides,
       rim: { left: this.rimL, right: this.rimR },
-      waveRadii,
+      burstRadii,
       radius: u.radius!.value as number,
       centers: { left: { x: cl.x, y: cl.y }, right: { x: cr.x, y: cr.y } },
       side: this.side,
@@ -297,10 +314,19 @@ export class SpeakerTwinPreset implements VisualizerPreset {
     }
     (u.stripL!.value as Float32Array).set(this.stripL);
     (u.stripR!.value as Float32Array).set(this.stripR);
-    const waveC = u.waveC!.value as THREE.Vector2[];
-    for (let i = 0; i < MAX_WAVES; i++) waveC[i]!.set(this.waveSide[i]! * dx, cy - 0.3 * radius);
-    (u.waveR!.value as Float32Array).set(this.waveR);
-    (u.waveA!.value as Float32Array).set(this.waveA);
+    const burstC = u.burstC!.value as THREE.Vector2[];
+    const burstDir = u.burstDir!.value as Float32Array;
+    for (let i = 0; i < MAX_BURSTS; i++) {
+      burstC[i]!.set(this.burstSide[i]! * dx, cy - 0.3 * radius);
+      // 反対側の向き (右から出た粒は左 = -1、左から出た粒は右 = +1)
+      burstDir[i] = -this.burstSide[i]!;
+    }
+    (u.burstAge!.value as Float32Array).set(this.burstAge);
+    (u.burstAmp!.value as Float32Array).set(this.burstAmp);
+    (u.burstPhase!.value as Float32Array).set(this.burstPhase);
+    (u.burstSalt!.value as Float32Array).set(this.burstSalt);
+    (u.burstReach!.value as Float32Array).set(this.burstReach);
+    u.burstRate!.value = BURST_RATE * (0.7 + 0.6 * this.motion);
     u.stripAmount!.value = unit(params.strip, 0.8);
     u.intensity!.value = 0.55 + 0.75 * intensity;
   }

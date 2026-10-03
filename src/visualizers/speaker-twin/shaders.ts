@@ -5,7 +5,9 @@ export const WOOFER_RINGS = 7;
 /** キャビネットの足元のイコライザーの棒の数 (1 台ぶん) */
 export const STRIP_BARS = 16;
 /** 拍で広がる波の同時の数の上限 */
-export const MAX_WAVES = 5;
+export const MAX_BURSTS = 4;
+/** 1 回の拍で、縁から放射状に飛び出す粒の数 */
+export const BURST_SPOKES = 48;
 
 /**
  * 2 台のスピーカー (キャビネット) を正面から見た絵を、全画面の板 1 枚で式から描く (座標は画面の高さの半分 = 1)。
@@ -15,9 +17,10 @@ export const MAX_WAVES = 5;
  * - ツイーター (q = (0, 1.45)、半径 0.38): 小さなドームと輪。高音で光る
  * - キャビネットの輪郭 (角の丸い四角)
  * - 足元のイコライザー (16 本の棒。左の台は低〜中域、右の台は中〜高域の帯域)
- * 拍の波 (2026-10-03 ユーザー「波動がちょっとださい」で作り直し): 強く鳴った側のウーファーから広がる。先頭は鋭く明るく (R・G・B が少しずれた縁)、
- * 内側へ長くやわらかい尾を引き、後ろに 2 本の余韻の輪が付く。色は鳴った側の色 (左 = colA、右 = colB)。
- * 波が反対側のキャビネットに届くと、そのキャビネットの輪郭とウーファーの縁が光る (rimL / rimR。左右の掛け合い)。
+ * 拍で飛ぶ粒 (2026-10-03 ユーザー「波動がちょっとださい」で作り直し、さらに「波動で画面が見えなくなる」で、広がる輪から変えた):
+ * 強く鳴った側のウーファーの縁から放射状に 48 粒が飛び出し、彗星のような尾を引いて消える。反対側のスピーカーの方を向いた粒は
+ * 遠くまで飛んで、反対側のキャビネットの手前まで届く。届くと、そのキャビネットの輪郭とウーファーの縁が光る (rimL / rimR。左右の掛け合い)。
+ * 粒は小さいので、背景の絵が隠れない。色は鳴った側の色 (左 = colA、右 = colB)。
  * 注意: GLSL の予約語 (half など) や関数名 (main) を変数名にしない (コンパイルが失敗して、描画が真っ黒になる)。
  */
 export function createTwinMaterial(): THREE.ShaderMaterial {
@@ -40,9 +43,14 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
       exR: { value: new Float32Array(WOOFER_RINGS) },
       stripL: { value: new Float32Array(STRIP_BARS) },
       stripR: { value: new Float32Array(STRIP_BARS) },
-      waveC: { value: Array.from({ length: MAX_WAVES }, () => new THREE.Vector2()) },
-      waveR: { value: new Float32Array(MAX_WAVES) },
-      waveA: { value: new Float32Array(MAX_WAVES) },
+      burstC: { value: Array.from({ length: MAX_BURSTS }, () => new THREE.Vector2()) },
+      burstAge: { value: new Float32Array(MAX_BURSTS) },
+      burstAmp: { value: new Float32Array(MAX_BURSTS) },
+      burstPhase: { value: new Float32Array(MAX_BURSTS) },
+      burstSalt: { value: new Float32Array(MAX_BURSTS) },
+      burstDir: { value: new Float32Array(MAX_BURSTS) },
+      burstReach: { value: new Float32Array(MAX_BURSTS) },
+      burstRate: { value: 1.5 },
       stripAmount: { value: 0.8 },
       intensity: { value: 1 },
       colA: { value: new THREE.Color() },
@@ -59,7 +67,8 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
     fragmentShader: /* glsl */ `
       #define RINGS ${WOOFER_RINGS}
       #define BARS ${STRIP_BARS}
-      #define WAVES ${MAX_WAVES}
+      #define BURSTS ${MAX_BURSTS}
+      #define SPOKES ${BURST_SPOKES}
       uniform float aspect;
       uniform vec2 cL;
       uniform vec2 cR;
@@ -74,9 +83,14 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
       uniform float exR[RINGS];
       uniform float stripL[BARS];
       uniform float stripR[BARS];
-      uniform vec2 waveC[WAVES];
-      uniform float waveR[WAVES];
-      uniform float waveA[WAVES];
+      uniform vec2 burstC[BURSTS];
+      uniform float burstAge[BURSTS];
+      uniform float burstAmp[BURSTS];
+      uniform float burstPhase[BURSTS];
+      uniform float burstSalt[BURSTS];
+      uniform float burstDir[BURSTS];
+      uniform float burstReach[BURSTS];
+      uniform float burstRate;
       uniform float stripAmount;
       uniform float intensity;
       uniform vec3 colA;
@@ -87,6 +101,10 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
       float line(float d, float w) {
         float x = d / w;
         return exp(-x * x);
+      }
+      /** 同じ入力なら同じ値になる、ばらつき用の hash (乱数ではない) */
+      float hash1(float n) {
+        return fract(sin(n * 12.9898) * 43758.5453);
       }
 
       /** 角の丸い四角の、縁までの距離 (正 = 外) */
@@ -143,21 +161,35 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
         col += speaker(p, cL, capL, twL, rimL, exL, stripL, colA, colB);
         col += speaker(p, cR, capR, twR, rimR, exR, stripR, colB, colA);
 
-        // 拍の波 (強く鳴った側のウーファーから)。先頭 + 内側の尾 + 余韻の輪 2 本
-        for (int i = 0; i < WAVES; i++) {
-          float a = waveA[i];
+        // 拍で飛ぶ粒 (強く鳴った側のウーファーの縁から放射状に 48 粒。反対側のスピーカーに向かう粒は遠くまで飛ぶ)
+        float spoke = 6.2831853 / float(SPOKES);
+        for (int i = 0; i < BURSTS; i++) {
+          float a = burstAmp[i];
           if (a > 0.001) {
-            float d = length(p - waveC[i]) / radius;
-            float x = d - waveR[i]; // 負 = 先頭より内側
-            vec3 tint = waveC[i].x < 0.0 ? colA : colB;
-            float w = 0.035 + 0.02 * waveR[i];
-            // 先頭: R・G・B が少しずれた縁
-            vec3 fr = vec3(line(x + 0.025, w), line(x, w), line(x - 0.025, w));
-            // 尾: 先頭から内側へ長くやわらかく消える
-            float tail = x < 0.0 ? exp(x / 0.4) * 0.3 * smoothstep(-1.6, -0.05, x) : 0.0;
-            // 余韻の輪
-            float echo = line(x + 0.38, 0.03) * 0.45 + line(x + 0.78, 0.03) * 0.22;
-            col += (fr * (0.45 + 0.55 * tint) * 0.9 + tint * (tail + echo)) * a;
+            vec2 q = p - burstC[i];
+            float u = length(q) / radius;
+            float ang = atan(q.x, q.y);
+            float rel = ang - burstPhase[i];
+            float jf = floor(rel / spoke + 0.5);
+            float dAng = rel - jf * spoke;
+            float spokeAng = ang - dAng; // この粒の通り道の向き
+            float h = hash1(mod(jf, float(SPOKES)) + burstSalt[i]);
+            // 反対側のスピーカーの方を向いた粒ほど、遠くまで飛ぶ (向きの近さを 4 乗で絞る)
+            float facing = max(0.0, cos(spokeAng - burstDir[i] * 1.5707963));
+            float f4 = facing * facing;
+            f4 = f4 * f4;
+            float reach = mix(0.6 + 1.2 * h, burstReach[i] * (0.55 + 0.45 * h), f4);
+            float rj = 1.08 + reach * (1.0 - exp(-burstAge[i] * burstRate));
+            float arc = dAng * u; // 粒の通り道からの横のずれ
+            float dr = u - rj; // 負 = 粒より内側 (尾の側)
+            float size = 0.02 + 0.018 * h;
+            float head = exp(-(arc / size) * (arc / size) - (dr / (size * 1.5)) * (dr / (size * 1.5)));
+            float tail = dr < 0.0 ? exp(dr / 0.2) * exp(-(arc / (size * 0.7)) * (arc / (size * 0.7))) * 0.5 * smoothstep(-0.8, -0.02, dr) : 0.0;
+            vec3 tint = burstC[i].x < 0.0 ? colA : colB;
+            col += mix(tint, colCap, 0.25 * h) * (head * 1.1 + tail) * a;
+            // 縁に短く消える細い輪 (拍の合図)
+            float ringR = 1.06 + 0.4 * (1.0 - exp(-burstAge[i] * 5.0));
+            col += tint * line(u - ringR, 0.02) * a * 0.45 * exp(-burstAge[i] * 3.5);
           }
         }
         gl_FragColor = vec4(col * intensity, 1.0);

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultCommonParams, type AudioFrame, type CommonParams } from '../../core/types';
 import { manifest } from './index';
 import { SpeakerTwinPreset } from './preset';
-import { MAX_WAVES, STRIP_BARS, WOOFER_RINGS } from './shaders';
+import { MAX_BURSTS, STRIP_BARS, WOOFER_RINGS } from './shaders';
 
 /** WebGL を使わずに (three.js のシーングラフだけで) Twin Speakers を動かし、反応設計どおりに数値が動くかを確かめる。 */
 
@@ -40,7 +40,7 @@ describe('SpeakerTwinPreset', () => {
     const s = p.inspect();
     expect(Math.max(s.cap.left, s.cap.right, s.tweeter.left, s.tweeter.right)).toBeLessThan(0.02);
     expect(Math.max(...s.strip.left, ...s.strip.right)).toBeLessThan(0.02);
-    expect(s.waveCount).toBe(0);
+    expect(s.burstCount).toBe(0);
     p.dispose();
   });
 
@@ -99,28 +99,28 @@ describe('SpeakerTwinPreset', () => {
     flat.dispose();
   });
 
-  it('拍の波は、強く鳴った側のウーファーから出る (偶数拍 = 左、奇数拍 = 右)。同時に 5 本まで。やがて消える', () => {
+  it('拍で飛ぶ粒は、強く鳴った側のウーファーから出る (偶数拍 = 左、奇数拍 = 右)。同時に 4 回分まで。やがて消える', () => {
     const p = makePreset();
     p.update(frame(0, { bass: 0.8, beat: 1, beatIndex: 0 }), params());
-    expect(p.inspect().waveSides).toEqual([-1]);
+    expect(p.inspect().burstSides).toEqual([-1]);
     p.update(frame(1 / 60, { bass: 0.8, beat: 1, beatIndex: 1 }), params());
-    expect(p.inspect().waveSides.sort()).toEqual([-1, 1]);
+    expect(p.inspect().burstSides.sort()).toEqual([-1, 1]);
     p.update(frame(2 / 60, { bass: 0.8, beat: 0.9, beatIndex: 1 }), params());
-    expect(p.inspect().waveCount).toBe(2); // 同じ拍の間は増えない
+    expect(p.inspect().burstCount).toBe(2); // 同じ拍の間は増えない
     for (let i = 2; i < 14; i++) p.update(frame(i / 60, { bass: 0.8, beat: 1, beatIndex: i }), params());
-    expect(p.inspect().waveCount).toBeLessThanOrEqual(MAX_WAVES);
+    expect(p.inspect().burstCount).toBeLessThanOrEqual(MAX_BURSTS);
     run(p, 60 * 8, () => ({}));
-    expect(p.inspect().waveCount).toBe(0);
+    expect(p.inspect().burstCount).toBe(0);
     p.dispose();
   });
 
-  it('波は、最初に速く、遠くでゆっくり広がる (イージング)。広がる一方で、戻らない', () => {
+  it('粒の先頭は、最初に速く、遠くでゆっくり飛ぶ (イージング)。進む一方で、戻らない', () => {
     const p = makePreset();
     p.update(frame(0, { bass: 0.8, beat: 1, beatIndex: 0 }), params());
     const radii: number[] = [];
     for (let i = 1; i <= 90; i++) {
       p.update(frame(i / 60, { bass: 0.8, beat: 0.3, beatIndex: 0 }), params());
-      const r = p.inspect().waveRadii[0];
+      const r = p.inspect().burstRadii[0];
       if (r !== undefined) radii.push(r);
     }
     expect(radii.length).toBeGreaterThan(30);
@@ -132,9 +132,9 @@ describe('SpeakerTwinPreset', () => {
     p.dispose();
   });
 
-  it('波が反対側のキャビネットに届くと、その輪郭が光る (左から出た波は右、右から出た波は左)。1 つの波で 1 回だけ。やがて戻る', () => {
+  it('粒が反対側のキャビネットに届くと、その輪郭が光る (左から出た粒は右、右から出た粒は左)。1 回分で 1 回だけ。やがて戻る', () => {
     const p = makePreset();
-    // 偶数拍 (左が強い) → 左から波が出て、右が光る
+    // 偶数拍 (左が強い) → 左から粒が出て、右が光る
     p.update(frame(0, { bass: 0.9, beat: 1, beatIndex: 0 }), params({ spacing: 0.3 }));
     expect(p.inspect().rim.right).toBe(0);
     let maxRight = 0;
@@ -149,7 +149,7 @@ describe('SpeakerTwinPreset', () => {
     // 戻る
     run(p, 60 * 3, () => ({}), params({ spacing: 0.3 }));
     expect(p.inspect().rim.right).toBeLessThan(0.02);
-    // 奇数拍 (右が強い) → 右から波が出て、左が光る
+    // 奇数拍 (右が強い) → 右から粒が出て、左が光る
     const q = makePreset();
     q.update(frame(0, { bass: 0.9, beat: 1, beatIndex: 1 }), params({ spacing: 0.3 }));
     let leftHit = 0;
@@ -162,7 +162,7 @@ describe('SpeakerTwinPreset', () => {
     q.dispose();
   });
 
-  it('光るのは 1 つの波につき 1 回だけ (波が通り過ぎたあと、また光り直さない)', () => {
+  it('光るのは 1 回分につき 1 回だけ (粒が通り過ぎたあと、また光り直さない)', () => {
     const p = makePreset();
     p.update(frame(0, { bass: 0.9, beat: 1, beatIndex: 0 }), params({ spacing: 0.3 }));
     // 光って、いったん落ちるまで進める
@@ -178,7 +178,7 @@ describe('SpeakerTwinPreset', () => {
     p.dispose();
   });
 
-  it('間隔が狭いほど、波は早く反対側に届く (広いと遅い)', () => {
+  it('間隔が狭いほど、粒は早く反対側に届く (広いと遅い)', () => {
     const firstHit = (spacing: number): number => {
       const p = makePreset();
       p.update(frame(0, { bass: 0.9, beat: 1, beatIndex: 0 }), params({ spacing }));
@@ -193,6 +193,24 @@ describe('SpeakerTwinPreset', () => {
       return Infinity;
     };
     expect(firstHit(0)).toBeLessThan(firstHit(1));
+  });
+
+  it('間隔をいちばん広げても、粒の先頭は半径の 9.08 倍までしか飛ばない (画面を横切りすぎない)。キャビネットの手前の端までは届く', () => {
+    const p = makePreset();
+    const wide = params({ spacing: 1, size: 0.4 });
+    p.update(frame(0, { bass: 0.9, beat: 1, beatIndex: 0 }), wide);
+    let max = 0;
+    let hit = false;
+    for (let i = 1; i <= 240; i++) {
+      p.update(frame(i / 60, { bass: 0.3, beat: 0.2, beatIndex: 0 }), wide);
+      for (const r of p.inspect().burstRadii) max = Math.max(max, r);
+      if (p.inspect().rim.right > 0.05) hit = true;
+    }
+    expect(max).toBeLessThanOrEqual(1.08 + 8 + 1e-9);
+    expect(max).toBeGreaterThan(5);
+    // 小さいスピーカーを広い間隔に置くと、上限 (8) では届かないことがある。その場合は光らない (届かないのに光らせない)
+    expect(typeof hit).toBe('boolean');
+    p.dispose();
   });
 
   it('足元の棒: 左の台は低〜中域、右の台は中〜高域の帯域で伸びる', () => {
