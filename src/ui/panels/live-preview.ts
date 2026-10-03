@@ -167,6 +167,7 @@ export function createLivePreview(opts: { onFrame?: () => void } = {}): LivePrev
 
   let prevT = performance.now() / 1000;
   let mounted = false;
+  let lastAr = 0;
   const tick = (): void => {
     if (!canvas.isConnected) {
       // まだ画面に載る前 (作った直後) は待つ。載ったあとに外れたら (タブを切り替えたら) 片づける
@@ -179,6 +180,12 @@ export function createLivePreview(opts: { onFrame?: () => void } = {}): LivePrev
       return;
     }
     mounted = true;
+    // 枠の縦横比は書き出しサイズに合わせる (縦長・正方形でも、書き出しと同じ構図をプレビューで見られる)
+    const ar = store.exportSettings.width / store.exportSettings.height;
+    if (Number.isFinite(ar) && ar > 0 && ar !== lastAr) {
+      lastAr = ar;
+      wrap.style.setProperty('--ar', String(ar));
+    }
     opts.onFrame?.();
     syncPreset();
     syncBackground();

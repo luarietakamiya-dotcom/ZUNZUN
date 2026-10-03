@@ -26,6 +26,17 @@ function run(p: SpeakerTwinPreset, frames: number, o: (i: number) => Partial<Aud
 }
 
 describe('SpeakerTwinPreset', () => {
+  it('縦長の画面: はみ出し 0 なら 2 台とも画面の幅に収まるよう半径が小さくなる。はみ出し 1 なら小さくしない', () => {
+    const p = makePreset(params(), 720, 1280);
+    p.update(frame(0), params({ size: 1, overflow: 0 }));
+    const s = p.inspect();
+    expect(s.radius).toBeLessThan(0.34);
+    expect(s.centers.right.x + s.radius * 1.3).toBeLessThanOrEqual(720 / 1280 + 1e-9);
+    p.update(frame(0), params({ size: 1, overflow: 1 }));
+    expect(p.inspect().radius).toBeCloseTo(0.34, 6);
+    p.dispose();
+  });
+
   it('定義: 設定は 大きさ・間隔・上下・交互に鳴らす・足元の棒。黒い背景に光だけ', () => {
     expect(manifest.id).toBe('speaker-twin');
     expect(manifest.controls!.map((c) => c.key)).toEqual(['size', 'spacing', 'offsetY', 'overflow', 'alternate', 'strip']);

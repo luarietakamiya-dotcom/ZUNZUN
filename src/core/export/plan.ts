@@ -12,6 +12,10 @@ export const EXPORT_SIZE_PRESETS: readonly { id: string; label: Text2; width: nu
   { id: '1280x720', label: { ja: '1280×720 (横長 16:9・HD・軽め)', en: '1280×720 (landscape 16:9, HD, lighter)' }, width: 1280, height: 720 },
   { id: '1080x1920', label: { ja: '1080×1920 (縦長 9:16・ショート動画)', en: '1080×1920 (portrait 9:16, shorts)' }, width: 1080, height: 1920 },
   { id: '1080x1080', label: { ja: '1080×1080 (正方形 1:1)', en: '1080×1080 (square 1:1)' }, width: 1080, height: 1080 },
+  { id: '1080x1350', label: { ja: '1080×1350 (縦長 4:5・SNS の投稿)', en: '1080×1350 (portrait 4:5, social posts)' }, width: 1080, height: 1350 },
+  { id: '1080x1440', label: { ja: '1080×1440 (縦長 3:4)', en: '1080×1440 (portrait 3:4)' }, width: 1080, height: 1440 },
+  { id: '1440x1080', label: { ja: '1440×1080 (横長 4:3)', en: '1440×1080 (landscape 4:3)' }, width: 1440, height: 1080 },
+  { id: '2560x1080', label: { ja: '2560×1080 (横長 21:9・ワイド)', en: '2560×1080 (landscape 21:9, ultrawide)' }, width: 2560, height: 1080 },
 ];
 
 export const EXPORT_FPS_OPTIONS: readonly number[] = [30, 60];

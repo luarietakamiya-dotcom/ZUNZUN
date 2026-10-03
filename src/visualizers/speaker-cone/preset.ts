@@ -206,7 +206,10 @@ export class SpeakerConePreset implements VisualizerPreset {
   private writeUniforms(params: CommonParams & Record<string, unknown>, intensity: number): void {
     const u = this.material.uniforms;
     const size = Math.min(1.6, Math.max(0.4, fin(params.size, 1)));
-    const radius = BASE_RADIUS * size;
+    const wanted = BASE_RADIUS * size;
+    // 縦長の画面では、まわりの棒 (半径の約 1.9 倍) が画面の幅に収まるよう半径を小さくする (はみ出し 1 なら小さくしない)
+    const fit = this.aspect / 1.9;
+    const radius = Math.min(wanted, fit + unit(params.overflow, 0) * Math.max(0, wanted - fit));
     // 位置: 画面の中で、スピーカーの外枠 (半径の 1.9 倍ほど: イコライザーの棒まで) が収まる範囲を、-1..1 で
     // はみ出し (overflow): 0 = 画面の中だけ。1 で、中心が画面の端の外 (半径の約 0.6 倍) まで動かせる = 一部だけ見える
     const overflow = unit(params.overflow, 0);

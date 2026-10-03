@@ -277,7 +277,10 @@ export class SpeakerTwinPreset implements VisualizerPreset {
   /** 2 台の配置 (半径・中心の左右の距離・中心の高さ)。大きさ・間隔・上下の設定と画面の縦横比から決まる */
   private layout(params: CommonParams & Record<string, unknown>): { radius: number; dx: number; cy: number } {
     const size = Math.min(1.6, Math.max(0.4, fin(params.size, 1)));
-    const radius = BASE_RADIUS * size;
+    const wanted = BASE_RADIUS * size;
+    // 縦長の画面では、2 台が画面の幅に収まるよう半径を小さくする (はみ出し 1 なら小さくしない)
+    const fit = Math.max(0.05, (this.aspect - 0.06) / (2 * HALF_WIDTH));
+    const radius = Math.min(wanted, fit + unit(params.overflow, 0) * Math.max(0, wanted - fit));
     // 配置: 2 台の中心の間隔は、画面の幅に収まる範囲で (間隔 0 = ぴったり並べる、1 = 左右の端いっぱい)
     const half = radius * HALF_WIDTH;
     const nearest = half + 0.03;

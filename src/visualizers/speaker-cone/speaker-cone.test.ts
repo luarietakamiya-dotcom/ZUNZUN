@@ -195,6 +195,16 @@ describe('SpeakerConePreset', () => {
     p.dispose();
   });
 
+  it('縦長の画面: はみ出し 0 なら、外枠が画面の幅に収まるよう半径が小さくなる。はみ出し 1 なら小さくしない', () => {
+    const p = makePreset(params(), 720, 1280);
+    p.update(frame(0), params({ size: 1, overflow: 0 }));
+    const s = p.inspect();
+    expect(s.radius * 1.9).toBeLessThanOrEqual(s.aspect + 1e-9);
+    p.update(frame(0), params({ size: 1, overflow: 1 }));
+    expect(p.inspect().radius).toBeCloseTo(0.5, 6);
+    p.dispose();
+  });
+
   it('縦長の画面でも壊れない (横幅の余裕が小さいと、位置は真ん中のまま)', () => {
     const p = makePreset(params(), 720, 1280);
     p.update(frame(0), params({ size: 1, offsetX: 1, offsetY: 0 }));
