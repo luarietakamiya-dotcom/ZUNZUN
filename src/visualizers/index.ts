@@ -1,5 +1,6 @@
 import { visualizerRegistry } from '../core/visualizer/registry';
 import { debugBarsModule } from './_debug';
+import { edgeEqualizerModule } from './edge-equalizer';
 import { cityScrollModule } from './city-scroll';
 import { cyberSpaceModule } from './cyber-space';
 import { liveStageModule } from './live-stage';
@@ -26,6 +27,7 @@ visualizerRegistry.register(speakerRackModule);
 visualizerRegistry.register(speakerConeModule);
 visualizerRegistry.register(speakerTwinModule);
 visualizerRegistry.register(speakerMegaModule);
+visualizerRegistry.register(edgeEqualizerModule);
 visualizerRegistry.register(ripplesModule);
 visualizerRegistry.register(photoMotionModule);
 visualizerRegistry.register(cityScrollModule);
