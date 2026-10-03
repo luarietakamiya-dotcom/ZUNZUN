@@ -7,6 +7,7 @@ import { milkyWayModule } from './milky-way';
 import { noneModule } from './none';
 import { photoMotionModule } from './photo-motion';
 import { solarGateModule } from './solar-gate';
+import { speakerConeModule } from './speaker-cone';
 import { speakerRackModule } from './speaker-rack';
 
 /**
@@ -19,6 +20,7 @@ visualizerRegistry.register(solarGateModule);
 visualizerRegistry.register(milkyWayModule);
 visualizerRegistry.register(liveStageModule);
 visualizerRegistry.register(speakerRackModule);
+visualizerRegistry.register(speakerConeModule);
 visualizerRegistry.register(photoMotionModule);
 visualizerRegistry.register(cityScrollModule);
 visualizerRegistry.register(cyberSpaceModule);
