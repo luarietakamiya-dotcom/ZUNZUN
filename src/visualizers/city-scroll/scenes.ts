@@ -1,3 +1,4 @@
+import countryRoadUrl from '../../assets/city-scroll/country-road.webp';
 import grandAvenueUrl from '../../assets/city-scroll/grand-avenue.webp';
 import harborTownUrl from '../../assets/city-scroll/harbor-town.webp';
 import marathonUrl from '../../assets/city-scroll/marathon.webp';
@@ -10,7 +11,7 @@ import tramStreetUrl from '../../assets/city-scroll/tram-street.webp';
 import type { Text2 } from '../../core/i18n';
 
 /**
- * 「流れる街並み」で使う横長の絵 (ユーザーが用意した 9 枚。5940 × 1195、src/assets/city-scroll/)。
+ * 「流れる街並み」で使う横長の絵 (ユーザーが用意した 10 枚。5940 × 1195、src/assets/city-scroll/)。
  * 2026-10-03 に高解像度の絵へ差し替え (ChatGPT で作った 1980 × 1195 を 3 枚、横につないだもの。3 枚目の右端は 1 枚目の左端へ
  * つながるので、1 枚だけ流すときは継ぎ目なしでループする)。別の絵をつなげて流す「全部つなげる」だけ、絵の境目を
  * 少し重ねて溶かす (shaders.ts の SEAM)。
@@ -42,6 +43,7 @@ export const SCENES: readonly CityScene[] = [
   { id: 'palace-plaza', name: { ja: '宮殿と噴水の広場', en: 'Palace plaza' }, url: palacePlazaUrl, aspect: ASPECT, particles: 'petals' },
   { id: 'residential', name: { ja: '並木の住宅街', en: 'Tree-lined neighborhood' }, url: residentialUrl, aspect: ASPECT, particles: 'leaves' },
   { id: 'rainy-street', name: { ja: '雨の夜の商店街', en: 'Rainy night street' }, url: rainyStreetUrl, aspect: ASPECT, particles: 'lights' },
+  { id: 'country-road', name: { ja: '田んぼの田舎道', en: 'Country road' }, url: countryRoadUrl, aspect: ASPECT, particles: 'leaves' },
   { id: 'marathon', name: { ja: 'マラソンの沿道', en: 'Marathon route' }, url: marathonUrl, aspect: ASPECT, particles: 'confetti' },
 ];
 
