@@ -44,7 +44,7 @@ function run(preset: SolarGatePreset, frames: number, o: (i: number) => Partial<
 }
 
 describe('SolarGatePreset', () => {
-  it('bass が強いほど光線が長く伸びる', () => {
+  it('bass が強いほど、輪のまわりのオーロラの縁が長く伸びる', () => {
     const quiet = makePreset();
     const loud = makePreset();
     run(quiet, 60, () => ({ bass: 0 }));
@@ -66,12 +66,47 @@ describe('SolarGatePreset', () => {
     expect(bright.inspect().activeParticles).toBeGreaterThan(calm.inspect().activeParticles + 100);
   });
 
-  it('beat で光柱がフラッシュする', () => {
+  it('音が大きいほど月食のフレアが強くなり、静かなときは落ち着いている (光過敏への配慮で、1.5 を超えない)', () => {
+    const quiet = makePreset();
+    const loud = makePreset();
+    run(quiet, 120, () => ({}));
+    run(loud, 120, (i) => ({ rms: 0.9, mid: 0.8, beat: i % 30 === 0 ? 1 : (30 - (i % 30)) / 60, beatIndex: Math.floor(i / 30) }));
+    expect(loud.inspect().flareStrength).toBeGreaterThan(quiet.inspect().flareStrength + 0.3);
+    expect(loud.inspect().flareStrength).toBeLessThanOrEqual(1.5);
+    expect(quiet.inspect().flareStrength).toBeLessThan(0.5);
+  });
+
+  it('フレアが燃える位置は、ゆっくり輪を回り (約 40 秒で 1 周)、拍が多いと少し速い。同じ音なら同じ位置', () => {
+    const calm = makePreset();
+    const beaty = makePreset();
+    const calm2 = makePreset();
+    const a0 = calm.inspect().flareAngle;
+    run(calm, 600, () => ({}));
+    run(calm2, 600, () => ({}));
+    run(beaty, 600, (i) => ({ beat: (i % 30) / 30 < 0.2 ? 1 - (i % 30) / 6 : 0 }));
+    const turn = calm.inspect().flareAngle - a0;
+    // 10 秒で、1 周の 1/4 より少し進む (Motion 0.6 の既定: 0.5 + 0.9 × 0.6 = 1.04 倍速)
+    expect(turn).toBeGreaterThan(0.9);
+    expect(turn).toBeLessThan(2.4);
+    expect(beaty.inspect().flareAngle).toBeGreaterThan(calm.inspect().flareAngle);
+    expect(calm2.inspect().flareAngle).toBe(calm.inspect().flareAngle);
+  });
+
+  it('地面のオーロラのカーテンは、低音と帯域で高くなり、静かなときは低い背で見えている', () => {
+    const quiet = makePreset();
+    const loud = makePreset();
+    run(quiet, 90, () => ({}));
+    run(loud, 90, () => ({ bass: 1, beat: 0.5, bands: new Float32Array(64).fill(0.9) }));
+    expect(quiet.inspect().curtainHeight).toBeGreaterThan(3);
+    expect(loud.inspect().curtainHeight).toBeGreaterThan(quiet.inspect().curtainHeight + 3);
+  });
+
+  it('beat でカーテンがフラッシュする', () => {
     const p = makePreset();
     run(p, 5, () => ({ beat: 0 }));
     const idle = p.inspect().pillarStrength;
     run(p, 1, () => ({ beat: 1, beatIndex: 0 }));
-    expect(p.inspect().pillarStrength).toBeGreaterThan(idle + 0.5);
+    expect(p.inspect().pillarStrength).toBeGreaterThan(idle + 0.3);
   });
 
   it('同じ seed・同じ音声なら粒子の配置まで完全に一致し、seed が違えば変わる (書き出しの再現性)', () => {

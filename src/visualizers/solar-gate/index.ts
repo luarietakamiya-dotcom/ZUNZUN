@@ -10,7 +10,7 @@ export const manifest: VisualizerManifest = {
   defaults: {},
   // 円環・光線・光柱は HDR (成分 > 1) で描くので、しきい値を高めにして本当に明るい部分だけをにじませる
   // (低いしきい値 + 広い半径だと、空や床まで茶色くかすむことを実際の描画で確認した)
-  post: { bloomStrength: 0.75, bloomRadius: 0.25, bloomThreshold: 0.55 },
+  post: { bloomStrength: 0.45, bloomRadius: 0.3, bloomThreshold: 0.8 },
 };
 
 export const solarGateModule: VisualizerModule = {
