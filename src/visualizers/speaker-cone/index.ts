@@ -43,6 +43,19 @@ export const manifest: VisualizerManifest = {
     },
     {
       type: 'range',
+      key: 'overflow',
+      label: { ja: 'はみ出し', en: 'Overflow' },
+      help: {
+        ja: 'スピーカーを画面の外まで動かせる範囲 (0 で画面の中だけ、1 でほとんど外に出して一部だけ使えます。位置のスライダーを端まで動かして使います)',
+        en: 'How far the speaker can move off-screen (0 = stays inside, 1 = mostly outside so only part of it shows; use with the position sliders)',
+      },
+      min: 0,
+      max: 1,
+      step: 0.01,
+      default: 0,
+    },
+    {
+      type: 'range',
       key: 'equalizer',
       label: { ja: 'まわりの棒 (イコライザー)', en: 'Surrounding bars (equalizer)' },
       help: { ja: 'スピーカーのまわりに並ぶ、音の高さごとの棒の量 (0 で出さない)', en: 'Amount of the bars around the speaker, one per pitch range (0 = hidden)' },

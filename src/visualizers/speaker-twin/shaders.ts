@@ -8,6 +8,8 @@ export const STRIP_BARS = 16;
 export const MAX_BURSTS = 4;
 /** 1 回の拍で、縁から放射状に飛び出す粒の数 */
 export const BURST_SPOKES = 48;
+/** 粒が消えるまでの時間の目安 (秒。小さくなる速さに使う) */
+const BURST_LIFE_S = '3.2';
 
 /**
  * 2 台のスピーカー (キャビネット) を正面から見た絵を、全画面の板 1 枚で式から描く (座標は画面の高さの半分 = 1)。
@@ -161,7 +163,8 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
         col += speaker(p, cL, capL, twL, rimL, exL, stripL, colA, colB);
         col += speaker(p, cR, capR, twR, rimR, exR, stripR, colB, colA);
 
-        // 拍で飛ぶ粒 (強く鳴った側のウーファーの縁から放射状に 48 粒。反対側のスピーカーに向かう粒は遠くまで飛ぶ)
+        // 拍で飛ぶ粒 (強く鳴った側のウーファーの縁から、48 個の小さな四角が、ゆっくり回りながら輪になって広がる。
+        // キラキラ光り、小さくなりながら光の粉を残す。反対側のスピーカーに向かう粒だけは遠くまで飛ぶ)
         float spoke = 6.2831853 / float(SPOKES);
         for (int i = 0; i < BURSTS; i++) {
           float a = burstAmp[i];
@@ -169,27 +172,43 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
             vec2 q = p - burstC[i];
             float u = length(q) / radius;
             float ang = atan(q.x, q.y);
-            float rel = ang - burstPhase[i];
-            float jf = floor(rel / spoke + 0.5);
-            float dAng = rel - jf * spoke;
-            float spokeAng = ang - dAng; // この粒の通り道の向き
-            float h = hash1(mod(jf, float(SPOKES)) + burstSalt[i]);
-            // 反対側のスピーカーの方を向いた粒ほど、遠くまで飛ぶ (向きの近さを 4 乗で絞る)
-            float facing = max(0.0, cos(spokeAng - burstDir[i] * 1.5707963));
-            float f4 = facing * facing;
-            f4 = f4 * f4;
-            float reach = mix(0.6 + 1.2 * h, burstReach[i] * (0.55 + 0.45 * h), f4);
-            float rj = 1.08 + reach * (1.0 - exp(-burstAge[i] * burstRate));
-            float arc = dAng * u; // 粒の通り道からの横のずれ
-            float dr = u - rj; // 負 = 粒より内側 (尾の側)
-            float size = 0.02 + 0.018 * h;
-            float head = exp(-(arc / size) * (arc / size) - (dr / (size * 1.5)) * (dr / (size * 1.5)));
-            float tail = dr < 0.0 ? exp(dr / 0.2) * exp(-(arc / (size * 0.7)) * (arc / (size * 0.7))) * 0.5 * smoothstep(-0.8, -0.02, dr) : 0.0;
+            float age = burstAge[i];
+            float sum = 0.0;
+            float hh = 0.0;
+            // k = 0: 粒の本体。k = 1..4: 通ったあとに残る光の粉 (小さく、うすく、少しずつ消える)
+            for (int k = 0; k < 5; k++) {
+              float ag = age - float(k) * 0.07;
+              if (ag >= 0.0) {
+                float rel = ang - burstPhase[i] - 0.45 * ag; // 輪全体がゆっくり回る
+                float jf = floor(rel / spoke + 0.5);
+                float dAng = rel - jf * spoke;
+                float spokeAng = ang - dAng; // この粒の通り道の向き
+                float h = hash1(mod(jf, float(SPOKES)) + burstSalt[i]);
+                // 反対側のスピーカーの方を向いた粒ほど、遠くまで飛ぶ (向きの近さを 4 乗で絞る)
+                float facing = max(0.0, cos(spokeAng - burstDir[i] * 1.5707963));
+                float f4 = facing * facing;
+                f4 = f4 * f4;
+                float reach = mix(1.1 + 0.25 * h, burstReach[i] * (0.55 + 0.45 * h), f4);
+                float rj = 1.08 + reach * (1.0 - exp(-ag * burstRate));
+                vec2 dd = vec2(dAng * u, u - rj); // 粒の中心からのずれ (横, 外向き)
+                float th = h * 6.2831853 + ag * (0.5 + 0.7 * h); // 四角がゆっくり回る
+                float cs = cos(th);
+                float sn = sin(th);
+                vec2 qq = abs(vec2(cs * dd.x - sn * dd.y, sn * dd.x + cs * dd.y));
+                float life = clamp(ag / ${BURST_LIFE_S}, 0.0, 1.0);
+                float sz = (0.03 + 0.016 * h) * (1.0 - 0.8 * life) * (k == 0 ? 1.0 : 0.45);
+                float sq = 1.0 - smoothstep(0.7, 1.0, max(qq.x, qq.y) / sz);
+                float tw = 0.55 + 0.45 * sin(ag * 16.0 + h * 40.0 + float(k) * 1.7); // きらめき
+                float w = k == 0 ? 1.0 : 0.5 * exp(-float(k) * 0.45);
+                sum += sq * tw * w;
+                hh = h;
+              }
+            }
             vec3 tint = burstC[i].x < 0.0 ? colA : colB;
-            col += mix(tint, colCap, 0.25 * h) * (head * 1.1 + tail) * a;
+            col += mix(tint, colCap, 0.25 * hh) * sum * a * 1.4;
             // 縁に短く消える細い輪 (拍の合図)
-            float ringR = 1.06 + 0.4 * (1.0 - exp(-burstAge[i] * 5.0));
-            col += tint * line(u - ringR, 0.02) * a * 0.45 * exp(-burstAge[i] * 3.5);
+            float ringR = 1.06 + 0.4 * (1.0 - exp(-age * 5.0));
+            col += tint * line(u - ringR, 0.02) * a * 0.45 * exp(-age * 3.5);
           }
         }
         gl_FragColor = vec4(col * intensity, 1.0);

@@ -29,7 +29,7 @@ function run(p: SpeakerMegaPreset, frames: number, o: (i: number) => Partial<Aud
 describe('SpeakerMegaPreset', () => {
   it('定義: 設定は 大きさ・左右・上下・回る光の筋・虹色の速さ・まわりの棒・拍の衝撃波。黒い背景に光だけ', () => {
     expect(manifest.id).toBe('speaker-mega');
-    expect(manifest.controls!.map((c) => c.key)).toEqual(['size', 'offsetX', 'offsetY', 'rays', 'rainbow', 'equalizer', 'waves']);
+    expect(manifest.controls!.map((c) => c.key)).toEqual(['size', 'offsetX', 'offsetY', 'overflow', 'rays', 'rainbow', 'equalizer', 'waves']);
     const p = makePreset();
     expect((p.scene.background as THREE.Color).getHex()).toBe(0x000000);
     p.dispose();

@@ -281,12 +281,14 @@ export class SpeakerTwinPreset implements VisualizerPreset {
     // 配置: 2 台の中心の間隔は、画面の幅に収まる範囲で (間隔 0 = ぴったり並べる、1 = 左右の端いっぱい)
     const half = radius * HALF_WIDTH;
     const nearest = half + 0.03;
-    const widest = Math.max(nearest, this.aspect - half - 0.03);
+    // はみ出し (overflow) 1 で、間隔をさらに広げて、2 台とも半分ほど画面の外に出せる
+    const overflow = unit(params.overflow, 0);
+    const widest = Math.max(nearest, this.aspect - half - 0.03) + overflow * half * 1.0;
     const spacing = unit(params.spacing, 0.6);
     const dx = nearest + (widest - nearest) * spacing;
     // 上下: キャビネットは足元の棒から上の端まで高さがあるので、画面に収まる範囲で動かせる
     const total = radius * TOTAL_HEIGHT;
-    const room = Math.max(0, 1 - total / 2 - 0.03);
+    const room = Math.max(0, 1 - total / 2 - 0.03) + overflow * total * 0.4;
     const oy = Math.min(1, Math.max(-1, fin(params.offsetY, 0)));
     // キャビネットの中心は、足元の棒の下 (-2.45) と上の端 (+2.05) の真ん中 (= -0.2 R) が画面の中心に来るようにする
     const cy = oy * room + radius * 0.2;

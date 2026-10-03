@@ -42,6 +42,19 @@ export const manifest: VisualizerManifest = {
     },
     {
       type: 'range',
+      key: 'overflow',
+      label: { ja: 'はみ出し', en: 'Overflow' },
+      help: {
+        ja: 'スピーカーを画面の外まで動かせる範囲 (0 で画面の中だけ、1 でほとんど外に出して一部だけ使えます。位置のスライダーを端まで動かして使います)',
+        en: 'How far the speaker can move off-screen (0 = stays inside, 1 = mostly outside so only part of it shows; use with the position sliders)',
+      },
+      min: 0,
+      max: 1,
+      step: 0.01,
+      default: 0,
+    },
+    {
+      type: 'range',
       key: 'alternate',
       label: { ja: '交互に鳴らす', en: 'Alternate' },
       help: { ja: '拍ごとに左右で強く鳴る側が入れ替わる量 (0 で左右とも同じ強さ)', en: 'How much the louder side switches left and right on each beat (0 = both equal)' },

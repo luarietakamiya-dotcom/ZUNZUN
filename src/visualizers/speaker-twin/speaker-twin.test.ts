@@ -28,7 +28,7 @@ function run(p: SpeakerTwinPreset, frames: number, o: (i: number) => Partial<Aud
 describe('SpeakerTwinPreset', () => {
   it('定義: 設定は 大きさ・間隔・上下・交互に鳴らす・足元の棒。黒い背景に光だけ', () => {
     expect(manifest.id).toBe('speaker-twin');
-    expect(manifest.controls!.map((c) => c.key)).toEqual(['size', 'spacing', 'offsetY', 'alternate', 'strip']);
+    expect(manifest.controls!.map((c) => c.key)).toEqual(['size', 'spacing', 'offsetY', 'overflow', 'alternate', 'strip']);
     const p = makePreset();
     expect((p.scene.background as THREE.Color).getHex()).toBe(0x000000);
     p.dispose();

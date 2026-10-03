@@ -30,7 +30,7 @@ function run(p: SpeakerConePreset, frames: number, o: (i: number) => Partial<Aud
 describe('SpeakerConePreset', () => {
   it('定義: 設定は 大きさ・左右・上下・まわりの棒・拍の波。既定は黒い背景に光だけ (スクリーンで絵に重ねる前提)', () => {
     expect(manifest.id).toBe('speaker-cone');
-    expect(manifest.controls!.map((c) => c.key)).toEqual(['size', 'offsetX', 'offsetY', 'equalizer', 'waves']);
+    expect(manifest.controls!.map((c) => c.key)).toEqual(['size', 'offsetX', 'offsetY', 'overflow', 'equalizer', 'waves']);
     const p = makePreset();
     expect((p.scene.background as THREE.Color).getHex()).toBe(0x000000);
     p.dispose();
@@ -175,6 +175,23 @@ describe('SpeakerConePreset', () => {
     // 範囲外の値は丸める
     p.update(frame(0), params({ size: 99, offsetX: 99, offsetY: -99 }));
     expect(p.inspect().radius).toBeCloseTo(0.8, 6);
+    p.dispose();
+  });
+
+  it('はみ出し: 0 なら画面の中だけ、1 なら中心が画面の端の外まで動かせる (一部だけ使える)', () => {
+    const p = makePreset();
+    p.update(frame(0), params({ size: 1, offsetX: 1, offsetY: 1, overflow: 0 }));
+    const inside = p.inspect();
+    expect(inside.center.x + inside.radius * 1.9).toBeLessThanOrEqual(inside.aspect + 1e-9);
+    p.update(frame(0), params({ size: 1, offsetX: 1, offsetY: 1, overflow: 1 }));
+    const out = p.inspect();
+    expect(out.center.x).toBeGreaterThan(out.aspect); // 中心が画面の右の外
+    expect(out.center.y).toBeGreaterThan(1);
+    p.update(frame(0), params({ size: 1, offsetX: -1, offsetY: 0, overflow: 1 }));
+    expect(p.inspect().center.x).toBeLessThan(-p.inspect().aspect);
+    // 壊れた値は 0 (はみ出さない) として扱う
+    p.update(frame(0), params({ size: 1, offsetX: 1, offsetY: 0, overflow: Number.NaN }));
+    expect(Number.isFinite(p.inspect().center.x)).toBe(true);
     p.dispose();
   });
 

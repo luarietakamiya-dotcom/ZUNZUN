@@ -31,8 +31,8 @@ const HISTORY_LENGTH = CONE_RINGS * RING_DELAY_STEPS + 2;
 const BURST_RATE = 1.8;
 const BURST_FADE = 1.1;
 const BURST_LIFE = 2.4;
-/** 粒が飛ぶいちばん遠い距離 (スピーカーの半径の倍数。シェーダーの 1.08 + 0.7 + 1.3 = 3.08 より内側に収まる) */
-const BURST_MAX_RADIUS = 3.08;
+/** 粒が飛ぶいちばん遠い距離 (スピーカーの半径の倍数。シェーダーの 1.08 + 1.1 + 0.25 = 2.43 より内側に収まる) */
+const BURST_MAX_RADIUS = 2.43;
 
 interface Palette {
   a: THREE.Color;
@@ -178,8 +178,8 @@ export class SpeakerConePreset implements VisualizerPreset {
     for (let i = 0; i < MAX_BURSTS; i++) {
       if (this.burstAmp[i]! > 0) {
         burstCount++;
-        // いちばん遠くへ飛ぶ粒 (飛ぶ距離 2.0) の、いまの半径
-        burstMax = Math.max(burstMax, 1.08 + 2.0 * (1 - Math.exp(-this.burstAge[i]! * rate)));
+        // いちばん遠くへ飛ぶ粒 (飛ぶ距離 1.35) の、いまの半径
+        burstMax = Math.max(burstMax, 1.08 + 1.35 * (1 - Math.exp(-this.burstAge[i]! * rate)));
       }
     }
     return {
@@ -208,8 +208,10 @@ export class SpeakerConePreset implements VisualizerPreset {
     const size = Math.min(1.6, Math.max(0.4, fin(params.size, 1)));
     const radius = BASE_RADIUS * size;
     // 位置: 画面の中で、スピーカーの外枠 (半径の 1.9 倍ほど: イコライザーの棒まで) が収まる範囲を、-1..1 で
-    const roomX = Math.max(0, this.aspect - radius * 1.9);
-    const roomY = Math.max(0, 1 - radius * 1.9);
+    // はみ出し (overflow): 0 = 画面の中だけ。1 で、中心が画面の端の外 (半径の約 0.6 倍) まで動かせる = 一部だけ見える
+    const overflow = unit(params.overflow, 0);
+    const roomX = Math.max(0, this.aspect - radius * 1.9) + overflow * radius * 2.5;
+    const roomY = Math.max(0, 1 - radius * 1.9) + overflow * radius * 2.5;
     const ox = Math.min(1, Math.max(-1, fin(params.offsetX, 0)));
     const oy = Math.min(1, Math.max(-1, fin(params.offsetY, 0)));
     (u.center!.value as THREE.Vector2).set(ox * roomX, oy * roomY);

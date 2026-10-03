@@ -195,8 +195,10 @@ export class SpeakerMegaPreset implements VisualizerPreset {
     const size = Math.min(1.6, Math.max(0.4, fin(params.size, 1)));
     const radius = BASE_RADIUS * size;
     // 位置: まわりの棒の先 (半径の約 1.9 倍) が画面に収まる範囲で動かす
-    const roomX = Math.max(0, this.aspect - radius * 1.9);
-    const roomY = Math.max(0, 1 - radius * 1.9);
+    // はみ出し (overflow): 0 = 画面の中だけ。1 で、中心が画面の端の外 (半径の約 0.6 倍) まで動かせる = 一部だけ見える
+    const overflow = unit(params.overflow, 0);
+    const roomX = Math.max(0, this.aspect - radius * 1.9) + overflow * radius * 2.5;
+    const roomY = Math.max(0, 1 - radius * 1.9) + overflow * radius * 2.5;
     const ox = Math.min(1, Math.max(-1, fin(params.offsetX, 0)));
     const oy = Math.min(1, Math.max(-1, fin(params.offsetY, 0)));
     (u.center!.value as THREE.Vector2).set(ox * roomX, oy * roomY);
