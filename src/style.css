@@ -482,6 +482,9 @@ body {
 
 /* 共通の再生欄 (ヘッダー) */
 .app-header { flex-wrap: wrap; }
+.size-select { flex: none; width: auto; max-width: 150px; padding: 4px 6px; font-size: 12px; }
+.mobile-shell .m-sizebar { position: sticky; top: calc(var(--m-header-h) + env(safe-area-inset-top)); z-index: 18; display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: var(--m-bar-h); box-sizing: border-box; padding: 0 12px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--fg-dim); }
+.mobile-shell .size-select { max-width: 200px; padding: 3px 6px; font-size: 12px; }
 .transport { display: flex; align-items: center; gap: 6px; margin-left: auto; min-width: 0; }
 .transport-button { padding: 4px 8px; font-variant-numeric: tabular-nums; }
 .transport-play { min-width: 2.6em; color: var(--fg); border-color: var(--border); }
@@ -559,7 +562,7 @@ body {
 /* ---------------------------------------------------------------------------------------------
  * スマホ表示 (ui/mobile-shell.ts)。ここから下は .mobile-shell の中だけに効く (PC 表示は変えない)
  * ------------------------------------------------------------------------------------------- */
-.mobile-shell { --m-header-h: 53px; display: block; height: auto; min-height: 100%; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+.mobile-shell { --m-header-h: 53px; --m-bar-h: 36px; --m-stack-h: calc(var(--m-header-h) + var(--m-bar-h)); display: block; height: auto; min-height: 100%; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
 .mobile-shell .m-header {
   position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px;
   padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top));
@@ -583,12 +586,12 @@ body {
   .mobile-shell .transport-time { display: none; }
 }
 .mobile-shell [data-any-file] { width: 100%; text-align: left; white-space: normal; padding: 10px 12px; border: 1px dashed var(--border); font-size: 12px; line-height: 1.4; }
-.mobile-shell .m-preview { position: sticky; top: calc(var(--m-header-h) + env(safe-area-inset-top)); z-index: 15; background: var(--bg); padding: 6px 12px 8px; border-bottom: 1px solid var(--border); }
+.mobile-shell .m-preview { position: sticky; top: calc(var(--m-stack-h) + env(safe-area-inset-top)); z-index: 15; background: var(--bg); padding: 6px 12px 8px; border-bottom: 1px solid var(--border); }
 .mobile-shell .m-preview[hidden] { display: none; }
 .mobile-shell .m-preview .visualizer-canvas-wrap { --max-h: 24vh; margin: 0 auto; width: min(100%, calc(var(--max-h) * var(--ar))); }
 /* パネルの中のプレビュー (ビジュアライザー・背景と素材) も、下へ動かしても見えるように上に固定する */
-.mobile-shell .m-body .visualizer-canvas-wrap { position: sticky; top: calc(var(--m-header-h) + env(safe-area-inset-top)); z-index: 10; --max-h: 30vh; width: min(100%, calc(var(--max-h) * var(--ar))); margin-left: auto; margin-right: auto; }
-.mobile-shell .m-body .overlay-preview { top: calc(var(--m-header-h) + env(safe-area-inset-top)); }
+.mobile-shell .m-body .visualizer-canvas-wrap { position: sticky; top: calc(var(--m-stack-h) + env(safe-area-inset-top)); z-index: 10; --max-h: 30vh; width: min(100%, calc(var(--max-h) * var(--ar))); margin-left: auto; margin-right: auto; }
+.mobile-shell .m-body .overlay-preview { top: calc(var(--m-stack-h) + env(safe-area-inset-top)); }
 .mobile-shell .m-body .overlay-preview .visualizer-canvas-wrap { position: static; }
 .mobile-shell .m-subtabs { display: flex; gap: 4px; overflow-x: auto; padding: 8px 12px 0; scrollbar-width: none; }
 .mobile-shell .m-subtabs[hidden] { display: none; }

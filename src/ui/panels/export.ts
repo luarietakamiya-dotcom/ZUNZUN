@@ -17,6 +17,7 @@ import { t2, tr, type Text2 } from '../../core/i18n';
 import type { CommonParams, ExportSettings, OverlayLayer } from '../../core/types';
 import { visualizerRegistry } from '../../visualizers';
 import { layoutMode } from '../layout';
+import { sizeOptionText } from '../size-select';
 
 const QUALITY_OPTIONS: { value: ExportSettings['quality']; label: Text2 }[] = [
   { value: 'draft', label: { ja: '下書き (軽い・確認用)', en: 'Draft (small, for checking)' } },
@@ -188,30 +189,16 @@ export function renderExportPanel(): HTMLElement {
   settingsGrid.className = 'param-grid';
   el.appendChild(settingsGrid);
 
-  const sizeSelect = document.createElement('select');
-  sizeSelect.className = 'select';
-  for (const preset of EXPORT_SIZE_PRESETS) {
-    const opt = document.createElement('option');
-    opt.value = preset.id;
-    opt.textContent = t2(preset.label);
-    sizeSelect.appendChild(opt);
-  }
-  const currentSize = EXPORT_SIZE_PRESETS.find(
-    (s) => s.width === store.exportSettings.width && s.height === store.exportSettings.height,
-  );
-  if (!currentSize) {
-    // プロジェクトから一覧に無いサイズが読み込まれた場合も、そのサイズのまま選べるようにする
-    const opt = document.createElement('option');
-    opt.value = 'custom';
-    opt.textContent = `${store.exportSettings.width}×${store.exportSettings.height} ${tr('(プロジェクトの設定)', '(project setting)')}`;
-    sizeSelect.appendChild(opt);
-  }
-  sizeSelect.value = currentSize?.id ?? 'custom';
-  sizeSelect.addEventListener('change', () => {
-    const preset = EXPORT_SIZE_PRESETS.find((s) => s.id === sizeSelect.value);
-    if (preset) store.setExportSettings({ width: preset.width, height: preset.height });
-  });
-  settingsGrid.appendChild(labeledRow(tr('画面の大きさ', 'Size'), sizeSelect));
+  // 画面の大きさは上のメニュー (ヘッダーのプルダウン) で選ぶ。ここには今の大きさだけを見せる
+  const sizeText = document.createElement('span');
+  sizeText.dataset.export = 'size-text';
+  const showSize = (): void => {
+    const { width, height } = store.exportSettings;
+    const p = EXPORT_SIZE_PRESETS.find((x) => x.width === width && x.height === height);
+    sizeText.textContent = `${p ? sizeOptionText(p) : `${width}×${height}`} ${tr('(上のメニューで選べます)', '(choose it in the top menu)')}`;
+  };
+  showSize();
+  settingsGrid.appendChild(labeledRow(tr('画面の大きさ', 'Size'), sizeText));
 
   const fpsSelect = document.createElement('select');
   fpsSelect.className = 'select';
@@ -274,8 +261,17 @@ export function renderExportPanel(): HTMLElement {
           : tr(' 動画を最後までメモリに置くので、重いときは「画質」や大きさを下げてください。', ' The video is kept in memory until the end; lower the quality or size if it is heavy.')
         : '');
   };
-  for (const c of [sizeSelect, fpsSelect, qualitySelect]) c.addEventListener('change', refreshSizeNote);
+  for (const c of [fpsSelect, qualitySelect]) c.addEventListener('change', refreshSizeNote);
   refreshSizeNote();
+  // 上のメニューで大きさが変わったら、ここの表示とファイルの大きさの目安も追従する (パネルが外れたら購読をやめる)
+  const unsubscribeSize = store.subscribe(() => {
+    if (!sizeText.isConnected) {
+      unsubscribeSize();
+      return;
+    }
+    showSize();
+    refreshSizeNote();
+  });
   el.appendChild(sizeNote);
 
   // --- 実行・進捗 --------------------------------------------------------
@@ -312,7 +308,7 @@ export function renderExportPanel(): HTMLElement {
   statusText.className = 'export-status';
   el.appendChild(statusText);
 
-  const settingControls: HTMLSelectElement[] = [sizeSelect, fpsSelect, qualitySelect];
+  const settingControls: HTMLSelectElement[] = [fpsSelect, qualitySelect];
 
   const render = (status: ExportStatus): void => {
     const running = status.kind === 'running';

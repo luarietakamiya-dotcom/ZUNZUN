@@ -1,6 +1,7 @@
 import type { PanelId } from './panels';
 import { PANELS } from './panels';
 import { createLivePreview } from './panels/live-preview';
+import { createSizeSelect } from './size-select';
 import { createTransport } from './transport';
 import { lang, onLangChange, setLang, t2, tr, type Lang, type Text2 } from '../core/i18n';
 import { setLayout } from './layout';
@@ -64,6 +65,13 @@ export function mountMobileShell(root: HTMLElement): () => void {
   three.textContent = '3';
   title.append('ZUNZUN', three);
   header.append(title, createTransport({ spaceHandledByPanel: () => mobileActive().panel === 'lyrics' }));
+  // 画面の大きさ: ヘッダーは 1 行で余裕が無いので、そのすぐ下に細い 1 行を固定して置く (どのタブでも見える)
+  const sizeBar = document.createElement('div');
+  sizeBar.className = 'm-sizebar';
+  const sizeLabel = document.createElement('span');
+  const sizeLabelText = (): string => tr('画面の大きさ', 'Screen size');
+  sizeLabel.textContent = sizeLabelText();
+  sizeBar.append(sizeLabel, createSizeSelect());
 
   const previewBox = document.createElement('div');
   previewBox.className = 'm-preview';
@@ -76,7 +84,7 @@ export function mountMobileShell(root: HTMLElement): () => void {
   nav.className = 'm-nav';
   nav.setAttribute('aria-label', 'menu');
 
-  shell.append(header, previewBox, sub, body, nav);
+  shell.append(header, sizeBar, previewBox, sub, body, nav);
   root.appendChild(shell);
 
   /** 「その他」の上に出す、言語・ライセンス・PC 表示 */
@@ -183,7 +191,10 @@ export function mountMobileShell(root: HTMLElement): () => void {
   };
 
   render();
-  const offLang = onLangChange(() => render());
+  const offLang = onLangChange(() => {
+    sizeLabel.textContent = sizeLabelText();
+    render();
+  });
   return () => {
     offLang();
     root.innerHTML = '';
