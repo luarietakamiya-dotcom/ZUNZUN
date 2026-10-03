@@ -19,6 +19,7 @@ import {
   usesOddMeterPack,
   type JizuraPlan,
   type JizuraStyleDef,
+  installAspectPatch,
 } from './jizura-adapter';
 
 // 明るさ: 白系 = 1、それ以外 = 0 の簡易版 (JIZURA の J.lum の代わり)
@@ -122,11 +123,14 @@ describe('nearestAspect', () => {
   it('書き出しサイズに最も近い JIZURA の比率を選ぶ', () => {
     expect(nearestAspect(1920, 1080)).toBe('16:9');
     expect(nearestAspect(1080, 1920)).toBe('9:16');
+    expect(nearestAspect(1080, 1620)).toBe('2:3');
+    expect(nearestAspect(1620, 1080)).toBe('3:2');
     expect(nearestAspect(1080, 1080)).toBe('1:1');
     expect(nearestAspect(1080, 1350)).toBe('4:5');
     expect(nearestAspect(2560, 1080)).toBe('21:9');
     expect(nearestAspect(1440, 1080)).toBe('4:3');
-    expect(nearestAspect(1920, 1200)).toBe('16:9');
+    expect(nearestAspect(1920, 1200)).toBe('3:2'); // 1.6 は 16:9 より 3:2 に近い
+    expect(nearestAspect(1920, 1100)).toBe('16:9');
     expect(nearestAspect(0, 0)).toBe('1:1');
   });
 });
@@ -241,3 +245,22 @@ describe('変拍子パック (R4) を使う条件と、JIZURA に渡すプロジ
   });
 });
 
+
+describe('installAspectPatch', () => {
+  it('J.designSize に 2:3 と 3:2 を足す。ほかの比率は元のまま、2 回呼んでも二重に包まない', () => {
+    const calls: string[] = [];
+    const J = {
+      designSize: (a: string): [number, number] => {
+        calls.push(a);
+        return a === '9:16' ? [1080, 1920] : [1920, 1080];
+      },
+    };
+    installAspectPatch(J as never);
+    installAspectPatch(J as never);
+    expect(J.designSize('2:3')).toEqual([1080, 1620]);
+    expect(J.designSize('3:2')).toEqual([1620, 1080]);
+    expect(calls).toEqual([]); // 足した比率は元の関数を呼ばない
+    expect(J.designSize('9:16')).toEqual([1080, 1920]);
+    expect(calls).toEqual(['9:16']); // 二重に包んでいれば 2 回呼ばれる
+  });
+});

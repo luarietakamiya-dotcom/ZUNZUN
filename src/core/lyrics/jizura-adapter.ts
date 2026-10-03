@@ -112,6 +112,7 @@ export function loadJizura(): Promise<JizuraApi> {
     const J = (globalThis as unknown as { J?: JizuraApi }).J;
     if (!J || typeof J.plan !== 'function') throw new Error(tr('歌詞の動きの仕組み (JIZURA) を読み込めませんでした', 'Could not load the lyric motion engine (JIZURA)'));
     installTimingPatch(J);
+    installAspectPatch(J);
     installGlyphIdPatch(J);
     registerOddMeterPack(J as unknown as PackApi);
     // オリジナルの歌詞モーション (演出パック: 静寂 など)。そのスタイルのときだけ候補に入る (packs/index.ts)
@@ -119,6 +120,19 @@ export function loadJizura(): Promise<JizuraApi> {
     return J;
   });
   return loading;
+}
+
+/**
+ * J.designSize に、JIZURA が持っていない比率 (ZUNZUN が書き出しに足した 2:3 と 3:2) を足す。一度だけ行う。
+ * 持っていない比率は一番近い比率 (3:4 / 4:3) の板に収めるしかなく、画面に余白ができた
+ * (2026-10-03 ユーザー「リリックモーションのとこも縦長にしないと」)。
+ */
+export function installAspectPatch(J: JizuraApi): void {
+  const api = J as unknown as { designSize: (aspect: string) => [number, number]; __zunzunAspectPatched?: boolean };
+  if (api.__zunzunAspectPatched || typeof api.designSize !== 'function') return;
+  api.__zunzunAspectPatched = true;
+  const orig = api.designSize.bind(api);
+  api.designSize = (aspect) => (aspect === '2:3' ? [1080, 1620] : aspect === '3:2' ? [1620, 1080] : orig(aspect));
 }
 
 /** J.computeTiming を包んで、ZUNZUN の lineEnds (手で決めた行の終了) を反映する。一度だけ行う。 */
@@ -196,7 +210,7 @@ export function resetLayerCanvas(J: JizuraApi, width: number, height: number): v
 
 // ------------------------------------------------------------------ 入力の変換 (純粋関数)
 
-/** JIZURA が持っている画面の比率 (J.designSize) */
+/** 歌詞の画面の比率 (J.designSize + installAspectPatch で足した 2:3 / 3:2) */
 export const JIZURA_ASPECTS: readonly (readonly [string, number])[] = [
   ['16:9', 16 / 9],
   ['9:16', 9 / 16],
@@ -205,6 +219,8 @@ export const JIZURA_ASPECTS: readonly (readonly [string, number])[] = [
   ['21:9', 21 / 9],
   ['4:3', 4 / 3],
   ['3:4', 3 / 4],
+  ['2:3', 2 / 3],
+  ['3:2', 3 / 2],
 ];
 
 /** 書き出しの幅・高さに最も近い JIZURA の比率 */
