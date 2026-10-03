@@ -54,8 +54,9 @@ export const manifest: VisualizerManifest = {
     {
       type: 'range',
       key: 'waves',
-      label: { ja: '拍で広がる波', en: 'Beat waves' },
-      help: { ja: '拍ごとに外へ広がる輪の量 (0 で出さない)', en: 'Amount of rings that spread outward on each beat (0 = hidden)' },
+      // キーは 'waves' のまま (以前の「拍で広がる波」を保存したプロジェクトの値を、そのまま使うため)
+      label: { ja: '拍で飛ぶ粒', en: 'Beat particles' },
+      help: { ja: '拍ごとに、縁から放射状に飛び出す粒の量 (0 で出さない。画面いっぱいには広がらず、絵が隠れません)', en: 'Amount of particles shooting outward from the rim on each beat (0 = hidden). They stay near the speaker, so the picture is not covered' },
       min: 0,
       max: 1,
       step: 0.01,

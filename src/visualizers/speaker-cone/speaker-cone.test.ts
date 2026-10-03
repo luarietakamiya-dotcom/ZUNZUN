@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultCommonParams, type AudioFrame, type CommonParams } from '../../core/types';
 import { manifest } from './index';
 import { SpeakerConePreset } from './preset';
-import { CONE_RINGS, EQ_BARS, MAX_WAVES } from './shaders';
+import { CONE_RINGS, EQ_BARS, MAX_BURSTS } from './shaders';
 
 /**
  * WebGL を使わずに (three.js のシーングラフだけで) Speaker Cone を動かし、反応設計どおりに数値が動くかを確かめる。
@@ -43,7 +43,7 @@ describe('SpeakerConePreset', () => {
     expect(s.cap).toBeLessThan(0.02);
     expect(Math.max(...s.ringEx)).toBeLessThan(0.02);
     expect(Math.max(...s.eq)).toBeLessThan(0.02);
-    expect(s.waveCount).toBe(0);
+    expect(s.burstCount).toBe(0);
     p.dispose();
   });
 
@@ -90,30 +90,55 @@ describe('SpeakerConePreset', () => {
     b.dispose();
   });
 
-  it('拍が変わると波が 1 本出て、外へ広がり、薄れて消える。同じ拍の間は増えない。同時に 5 本まで', () => {
+  it('拍が変わると粒が飛び出し (1 回分)、遠くへ飛んでから薄れて消える。同じ拍の間は増えない。同時に 4 回分まで', () => {
     const p = makePreset();
     p.update(frame(0, { bass: 0.8, beat: 1, beatIndex: 0 }), params());
-    expect(p.inspect().waveCount).toBe(1);
-    const r0 = p.inspect().waveMaxRadius;
+    expect(p.inspect().burstCount).toBe(1);
+    const r0 = p.inspect().burstMaxRadius;
     p.update(frame(1 / 60, { bass: 0.8, beat: 0.9, beatIndex: 0 }), params());
-    expect(p.inspect().waveCount).toBe(1);
-    expect(p.inspect().waveMaxRadius).toBeGreaterThan(r0);
-    // 拍をたくさん入れても 5 本まで
+    expect(p.inspect().burstCount).toBe(1);
+    expect(p.inspect().burstMaxRadius).toBeGreaterThan(r0);
+    // 拍をたくさん入れても 4 回分まで
     for (let i = 1; i <= 12; i++) p.update(frame(i / 60, { bass: 0.8, beat: 1, beatIndex: i }), params());
-    expect(p.inspect().waveCount).toBeLessThanOrEqual(MAX_WAVES);
+    expect(p.inspect().burstCount).toBeLessThanOrEqual(MAX_BURSTS);
     // 拍が止めば、やがて全部消える
     run(p, 60 * 8, () => ({}));
-    expect(p.inspect().waveCount).toBe(0);
+    expect(p.inspect().burstCount).toBe(0);
     p.dispose();
   });
 
-  it('拍の波の量 0 なら波は出ない。beat が小さい (拍でない) ときも出ない', () => {
+  it('粒が飛ぶのは、スピーカーの半径の約 3 倍まで (画面いっぱいには広がらない = 背景の絵が隠れない)。最初に速く、遠くでゆっくり', () => {
+    const p = makePreset();
+    p.update(frame(0, { bass: 0.8, beat: 1, beatIndex: 0 }), params({ motion: 1 }));
+    const radii: number[] = [];
+    for (let i = 1; i <= 140; i++) {
+      p.update(frame(i / 60, { bass: 0, beat: 0, beatIndex: 0 }), params({ motion: 1 }));
+      if (p.inspect().burstCount > 0) radii.push(p.inspect().burstMaxRadius);
+    }
+    expect(radii.length).toBeGreaterThan(40);
+    for (const r of radii) expect(r).toBeLessThanOrEqual(3.08 + 1e-9);
+    for (let i = 1; i < radii.length; i++) expect(radii[i]!).toBeGreaterThanOrEqual(radii[i - 1]!);
+    const early = radii[9]! - radii[0]!;
+    const late = radii[radii.length - 1]! - radii[radii.length - 11]!;
+    expect(early).toBeGreaterThan(late * 2);
+    // Motion が小さいと、飛ぶのがゆっくり
+    const slow = makePreset();
+    slow.update(frame(0, { bass: 0.8, beat: 1, beatIndex: 0 }), params({ motion: 0 }));
+    run(slow, 30, () => ({}), params({ motion: 0 }));
+    const fast = makePreset();
+    fast.update(frame(0, { bass: 0.8, beat: 1, beatIndex: 0 }), params({ motion: 1 }));
+    run(fast, 30, () => ({}), params({ motion: 1 }));
+    expect(fast.inspect().burstMaxRadius).toBeGreaterThan(slow.inspect().burstMaxRadius);
+    for (const q of [p, slow, fast]) q.dispose();
+  });
+
+  it('拍で飛ぶ粒の量 0 なら出ない。beat が小さい (拍でない) ときも出ない', () => {
     const p = makePreset();
     const off = params({ waves: 0 });
     p.update(frame(0, { bass: 1, beat: 1, beatIndex: 0 }), off);
-    expect(p.inspect().waveCount).toBe(0);
+    expect(p.inspect().burstCount).toBe(0);
     p.update(frame(1 / 60, { bass: 1, beat: 0.1, beatIndex: 1 }), params());
-    expect(p.inspect().waveCount).toBe(0);
+    expect(p.inspect().burstCount).toBe(0);
     p.dispose();
   });
 
@@ -180,7 +205,7 @@ describe('SpeakerConePreset', () => {
     expect(() => p.update(bad, params({ intensity: Number.NaN, motion: Number.NaN, size: Number.NaN, offsetX: Number.NaN, equalizer: Number.NaN }))).not.toThrow();
     run(p, 10, () => ({ bass: 1, beat: 1, beatIndex: 3 }), params({ intensity: Number.NaN }));
     const s = p.inspect();
-    for (const v of [s.cap, s.radius, s.center.x, s.center.y, s.waveMaxRadius, ...s.ringEx, ...s.eq]) expect(Number.isFinite(v)).toBe(true);
+    for (const v of [s.cap, s.radius, s.center.x, s.center.y, s.burstMaxRadius, ...s.ringEx, ...s.eq]) expect(Number.isFinite(v)).toBe(true);
     p.dispose();
   });
 

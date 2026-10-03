@@ -3,7 +3,9 @@ import * as THREE from 'three';
 /** コーンのリングの数 (中心から外へ) */
 export const CONE_RINGS = 9;
 /** 拍で広がる波の同時の数の上限 */
-export const MAX_WAVES = 5;
+export const MAX_BURSTS = 4;
+/** 1 回の拍で、縁から放射状に飛び出す粒の数 */
+export const BURST_SPOKES = 48;
 /** まわりのイコライザーの棒の数 (左右対称に並べるので、見える本数は 2 倍) */
 export const EQ_BARS = 40;
 
@@ -14,7 +16,9 @@ export const EQ_BARS = 40;
  * - ダストキャップ: 中心のドームのにじみ + 縁の輪。低音 (cap) でふくらんで明るくなる
  * - コーンのリング: 9 本。低音の動きが中心から外へ、時間差 (ringEx) をつけて伝わる (コーンが波打つ)
  * - サラウンド (縁): 太いやわらかい輪と細い輪、外枠の輪
- * - 拍の波: 外へ広がって薄れる輪 (waveR / waveA)
+ * - 拍で飛ぶ粒 (2026-10-03 ユーザー「波動で画面が見えなくなるから、円状に飛ぶ粒子がいいかな」で、画面いっぱいに広がる輪から変えた):
+ *   縁から放射状に 48 粒が飛び出し、彗星のような尾を引いて消える。粒ごとに飛ぶ距離が違う (形から決まる hash。乱数は使わない)。
+ *   飛ぶ範囲は半径の 2.9 倍までで、画面いっぱいには広がらない (絵が見えたまま)。あわせて、縁に短く消える細い輪が出る
  * - イコライザー: 外枠のまわりに放射状の棒 (左右対称。上が低音、下が高音。eq = 棒ごとの 0..1)
  */
 export function createConeMaterial(): THREE.ShaderMaterial {
@@ -28,8 +32,11 @@ export function createConeMaterial(): THREE.ShaderMaterial {
       radius: { value: 0.5 },
       cap: { value: 0 },
       ringEx: { value: new Float32Array(CONE_RINGS) },
-      waveR: { value: new Float32Array(MAX_WAVES) },
-      waveA: { value: new Float32Array(MAX_WAVES) },
+      burstAge: { value: new Float32Array(MAX_BURSTS) },
+      burstAmp: { value: new Float32Array(MAX_BURSTS) },
+      burstPhase: { value: new Float32Array(MAX_BURSTS) },
+      burstSalt: { value: new Float32Array(MAX_BURSTS) },
+      burstRate: { value: 1.8 },
       eq: { value: new Float32Array(EQ_BARS) },
       eqAmount: { value: 0.8 },
       fill: { value: 1 },
@@ -47,15 +54,19 @@ export function createConeMaterial(): THREE.ShaderMaterial {
     `,
     fragmentShader: /* glsl */ `
       #define RINGS ${CONE_RINGS}
-      #define WAVES ${MAX_WAVES}
+      #define BURSTS ${MAX_BURSTS}
+      #define SPOKES ${BURST_SPOKES}
       #define BARS ${EQ_BARS}
       uniform float aspect;
       uniform vec2 center;
       uniform float radius;
       uniform float cap;
       uniform float ringEx[RINGS];
-      uniform float waveR[WAVES];
-      uniform float waveA[WAVES];
+      uniform float burstAge[BURSTS];
+      uniform float burstAmp[BURSTS];
+      uniform float burstPhase[BURSTS];
+      uniform float burstSalt[BURSTS];
+      uniform float burstRate;
       uniform float eq[BARS];
       uniform float eqAmount;
       uniform float fill;
@@ -68,6 +79,10 @@ export function createConeMaterial(): THREE.ShaderMaterial {
       float line(float d, float w) {
         float x = d / w;
         return exp(-x * x);
+      }
+      /** 同じ入力なら同じ値になる、ばらつき用の hash (乱数ではない) */
+      float hash1(float n) {
+        return fract(sin(n * 12.9898) * 43758.5453);
       }
 
       void main() {
@@ -96,10 +111,29 @@ export function createConeMaterial(): THREE.ShaderMaterial {
         float d = (u - 0.55) / 0.38;
         col += colA * exp(-d * d) * 0.05 * (0.4 + cap) * fill;
 
-        // 拍で広がる波
-        for (int i = 0; i < WAVES; i++) {
-          float a = waveA[i];
-          if (a > 0.001) col += mix(colA, colB, 0.5) * line(u - waveR[i], 0.018 + 0.02 * waveR[i]) * a;
+        // 拍で飛ぶ粒: 縁から放射状に 48 粒。粒ごとに飛ぶ距離が違い、彗星のような尾を引く
+        float angAll = atan(p.x, p.y);
+        float spoke = 6.2831853 / float(SPOKES);
+        for (int i = 0; i < BURSTS; i++) {
+          float a = burstAmp[i];
+          if (a > 0.001) {
+            float age = burstAge[i];
+            float rel = angAll - burstPhase[i];
+            float jf = floor(rel / spoke + 0.5);
+            float dAng = rel - jf * spoke;
+            float h = hash1(mod(jf, float(SPOKES)) + burstSalt[i]);
+            float reach = 0.7 + 1.3 * h; // 飛ぶ距離 (半径の倍数。いちばん遠い粒でも半径の 2.9 倍まで)
+            float rj = 1.08 + reach * (1.0 - exp(-age * burstRate));
+            float arc = dAng * u; // 粒の通り道からの横のずれ
+            float dr = u - rj; // 負 = 粒より内側 (尾の側)
+            float size = 0.02 + 0.018 * h;
+            float head = exp(-(arc / size) * (arc / size) - (dr / (size * 1.5)) * (dr / (size * 1.5)));
+            float tail = dr < 0.0 ? exp(dr / 0.2) * exp(-(arc / (size * 0.7)) * (arc / (size * 0.7))) * 0.5 * smoothstep(-0.8, -0.02, dr) : 0.0;
+            col += mix(colA, colB, h) * (head * 1.1 + tail) * a;
+            // 縁に短く消える細い輪 (拍の合図)
+            float ringR = 1.06 + 0.4 * (1.0 - exp(-age * 5.0));
+            col += colA * line(u - ringR, 0.02) * a * 0.45 * exp(-age * 3.5);
+          }
         }
 
         // イコライザー: 外枠のまわりの放射状の棒 (左右対称、上が低音)

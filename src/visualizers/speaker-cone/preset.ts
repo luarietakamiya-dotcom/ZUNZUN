@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { shapeAudio, shapeBands } from '../../core/visualizer/response';
 import type { AudioFrame, CommonParams, VisualizerInitContext, VisualizerPreset } from '../../core/types';
-import { CONE_RINGS, createConeMaterial, EQ_BARS, MAX_WAVES } from './shaders';
+import { CONE_RINGS, createConeMaterial, EQ_BARS, MAX_BURSTS } from './shaders';
 
 /**
  * Speaker Cone — 背景の絵に重ねて使う、スピーカーのコーン風のエフェクト。
@@ -11,7 +11,9 @@ import { CONE_RINGS, createConeMaterial, EQ_BARS, MAX_WAVES } from './shaders';
  * 反応の仕組み (docs/ARCHITECTURE.md「プリセット初期3種の反応設計」にならう):
  * - bass: コーンが前後に動く。中心のドームがふくらんで明るくなり、その動きが 9 本のリングを中心から外へ、時間差をつけて伝わる
  *   (コーンが波打つ)。立ち上がりは速く、戻りはゆっくり (光過敏への配慮)。
- * - beat: 拍ごとに圧力波のリングが外へ広がって薄れる (同時に 5 本まで)。強さは低音と拍で決まる。
+ * - beat: 拍ごとに、縁から放射状に 48 粒が飛び出し、彗星のような尾を引いて薄れる (同時に 4 回分まで)。向きは拍ごとに回る。
+ *   強さは低音と拍で決まる。飛ぶ範囲は半径の 3 倍まで (画面いっぱいには広がらない = 背景の絵が隠れない。
+ *   2026-10-03 ユーザー「波動で画面見えなくなる」で、広がる輪から変えた)。
  * - 帯域 (bands): 外枠のまわりの 40 本の棒 (左右対称、上が低音・下が高音) が、帯域ごとの強さで伸びる (イコライザー)。
  * - intensity: 全体の明るさ。
  * 設定: 大きさ・位置 (左右 / 上下)・まわりの棒 (イコライザー) の量・拍の波の量。
@@ -25,8 +27,12 @@ const HISTORY_STEP = 1 / 60;
 const RING_DELAY_STEPS = 2;
 const HISTORY_LENGTH = CONE_RINGS * RING_DELAY_STEPS + 2;
 /** 波の広がる速さ (スピーカーの半径 / 秒) と、薄れる速さ */
-const WAVE_SPEED = 1.1;
-const WAVE_FADE = 1.3;
+/** 粒の飛び方 (最初に速く、遠くでゆっくり): 半径 = 1.08 + 飛ぶ距離 × (1 - exp(-経過秒 × BURST_RATE))。薄れる速さと、消える時間 */
+const BURST_RATE = 1.8;
+const BURST_FADE = 1.1;
+const BURST_LIFE = 2.4;
+/** 粒が飛ぶいちばん遠い距離 (スピーカーの半径の倍数。シェーダーの 1.08 + 0.7 + 1.3 = 3.08 より内側に収まる) */
+const BURST_MAX_RADIUS = 3.08;
 
 interface Palette {
   a: THREE.Color;
@@ -49,8 +55,9 @@ export interface SpeakerConeInspection {
   /** 各リングの動き (中心 → 外。時間差がある) */
   ringEx: number[];
   /** いま出ている波の数と、いちばん外の波の半径 (スピーカーの半径 = 1) */
-  waveCount: number;
-  waveMaxRadius: number;
+  burstCount: number;
+  /** いちばん遠くへ飛んでいる粒の半径の上限 (スピーカーの半径 = 1) */
+  burstMaxRadius: number;
   /** イコライザーの棒の強さ (0..1) */
   eq: number[];
   /** スピーカーの半径と中心 (画面の高さの半分 = 1) */
@@ -80,9 +87,13 @@ export class SpeakerConePreset implements VisualizerPreset {
   /** 低音の動きの履歴 (新しい順に前へ詰める刻みごとの値)。リングの時間差に使う */
   private readonly history = new Float32Array(HISTORY_LENGTH);
   private historyClock = 0;
-  private readonly waveR = new Float32Array(MAX_WAVES);
-  private readonly waveA = new Float32Array(MAX_WAVES);
-  private nextWave = 0;
+  private readonly burstAge = new Float32Array(MAX_BURSTS);
+  private readonly burstAmp = new Float32Array(MAX_BURSTS);
+  private readonly burstPhase = new Float32Array(MAX_BURSTS);
+  private readonly burstSalt = new Float32Array(MAX_BURSTS);
+  private nextBurst = 0;
+  /** 粒の飛ぶ速さに使う Motion (update で受け取る) */
+  private motion = 0.6;
   private lastBeatIndex = -1;
   private readonly eq = new Float32Array(EQ_BARS);
   private readonly shapedBands = new Float32Array(64);
@@ -105,6 +116,7 @@ export class SpeakerConePreset implements VisualizerPreset {
     const a = { bass: fin(shaped.bass, 0), beat: fin(shaped.beat, 0) };
     shapeBands(frame.bands, params, this.shapedBands);
     const motion = unit(params.motion, 0.6);
+    this.motion = motion;
     const intensity = unit(params.intensity, 0.8);
 
     // コーンの動き (低音。立ち上がりは速く、戻りはゆっくり)
@@ -118,23 +130,25 @@ export class SpeakerConePreset implements VisualizerPreset {
     }
     this.history[0] = this.cap;
 
-    // 拍の波: 拍が変わったら 1 本出す。広がって薄れる
-    const wavesAmount = unit(params.waves, 0.7);
+    // 拍で飛ぶ粒: 拍が変わったら 1 回分 (48 粒) を出す。拍ごとに粒の向きを少しずつ回す (黄金角。乱数は使わない)
+    const burstAmount = unit(params.waves, 0.7);
     const beatIndex = Number.isFinite(frame.beatIndex) ? frame.beatIndex : -1;
     if (beatIndex !== this.lastBeatIndex) {
       this.lastBeatIndex = beatIndex;
-      if (beatIndex >= 0 && a.beat > 0.25 && wavesAmount > 0) {
-        this.waveR[this.nextWave] = 1.14;
-        this.waveA[this.nextWave] = Math.min(0.9, (0.3 + 0.5 * a.bass + 0.3 * a.beat) * wavesAmount * (0.6 + 0.8 * intensity));
-        this.nextWave = (this.nextWave + 1) % MAX_WAVES;
+      if (beatIndex >= 0 && a.beat > 0.25 && burstAmount > 0) {
+        const i = this.nextBurst;
+        this.nextBurst = (this.nextBurst + 1) % MAX_BURSTS;
+        this.burstAge[i] = 0;
+        this.burstPhase[i] = (beatIndex * 2.399963) % (Math.PI * 2);
+        this.burstSalt[i] = (beatIndex * 7.31) % 97;
+        this.burstAmp[i] = Math.min(0.9, (0.35 + 0.5 * a.bass + 0.3 * a.beat) * burstAmount * (0.6 + 0.8 * intensity));
       }
     }
-    const speed = WAVE_SPEED * (0.6 + 0.8 * motion);
-    for (let i = 0; i < MAX_WAVES; i++) {
-      if (this.waveA[i]! <= 0) continue;
-      this.waveR[i] = this.waveR[i]! + speed * dt;
-      this.waveA[i] = this.waveA[i]! * Math.exp(-WAVE_FADE * dt);
-      if (this.waveA[i]! < 0.02) this.waveA[i] = 0;
+    for (let i = 0; i < MAX_BURSTS; i++) {
+      if (this.burstAmp[i]! <= 0) continue;
+      this.burstAge[i] = this.burstAge[i]! + dt;
+      this.burstAmp[i] = this.burstAmp[i]! * Math.exp(-BURST_FADE * dt);
+      if (this.burstAmp[i]! < 0.02 || this.burstAge[i]! > BURST_LIFE) this.burstAmp[i] = 0;
     }
 
     // イコライザーの棒 (帯域ごと。立ち上がりは速く、戻りはゆっくり)
@@ -158,19 +172,21 @@ export class SpeakerConePreset implements VisualizerPreset {
   inspect(): SpeakerConeInspection {
     const u = this.material.uniforms;
     const center = u.center!.value as THREE.Vector2;
-    let waveCount = 0;
-    let waveMax = 0;
-    for (let i = 0; i < MAX_WAVES; i++) {
-      if (this.waveA[i]! > 0) {
-        waveCount++;
-        waveMax = Math.max(waveMax, this.waveR[i]!);
+    let burstCount = 0;
+    let burstMax = 0;
+    const rate = BURST_RATE * (0.7 + 0.6 * this.motion);
+    for (let i = 0; i < MAX_BURSTS; i++) {
+      if (this.burstAmp[i]! > 0) {
+        burstCount++;
+        // いちばん遠くへ飛ぶ粒 (飛ぶ距離 2.0) の、いまの半径
+        burstMax = Math.max(burstMax, 1.08 + 2.0 * (1 - Math.exp(-this.burstAge[i]! * rate)));
       }
     }
     return {
       cap: this.cap,
       ringEx: Array.from(u.ringEx!.value as Float32Array),
-      waveCount,
-      waveMaxRadius: waveMax,
+      burstCount,
+      burstMaxRadius: Math.min(BURST_MAX_RADIUS, burstMax),
       eq: Array.from(this.eq),
       radius: u.radius!.value as number,
       center: { x: center.x, y: center.y },
@@ -201,8 +217,11 @@ export class SpeakerConePreset implements VisualizerPreset {
     u.cap!.value = this.cap;
     const ringEx = u.ringEx!.value as Float32Array;
     for (let k = 0; k < CONE_RINGS; k++) ringEx[k] = this.history[Math.min(HISTORY_LENGTH - 1, k * RING_DELAY_STEPS)]!;
-    (u.waveR!.value as Float32Array).set(this.waveR);
-    (u.waveA!.value as Float32Array).set(this.waveA);
+    (u.burstAge!.value as Float32Array).set(this.burstAge);
+    (u.burstAmp!.value as Float32Array).set(this.burstAmp);
+    (u.burstPhase!.value as Float32Array).set(this.burstPhase);
+    (u.burstSalt!.value as Float32Array).set(this.burstSalt);
+    u.burstRate!.value = BURST_RATE * (0.7 + 0.6 * this.motion);
     (u.eq!.value as Float32Array).set(this.eq);
     u.eqAmount!.value = unit(params.equalizer, 0.8);
     // 全体の明るさ (静かなときも、コーンの形が見える程度に残す)
