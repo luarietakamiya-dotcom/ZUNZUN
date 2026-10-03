@@ -10,6 +10,7 @@ import { ripplesModule } from './ripples';
 import { solarGateModule } from './solar-gate';
 import { speakerConeModule } from './speaker-cone';
 import { speakerRackModule } from './speaker-rack';
+import { speakerTwinModule } from './speaker-twin';
 
 /**
  * プリセットの登録一覧。新しいプリセットを追加するときは、そのフォルダを作って
@@ -22,6 +23,7 @@ visualizerRegistry.register(milkyWayModule);
 visualizerRegistry.register(liveStageModule);
 visualizerRegistry.register(speakerRackModule);
 visualizerRegistry.register(speakerConeModule);
+visualizerRegistry.register(speakerTwinModule);
 visualizerRegistry.register(ripplesModule);
 visualizerRegistry.register(photoMotionModule);
 visualizerRegistry.register(cityScrollModule);
