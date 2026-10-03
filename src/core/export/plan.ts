@@ -29,6 +29,22 @@ export function totalFrameCount(durationSec: number, fps: number): number {
   return Math.max(1, Math.ceil(durationSec * fps - 1e-6));
 }
 
+/**
+ * 書き出した動画のファイルの大きさの目安 (MB)。書き出しは、動画のデータを最後までブラウザのメモリに置く (BufferTarget) ので、
+ * 長い曲・高画質・スマホのときの注意書きに使う。**目安**: H.264 の高画質で 1080p・30fps が約 10Mbps、画素数と fps に比例、
+ * 画質で 0.5 倍 (軽め) / 1 倍 / 1.8 倍 (最高)。実際は絵の細かさで大きく変わるので、少し大きめに見積もる (音は約 0.13MB/秒を足す)。
+ */
+export function estimateExportMB(width: number, height: number, fps: number, durationSec: number, quality: ExportSettings['quality']): number {
+  if (!(width > 0) || !(height > 0) || !(fps > 0) || !(durationSec > 0)) return 0;
+  const q = quality === 'draft' ? 0.5 : quality === 'max' ? 1.8 : 1;
+  const mbps = 10 * ((width * height) / (1920 * 1080)) * (fps / 30) * q;
+  return (mbps / 8) * durationSec + 0.13 * durationSec;
+}
+
+/** 注意を出す大きさ (MB)。スマホのブラウザは、これを超えるとメモリ不足で止まりやすい (目安) */
+export const EXPORT_WARN_MB_MOBILE = 300;
+export const EXPORT_WARN_MB = 1500;
+
 /** i 番目のフレームの時刻 (秒)。プレビューと同じ AudioTimeline をこの時刻で引く。 */
 export function frameTimestamp(index: number, fps: number): number {
   return index / fps;

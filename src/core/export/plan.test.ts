@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   EXPORT_SIZE_PRESETS,
+  EXPORT_WARN_MB,
+  EXPORT_WARN_MB_MOBILE,
+  estimateExportMB,
   estimateRemainingMs,
   evenDimension,
   frameTimestamp,
@@ -91,3 +94,32 @@ describe('estimateRemainingMs', () => {
     expect(estimateRemainingMs(1000, 0, 400)).toBeNull();
   });
 });
+
+describe('estimateExportMB (書き出したファイルの大きさの目安)', () => {
+  it('1080p・30fps・高画質で 1 分は 90MB 前後。長さ・画素数・fps に比例し、画質で変わる', () => {
+    const base = estimateExportMB(1920, 1080, 30, 60, 'high');
+    expect(base).toBeGreaterThan(70);
+    expect(base).toBeLessThan(110);
+    expect(estimateExportMB(1920, 1080, 30, 120, 'high')).toBeCloseTo(base * 2, 5);
+    expect(estimateExportMB(1920, 1080, 60, 60, 'high')).toBeGreaterThan(base * 1.8);
+    expect(estimateExportMB(1280, 720, 30, 60, 'high')).toBeLessThan(base * 0.5);
+    expect(estimateExportMB(1920, 1080, 30, 60, 'draft')).toBeLessThan(base);
+    expect(estimateExportMB(1920, 1080, 30, 60, 'max')).toBeGreaterThan(base);
+  });
+
+  it('スマホの注意 (300MB) は、1080p・30fps・高画質なら約 3 分半の曲から。PC の注意 (1.5GB) は約 1 時間から', () => {
+    const perSec = estimateExportMB(1920, 1080, 30, 1, 'high');
+    expect(EXPORT_WARN_MB_MOBILE / perSec).toBeGreaterThan(180);
+    expect(EXPORT_WARN_MB_MOBILE / perSec).toBeLessThan(270);
+    expect(EXPORT_WARN_MB / perSec).toBeGreaterThan(1000);
+    // 1280×720・30fps・軽めなら、スマホでも 10 分の曲まで注意が出ない
+    expect(estimateExportMB(1280, 720, 30, 600, 'draft')).toBeLessThan(EXPORT_WARN_MB_MOBILE);
+  });
+
+  it('壊れた値は 0 (NaN にならない)', () => {
+    expect(estimateExportMB(Number.NaN, 1080, 30, 60, 'high')).toBe(0);
+    expect(estimateExportMB(1920, 1080, 0, 60, 'high')).toBe(0);
+    expect(estimateExportMB(1920, 1080, 30, -1, 'high')).toBe(0);
+  });
+});
+

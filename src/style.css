@@ -161,6 +161,9 @@ body {
 }
 /* 隠した欄は出さない (display: flex が hidden に勝つため。スライドショーの「重なる長さ」「画像の動き」の欄) */
 .param-row[hidden] { display: none; }
+.export-size-note { margin: 4px 0 8px; }
+.export-size-note[hidden] { display: none; }
+.export-size-warn { color: #f0b35a; border-left: 3px solid #f0b35a; padding-left: 8px; }
 
 .param-label {
   font-size: 12px;

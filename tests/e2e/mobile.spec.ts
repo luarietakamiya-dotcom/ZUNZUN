@@ -215,3 +215,51 @@ test('PC の歌詞のタップ: マウスで 1 回押すと 1 行だけ記録さ
   await page.waitForTimeout(300);
   expect(await lines()).toBe(before + 1);
 });
+
+test('スマホ表示のプレビューは 1.5 倍までの解像度で描く (画面の密度が高いスマホで 4 倍の画素を描かない)。PC は今までどおり', async ({ browser }) => {
+  const canvasWidth = async (viewport: { width: number; height: number }, url: string): Promise<{ w: number; css: number }> => {
+    const ctx = await browser.newContext({ viewport, deviceScaleFactor: 3, hasTouch: true });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => localStorage.setItem('zunzun.lang', 'ja'));
+    await page.goto(url);
+    // PC 表示は、プレビューを持つ「ビジュアライザー」タブを開く (スマホ表示は音楽メニューの上に出ている)
+    if (viewport.width >= 760) await page.locator('button[data-panel="visualizer"]').click();
+    await page.waitForTimeout(1500);
+    const r = await page.evaluate(() => {
+      const c = document.querySelector('canvas.visualizer-canvas') as HTMLCanvasElement;
+      return { w: c.width, css: Math.round(c.getBoundingClientRect().width) };
+    });
+    await ctx.close();
+    return r;
+  };
+  // スマホ表示: 画面の密度が 3 倍でも、描く幅は見た目の幅 (CSS px) の 1.5 倍まで (2 倍より小さい)
+  const mobile = await canvasWidth(PHONE, '/?mobile');
+  expect(mobile.w).toBeGreaterThan(mobile.css * 1.4);
+  expect(mobile.w).toBeLessThanOrEqual(mobile.css * 1.5 + 4);
+  // PC 表示: 密度 3 倍なら min(2, 3) = 2 倍で描く
+  const pc = await canvasWidth({ width: 1280, height: 800 }, '/?pc');
+  expect(pc.w).toBeGreaterThan(pc.css * 1.8);
+});
+
+test('書き出し: ファイルの大きさの目安が出て、スマホで大きいときは注意が出る。PC で小さいときは注意が出ない', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('zunzun.lang', 'ja'));
+  await page.setViewportSize(PHONE);
+  await page.goto('/?mobile');
+  await page.locator('section.panel input[type="file"]').first().setInputFiles({ name: 'song.wav', mimeType: 'audio/wav', buffer: testWav() });
+  await expect.poll(() => page.evaluate(async () => (await import('/src/core/store.ts')).store.audio.isLoaded)).toBe(true);
+  await page.locator('.m-nav-button[data-menu="export"]').click();
+  const note = page.locator('[data-export="size-note"]');
+  await expect(note).toContainText('約');
+  // 2 秒の曲なので小さい: 注意は出ない
+  await expect(note).not.toHaveClass(/export-size-warn/);
+  // 曲を 10 分に見立てる (長さだけ差し替えて、書き出しの設定を変えて見直す)
+  await page.evaluate(async () => {
+    const { store } = await import('/src/core/store.ts');
+    Object.defineProperty(store.audio, 'duration', { get: () => 600, configurable: true });
+    store.setExportSettings({ width: 1920, height: 1080, fps: 60, quality: 'max' });
+  });
+  await page.locator('select').nth(1).selectOption('30');
+  await page.locator('select').nth(1).selectOption('60');
+  await expect(note).toHaveClass(/export-size-warn/);
+  await expect(note).toContainText('スマホ');
+});

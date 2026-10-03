@@ -5,6 +5,7 @@ import type { AudioFrame, BackgroundSettings, CommonParams, OverlayLayer } from 
 import { VisualizerHost } from '../../core/visualizer/host';
 import { resolvePresetParams } from '../../core/visualizer/preset-params';
 import { visualizerRegistry } from '../../visualizers';
+import { layoutMode, MOBILE_PREVIEW_PIXEL_RATIO } from '../layout';
 import { previewMotionNow } from './motion-apply';
 
 /**
@@ -60,7 +61,10 @@ export function createLivePreview(opts: { onFrame?: () => void } = {}): LivePrev
   canvas.className = 'visualizer-canvas';
   wrap.appendChild(canvas);
   // 歌詞モーションはプレビューでは軽く描く (書き出しでは全部描く)
-  const host = new VisualizerHost(canvas, { fastLyrics: true });
+  // スマホ表示のプレビューは小さいので、描く解像度は 1.5 倍までにする (スマホは画面の密度が 2〜3 倍で、min(2, 密度) だと
+  // 小さい画面にしては 4 倍の画素を毎フレーム描くことになり、重く・電池も使う。1 倍だと細い線 (Solar Gate の輪など) が
+  // 階段状に見えたので 1.5 倍。画素は 2 倍の約 56%。2026-10-03 スマホ表示 M4)。書き出しは別の Host で影響しない
+  const host = new VisualizerHost(canvas, { fastLyrics: true, ...(layoutMode() === 'mobile' ? { pixelRatio: Math.min(MOBILE_PREVIEW_PIXEL_RATIO, window.devicePixelRatio || 1) } : {}) });
 
   // ビジュアライザーの種類 (store の presetId に合わせる)
   let presetId = '';

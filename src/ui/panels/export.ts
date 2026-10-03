@@ -1,6 +1,9 @@
 import {
   EXPORT_FPS_OPTIONS,
   EXPORT_SIZE_PRESETS,
+  EXPORT_WARN_MB,
+  EXPORT_WARN_MB_MOBILE,
+  estimateExportMB,
   estimateRemainingMs,
   exportController,
   renderMp4,
@@ -13,6 +16,7 @@ import { resolvePresetParams } from '../../core/visualizer/preset-params';
 import { t2, tr, type Text2 } from '../../core/i18n';
 import type { CommonParams, ExportSettings, OverlayLayer } from '../../core/types';
 import { visualizerRegistry } from '../../visualizers';
+import { layoutMode } from '../layout';
 
 const QUALITY_OPTIONS: { value: ExportSettings['quality']; label: Text2 }[] = [
   { value: 'draft', label: { ja: '下書き (軽い・確認用)', en: 'Draft (small, for checking)' } },
@@ -241,6 +245,37 @@ export function renderExportPanel(): HTMLElement {
   formatInfo.className = 'select';
   formatInfo.textContent = 'MP4 (H.264 + AAC)';
   settingsGrid.appendChild(labeledRow(tr('ファイルの形式 (WebM・連番の画像は今後対応)', 'Format (WebM / image sequence coming later)'), formatInfo));
+
+  // ファイルの大きさの目安と、大きいときの注意 (書き出しは動画を最後までブラウザのメモリに置くので、長い曲・高画質・スマホでは止まりやすい)
+  const sizeNote = document.createElement('div');
+  sizeNote.className = 'param-help export-size-note';
+  sizeNote.dataset.export = 'size-note';
+  const refreshSizeNote = (): void => {
+    const s = store.exportSettings;
+    const dur = store.audio.isLoaded ? store.audio.duration : 0;
+    if (dur <= 0) {
+      sizeNote.textContent = '';
+      sizeNote.hidden = true;
+      return;
+    }
+    const mb = estimateExportMB(s.width, s.height, s.fps, dur, s.quality);
+    const mobile = layoutMode() === 'mobile';
+    const limit = mobile ? EXPORT_WARN_MB_MOBILE : EXPORT_WARN_MB;
+    const size = mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${Math.max(1, Math.round(mb))} MB`;
+    const warn = mb > limit;
+    sizeNote.hidden = false;
+    sizeNote.classList.toggle('export-size-warn', warn);
+    sizeNote.textContent =
+      tr(`書き出したファイルは約 ${size} になる見込みです (目安)。`, `The exported file will be about ${size} (rough estimate).`) +
+      (warn
+        ? mobile
+          ? tr(' スマホでは、動画を最後まで本体のメモリに置くので、止まることがあります。「画質」を下げる・大きさを 1280×720 にする・30 fps にすると軽くなります。', ' On a phone the video is kept in memory until the end, so it may stop. Lower the quality, use 1280×720 or 30 fps to make it lighter.')
+          : tr(' 動画を最後までメモリに置くので、重いときは「画質」や大きさを下げてください。', ' The video is kept in memory until the end; lower the quality or size if it is heavy.')
+        : '');
+  };
+  for (const c of [sizeSelect, fpsSelect, qualitySelect]) c.addEventListener('change', refreshSizeNote);
+  refreshSizeNote();
+  el.appendChild(sizeNote);
 
   // --- 実行・進捗 --------------------------------------------------------
   const prereq = document.createElement('div');

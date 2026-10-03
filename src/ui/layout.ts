@@ -10,6 +10,8 @@ export type LayoutPref = 'auto' | 'pc' | 'mobile';
 export type LayoutMode = 'pc' | 'mobile';
 
 export const MOBILE_MAX_WIDTH = 760;
+/** スマホ表示のプレビューを描く解像度の倍率の上限 (画面の密度が高くても、これ以上は描かない。ui/panels/live-preview.ts) */
+export const MOBILE_PREVIEW_PIXEL_RATIO = 1.5;
 const KEY = 'zunzun.layout';
 const query = `(max-width: ${MOBILE_MAX_WIDTH}px)`;
 
