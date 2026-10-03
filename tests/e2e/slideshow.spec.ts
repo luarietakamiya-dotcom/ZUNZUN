@@ -96,7 +96,7 @@ test('スライドショー: 切り替え表の時刻にその画像の色にな
   for (let i = 0; i < r.fade.length; i++) expect(near(r.fade[i]!, r.exactFade[i]!, 2), `${i}`).toBe(true);
 });
 
-test('「背景と素材」タブで画像を複数選ぶと一覧に並び、ファイル名の区切りの言葉に印が付く', async ({ page }) => {
+test('「背景と素材」タブで画像を複数選ぶと一覧に並び、ファイル名の区切りの言葉が「自動」として選択欄に出る', async ({ page }) => {
   await page.goto('/');
   await page.click('button[data-panel="overlay"]');
   const png = await page.evaluate(async () => {
@@ -119,9 +119,11 @@ test('「背景と素材」タブで画像を複数選ぶと一覧に並び、�
   await expect(list.locator('.slide-item')).toHaveCount(3);
   // ファイル名の順 (数字は数として)。画像でないファイルは使わない
   await expect(list.locator('.slide-name')).toHaveText(['1_intro.png', '2_サビ.png', '10_街.png']);
-  await expect(list.locator('.slide-item').nth(0).locator('.slide-kind')).toHaveText('イントロ');
-  await expect(list.locator('.slide-item').nth(1).locator('.slide-kind')).toHaveText('サビ');
-  await expect(list.locator('.slide-item').nth(2).locator('.slide-kind')).toHaveCount(0);
+  // 区切りの選択欄: 指定していなければ、ファイル名の言葉で決まる (「自動: ○○」)。言葉が無ければ「指定なし」
+  const selected = (n: number) => list.locator('.slide-item').nth(n).locator('select.slide-kind-select option:checked');
+  await expect(selected(0)).toHaveText('自動: イントロ');
+  await expect(selected(1)).toHaveText('自動: サビ');
+  await expect(selected(2)).toHaveText('指定なし');
   const saved = await page.evaluate(async () => {
     const { store } = await import('/src/core/store.ts');
     return store.background?.slides?.items.map((it) => it.ref);

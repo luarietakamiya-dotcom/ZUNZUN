@@ -126,6 +126,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
       host.background.setSlideCues(
         slidePlan({
           names: slides.items.map((it) => it.ref),
+          kinds: slides.items.map((it) => it.kind),
           pace: slides.pace,
           lyrics: job.lyrics,
           beats: job.analysis?.beats ?? [],

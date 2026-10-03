@@ -101,6 +101,21 @@ describe('slideSchedule (切り替え表)', () => {
     for (let i = 1; i < cues.length; i++) expect(cues[i]!.index).not.toBe(cues[i - 1]!.index);
   });
 
+  it('ユーザーが決めた区切り (kinds) は、ファイル名の言葉より優先する。決めていない画像はファイル名の言葉で', () => {
+    // a, b: ファイル名に言葉は無いが、サビ・イントロの入れ場所に入れた。c: 名前は「サビ」だがイントロの入れ場所に入れた。d: 指定なし (名前の言葉もなし)
+    const names = ['a.jpg', 'b.jpg', 'サビ.jpg', 'd.jpg', 'intro-x.png'];
+    const kinds = ['chorus', 'chorus', 'intro', undefined, undefined] as const;
+    const sections = [sec('intro', 0, 16), sec('verse', 16, 48), sec('chorus', 48, 80), sec('verse', 80, 120)];
+    const cues = slideSchedule({ names, kinds, sections, grid, duration: 120, pace: 0.5 });
+    const shown = (from: number, to: number): Set<number> => new Set(cues.filter((c) => c.t >= from && c.t < to).map((c) => c.index));
+    // イントロ: 入れ場所のイントロ (2) と、名前にイントロの言葉がある指定なしの画像 (4)
+    expect([...shown(0, 16)].every((i) => i === 2 || i === 4)).toBe(true);
+    // サビ: 入れ場所のサビ (0, 1)。名前が「サビ」でもイントロに入れた画像 (2) は出ない
+    expect([...shown(48, 80)].sort()).toEqual([0, 1]);
+    // Aメロ: 専用の画像が無いので、区切りが決まっていない画像 (3) だけ (決まっている画像は出ない)
+    expect([...shown(16, 48)]).toEqual([3]);
+  });
+
   it('同じ入力なら同じ表 (乱数を使わない)。拍が無い曲は 2 秒ごとの区切りで', () => {
     const names = ['a.jpg', 'b.jpg', 'c.jpg'];
     const a = slideSchedule({ names, sections: [], grid: barGrid([], null, 60), duration: 60, pace: 0.5 });

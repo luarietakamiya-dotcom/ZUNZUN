@@ -215,26 +215,28 @@ describe('sanitizeProject', () => {
     }
   });
 
-  it('background.slides (スライドショー): 画像が 2 枚以上あるときだけ残し、値は範囲に収める。前のプロジェクト (slides 無し) はそのまま', () => {
+  it('background.slides (スライドショー): 画像が 1 枚以上あるときだけ残し (区切りの指定は決まった種類だけ)、値は範囲に収める。前のプロジェクト (slides 無し) はそのまま', () => {
     const raw = JSON.parse(JSON.stringify(validRaw())) as Record<string, unknown>;
     const sha = (c: string): string => c.repeat(64);
     raw.background = {
       ref: 'a.jpg',
       sha256: sha('a'),
       kind: 'image',
-      slides: { items: [{ ref: 'a.jpg', sha256: sha('a') }, { ref: 'bad', sha256: 'zz' }, { ref: 'サビ.jpg', sha256: sha('b') }], transition: 'wipe', fadeSec: 99, pace: -1 },
+      slides: { items: [{ ref: 'a.jpg', sha256: sha('a'), kind: 'chorus' }, { ref: 'bad', sha256: 'zz' }, { ref: 'サビ.jpg', sha256: sha('b'), kind: 'bogus' }], transition: 'wipe', fadeSec: 99, pace: -1 },
     };
     expect(sanitizeProject(raw).background?.slides).toEqual({
       items: [
-        { ref: 'a.jpg', sha256: sha('a') },
+        { ref: 'a.jpg', sha256: sha('a'), kind: 'chorus' },
         { ref: 'サビ.jpg', sha256: sha('b') },
       ],
       transition: 'fade',
       fadeSec: 3,
       pace: 0,
     });
-    // 1 枚しか残らなければ、1 枚の背景
-    raw.background = { ref: 'a.jpg', sha256: sha('a'), kind: 'image', slides: { items: [{ ref: 'a.jpg', sha256: sha('a') }] } };
+    // 1 枚だけのスライドショーもある (区切りごとの入れ場所に 1 枚だけ入れたとき)。0 枚なら 1 枚の背景
+    raw.background = { ref: 'a.jpg', sha256: sha('a'), kind: 'image', slides: { items: [{ ref: 'a.jpg', sha256: sha('a'), kind: 'intro' }] } };
+    expect(sanitizeProject(raw).background?.slides?.items).toEqual([{ ref: 'a.jpg', sha256: sha('a'), kind: 'intro' }]);
+    raw.background = { ref: 'a.jpg', sha256: sha('a'), kind: 'image', slides: { items: [{ ref: 'bad', sha256: 'zz' }] } };
     expect(sanitizeProject(raw).background?.slides).toBeUndefined();
     // 動画の背景にはスライドショーを付けない
     raw.background = { ref: 'a.mp4', sha256: sha('a'), kind: 'video', slides: { items: [{ ref: 'a.jpg', sha256: sha('a') }, { ref: 'b.jpg', sha256: sha('b') }] } };

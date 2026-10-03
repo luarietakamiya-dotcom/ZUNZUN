@@ -5,6 +5,9 @@ import { t2, tr, type Text2 } from '../../core/i18n';
 import { findLibraryItem, LIBRARY, libraryRef } from '../../core/library';
 import { sliderRow } from './panel-helpers';
 import { defaultSlideMotion, type SlideMotionSettings } from '../../core/render/slide-motion';
+import { entriesForZone, entriesFromFiles, entriesFromPaths, SLIDE_ZONES, type SlideEntry } from '../../core/render/slide-input';
+import { isSlideImage } from '../../core/store';
+import { readDropped } from './drop-files';
 
 /**
  * Overlay タブの「背景」欄。一枚絵か動画を選び、収め方・暗さ・ぼかし (画像だけ)・ビジュアライザーの重ね方と濃さ・
@@ -132,15 +135,89 @@ export function createBackgroundCard(): HTMLElement {
   }
   const status = h('div', 'param-label');
   const body = h('div', 'background-body');
+
+  // 区切りごとの入れ場所 (ドラッグ&ドロップ、または押して選ぶ)。入れた画像は、ファイル名に関係なくその区切りで使う
+  const zonesBox = h('div', 'slide-zones');
+  zonesBox.dataset.background = 'slide-zones';
+  const zoneCounts = new Map<SectionKind, HTMLElement>();
+  const slideNote = (r: { skipped: number }): string => (r.skipped > 0 ? tr(`${r.skipped} 個のファイルは使いませんでした (画像でない・大きすぎる・${MAX_SLIDES} 枚を超えた)。`, `Skipped ${r.skipped} files (not images, too large, or over ${MAX_SLIDES}).`) : '');
+  /** 画像を入れたあとの表示 (読み込み中の表示 → 結果。失敗したら理由) */
+  const runSlides = (job: Promise<string>, loading: string): void => {
+    status.textContent = loading;
+    job
+      .then((note) => {
+        render();
+        if (note) status.textContent = `${status.textContent} ${note}`;
+      })
+      .catch((err: unknown) => {
+        status.textContent = `${tr('読み込めませんでした', 'Could not load')}: ${err instanceof Error ? err.message : String(err)}`;
+      });
+  };
+  const addToZone = (kind: SectionKind, files: readonly File[]): void => {
+    const images = files.filter(isSlideImage);
+    if (images.length === 0) {
+      status.textContent = tr('画像が見つかりませんでした (PNG / JPEG / WebP など)', 'No images found (PNG / JPEG / WebP etc.)');
+      return;
+    }
+    runSlides(
+      store.setBackgroundSlides(entriesForZone(images, kind), { add: true }).then(slideNote),
+      tr(`${t2(KIND_NAME[kind])}に ${images.length} 枚を入れています…`, `Adding ${images.length} image(s) to ${t2(KIND_NAME[kind])}…`),
+    );
+  };
+  for (const kind of SLIDE_ZONES) {
+    const zone = h('div', 'slide-zone');
+    zone.dataset.zone = kind;
+    const pick = h('input');
+    pick.type = 'file';
+    pick.multiple = true;
+    pick.accept = 'image/*';
+    pick.hidden = true;
+    pick.dataset.zoneInput = kind;
+    const btn = h('button', 'tab-button slide-zone-button', t2(KIND_NAME[kind]));
+    btn.type = 'button';
+    btn.addEventListener('click', () => pick.click());
+    const count = h('span', 'slide-zone-count');
+    zoneCounts.set(kind, count);
+    zone.append(btn, count, pick);
+    pick.addEventListener('change', () => {
+      const files = [...(pick.files ?? [])];
+      pick.value = '';
+      if (files.length) addToZone(kind, files);
+    });
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      zone.classList.add('is-dragover');
+    });
+    zone.addEventListener('dragleave', () => zone.classList.remove('is-dragover'));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      zone.classList.remove('is-dragover');
+      void readDropped(e.dataTransfer).then((dropped) => addToZone(kind, dropped.map((d) => d.file)));
+    });
+    zonesBox.appendChild(zone);
+  }
+  /** 入れ場所ごとの枚数 (指定した画像と、ファイル名の言葉で決まる画像) */
+  const updateZones = (): void => {
+    const items = store.background?.slides?.items ?? [];
+    for (const kind of SLIDE_ZONES) {
+      const n = items.filter((it) => (it.kind ?? sectionKindOf(it.ref)) === kind).length;
+      zoneCounts.get(kind)!.textContent = n > 0 ? tr(`${n} 枚`, `${n}`) : '–';
+    }
+  };
+
   root.append(
     fileRow,
     slideRow,
+    h('span', 'param-label', tr('区切りごとの入れ場所 (画像をドラッグ&ドロップ、または押して選ぶ。ファイル名に関係なく、その区切りで使います):', 'Spots for each song section (drop images here, or press to choose; they are used in that section whatever their file names):')),
+    zonesBox,
     h(
       'p',
       'lyrics-help',
       tr(
-        `フォルダの中の画像を、ファイル名の順に使います (${MAX_SLIDES} 枚まで)。歌詞の [サビ] などの区切りで必ず切り替わり、その間は小節の頭で切り替わります (サビは速く、イントロ・アウトロはゆっくり。枚数が多いほど速く)。ファイル名に「サビ」「Chorus」「Intro」などの言葉がある画像は、その区切りの間だけ出ます。`,
-        `Uses the images in the folder in file-name order (up to ${MAX_SLIDES}). It always switches at song sections like [Chorus] in the lyrics, and on bar heads in between (faster in the chorus, slower in the intro / outro, faster with more images). Images whose file name contains words like "Chorus", "Intro" or "サビ" only appear in that section.`,
+        `このカードのどこへでも、画像・フォルダ・動画をドラッグ&ドロップできます (上の入れ場所へ落とすと、その区切りに入ります)。フォルダの中に「イントロ」「サビ」などの名前のフォルダがあれば、その中の画像はその区切りで使います。画像は ${MAX_SLIDES} 枚まで、足していけます (すでにあるスライドショーに足されます。1 枚だけ落とすと、今までどおり 1 枚の背景です)。歌詞の [サビ] などの区切りで必ず切り替わり、その間は小節の頭で切り替わります (サビは速く、イントロ・アウトロはゆっくり。枚数が多いほど速く)。区切りを決めていない画像は、ファイル名に「サビ」「Chorus」「Intro」などの言葉があればその区切りの間だけ、なければ専用の画像が無い区切りで出ます。`,
+        `You can drop images, folders or a video anywhere on this card (dropping on a spot above puts them in that section). If the folder contains sub-folders named like "Intro" or "Chorus", their images are used in that section. Add up to ${MAX_SLIDES} images (they are added to the current slideshow; dropping just one image sets a single background as before). It always switches at song sections like [Chorus] in the lyrics, and on bar heads in between (faster in the chorus, slower in the intro / outro, faster with more images). An image with no section set appears only in the section named by a word in its file name ("Chorus", "Intro", "サビ"…), or otherwise in sections that have no images of their own.`,
       ),
     ),
     h('span', 'param-label', tr('用意された背景から選ぶ:', 'Or pick a built-in background:')),
@@ -158,7 +235,7 @@ export function createBackgroundCard(): HTMLElement {
     const restoring = bg?.slides != null && store.slideFiles.some((f) => f == null);
     const job = restoring
       ? store.restoreSlides(files).then((r) => tr(`${r.total} 枚のうち ${r.matched} 枚が見つかりました。`, `Found ${r.matched} of ${r.total} images.`))
-      : store.setBackgroundSlides(files).then((r) => (r.skipped > 0 ? tr(`${r.skipped} 個のファイルは使いませんでした (画像でない・大きすぎる・${MAX_SLIDES} 枚を超えた)。`, `Skipped ${r.skipped} files (not images, too large, or over ${MAX_SLIDES}).`) : ''));
+      : store.setBackgroundSlides(entriesFromFiles(files)).then((r) => (r.skipped > 0 ? tr(`${r.skipped} 個のファイルは使いませんでした (画像でない・大きすぎる・${MAX_SLIDES} 枚を超えた)。`, `Skipped ${r.skipped} files (not images, too large, or over ${MAX_SLIDES}).`) : ''));
     job
       .then((note) => {
         render();
@@ -170,6 +247,42 @@ export function createBackgroundCard(): HTMLElement {
   };
   folderInput.addEventListener('change', () => onSlides(folderInput));
   filesInput.addEventListener('change', () => onSlides(filesInput));
+
+  // カードのどこへ落としても入る (フォルダ・動画も)。区切りは、フォルダ名で決める
+  const onCardDrop = async (dropped: { file: File; dirs: string[] }[]): Promise<string> => {
+    const images = dropped.filter((d) => isSlideImage(d.file));
+    if (images.length === 0) {
+      const video = dropped.find((d) => kindOf(d.file) === 'video');
+      if (!video) throw new Error(tr('画像か動画が見つかりませんでした', 'No image or video found'));
+      await store.setBackgroundFile(video.file, 'video');
+      return '';
+    }
+    const entries: SlideEntry[] = entriesFromPaths(images);
+    // プロジェクトを開いたあと (画像を選び直していない) なら、同じ画像を探して当てる
+    if (store.background?.slides != null && store.slideFiles.some((f) => f == null) && entries.every((e) => !e.kind)) {
+      const r = await store.restoreSlides(entries.map((e) => e.file));
+      return tr(`${r.total} 枚のうち ${r.matched} 枚が見つかりました。`, `Found ${r.matched} of ${r.total} images.`);
+    }
+    // 区切りの指定が無い 1 枚だけで、スライドショーでなければ、今までどおり 1 枚の背景 (置き換え)
+    if (entries.length === 1 && !entries[0]!.kind && !store.background?.slides) {
+      await store.setBackgroundFile(entries[0]!.file, 'image');
+      return '';
+    }
+    return slideNote(await store.setBackgroundSlides(entries, { add: true }));
+  };
+  root.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    root.classList.add('is-dragover');
+  });
+  root.addEventListener('dragleave', (e) => {
+    if (!root.contains(e.relatedTarget as Node | null)) root.classList.remove('is-dragover');
+  });
+  root.addEventListener('drop', (e) => {
+    e.preventDefault();
+    root.classList.remove('is-dragover');
+    const read = readDropped(e.dataTransfer);
+    runSlides(read.then(onCardDrop), tr('読み込んでいます…', 'Loading…'));
+  });
 
   input.addEventListener('change', () => {
     const file = input.files?.[0];
@@ -193,6 +306,7 @@ export function createBackgroundCard(): HTMLElement {
   function render(): void {
     const bg = store.background;
     const file = store.backgroundFile;
+    updateZones();
     body.textContent = '';
     removeBtn.disabled = bg == null;
     const lib = bg ? findLibraryItem(bg.ref, bg.sha256) : null;
@@ -300,9 +414,36 @@ export function createBackgroundCard(): HTMLElement {
         img.loading = 'lazy';
         cell.appendChild(img);
       } else cell.appendChild(h('div', 'slide-missing', tr('未選択', 'Not picked')));
-      const kind = sectionKindOf(it.ref);
       cell.append(h('span', 'slide-name', it.ref));
-      if (kind) cell.append(h('span', 'slide-kind', t2(KIND_NAME[kind])));
+      // 使う区切り: 決めていなければ、ファイル名の言葉で決まる (言葉も無ければ、専用の画像が無い区切りで出る)
+      const word = sectionKindOf(it.ref);
+      const sel = h('select', 'select slide-kind-select');
+      sel.dataset.slideKind = String(i);
+      sel.setAttribute('aria-label', tr(`${it.ref} を使う区切り`, `Section for ${it.ref}`));
+      const auto = h('option', '', word && word !== 'other' ? tr(`自動: ${t2(KIND_NAME[word])}`, `Auto: ${t2(KIND_NAME[word])}`) : tr('指定なし', 'Not set'));
+      auto.value = '';
+      sel.appendChild(auto);
+      for (const k of SLIDE_ZONES) {
+        const o = h('option', '', t2(KIND_NAME[k]));
+        o.value = k;
+        sel.appendChild(o);
+      }
+      sel.value = it.kind ?? '';
+      sel.addEventListener('change', () => {
+        store.setSlideKind(i, (sel.value || null) as SectionKind | null);
+        render();
+      });
+      const del = h('button', 'tab-button slide-remove', '×');
+      del.type = 'button';
+      del.dataset.slideRemove = String(i);
+      del.title = tr('このスライドショーから外す', 'Remove from the slideshow');
+      del.setAttribute('aria-label', tr(`${it.ref} を外す`, `Remove ${it.ref}`));
+      del.addEventListener('click', () => {
+        store.removeSlide(i);
+        render();
+      });
+      cell.append(h('div', 'slide-controls'));
+      cell.lastElementChild!.append(sel, del);
       list.appendChild(cell);
     });
     body.appendChild(list);

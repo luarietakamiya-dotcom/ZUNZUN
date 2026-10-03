@@ -13,8 +13,9 @@ import type { LyricsSettings, RhythmSettings } from '../types';
  *   - 区切りの種類: サビは速く (重み 2)、イントロ・アウトロはゆっくり (0.6) など
  *   - pace (切り替えの細かさ 0..1、0.5 が既定): 全体を 0.5 倍〜2 倍
  *   - BPM: 小節の長さが曲の速さで決まるので、速い曲ほど切り替えも速い
- * - ファイル名に区切りの言葉 (サビ・Chorus・Intro など) がある画像は、その種類の区切りの間だけ出す。
- *   言葉の無い画像は、専用の画像が無い区切りで使う (言葉の無い画像も無ければ全部から)
+ * - 画像の区切りは、ユーザーが決めたもの (入れ場所・フォルダ名・一覧の選択。kinds) を優先し、無ければ
+ *   ファイル名の言葉 (サビ・Chorus・Intro など) で決める。区切りが決まっている画像は、その種類の区切りの間だけ出す。
+ *   決まっていない画像は、専用の画像が無い区切りで使う (決まっていない画像も無ければ全部から)
  * - 同じ区切りの種類の中では、ファイル名の順にくり返す。続けて同じ画像にはしない (2 枚以上あるとき)
  * 乱数は使わない (同じ入力なら同じ表)。
  */
@@ -79,6 +80,8 @@ function pow2(x: number): number {
 export interface SlideScheduleInput {
   /** 画像のファイル名 (並べる順。区切りの言葉を見る) */
   names: readonly string[];
+  /** 画像ごとの、ユーザーが決めた区切りの種類 (names と同じ順。無い・undefined の画像はファイル名の言葉で決める) */
+  kinds?: readonly (SectionKind | null | undefined)[];
   /** 曲の区切り (無ければ曲全体を 1 つの区切りとして扱う) */
   sections: readonly Section[];
   /** 小節の頭 (barGrid の結果) */
@@ -126,7 +129,7 @@ export function slideSchedule(input: SlideScheduleInput): SlideCue[] {
   const base = weighted / Math.max(1, switches);
 
   // 区切りの種類ごとの画像の組 (ファイル名に言葉がある画像はその種類だけ)
-  const kinds = input.names.map((name) => sectionKindOf(name));
+  const kinds = input.names.map((name, i) => input.kinds?.[i] ?? sectionKindOf(name));
   const untagged = input.names.map((_, i) => i).filter((i) => kinds[i] == null);
   const poolFor = (kind: SectionKind): number[] => {
     const own = input.names.map((_, i) => i).filter((i) => kinds[i] === kind && kind !== 'other');
@@ -174,6 +177,8 @@ export function slideAt(cues: readonly SlideCue[], t: number): { index: number; 
 export interface SlidePlanInput {
   /** 画像のファイル名 (BackgroundSlides.items の ref) */
   names: readonly string[];
+  /** 画像ごとの、ユーザーが決めた区切りの種類 (BackgroundSlides.items の kind) */
+  kinds?: readonly (SectionKind | null | undefined)[];
   pace: number;
   /** 歌詞 (区切りを読む。無ければ曲全体を 1 つの区切り) */
   lyrics: LyricsSettings | null;
@@ -187,7 +192,7 @@ export interface SlidePlanInput {
 export function slidePlan(input: SlidePlanInput): SlideCue[] {
   const sections = input.lyrics && input.lyrics.text.trim() ? buildLyricsView(input.lyrics, input.duration).sections : [];
   const bars = input.rhythm?.enabled && input.rhythm.bars.length >= 2 ? input.rhythm.bars : null;
-  return slideSchedule({ names: input.names, sections, grid: barGrid(input.beats, bars, input.duration), duration: input.duration, pace: input.pace });
+  return slideSchedule({ names: input.names, kinds: input.kinds, sections, grid: barGrid(input.beats, bars, input.duration), duration: input.duration, pace: input.pace });
 }
 
 /** slidePlan の材料が同じかを見分けるキー (プレビューで、変わったときだけ作り直す) */
@@ -195,6 +200,7 @@ export function slidePlanKey(input: SlidePlanInput): string {
   const l = input.lyrics;
   return JSON.stringify([
     input.names,
+    input.kinds ?? null,
     input.pace,
     l ? [l.source, l.text, l.timing.lineTimes, l.timing.lineEnds] : null,
     input.beats.length,

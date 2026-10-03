@@ -1,4 +1,5 @@
 import type { Text2 } from './i18n';
+import type { SectionKind } from './lyrics/sections';
 import { defaultSlideMotion, type SlideMotionSettings } from './render/slide-motion';
 /**
  * ZUNZUN の中核となる共有型。
@@ -241,6 +242,11 @@ export interface BackgroundSettings {
 export interface BackgroundSlide {
   ref: string;
   sha256: string;
+  /**
+   * この画像を使う区切りの種類 (ユーザーが入れ場所・フォルダ名・一覧の選択で決めたもの。ファイル名に関係なく優先する)。
+   * 無ければ、ファイル名の言葉 (サビ・Intro など) で決める (core/render/slideshow.ts)
+   */
+  kind?: SectionKind;
 }
 
 export interface BackgroundSlides {

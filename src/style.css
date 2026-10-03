@@ -509,6 +509,15 @@ body {
 .slide-missing { display: flex; align-items: center; justify-content: center; }
 .slide-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slide-kind { align-self: flex-start; padding: 0 6px; border-radius: 8px; background: rgba(224, 102, 102, 0.25); color: #f0c0c0; }
+.slide-controls { display: flex; gap: 4px; align-items: center; }
+.slide-kind-select { flex: 1; min-width: 0; font-size: 11px; padding: 1px 2px; }
+.slide-remove { padding: 0 6px; line-height: 1.4; }
+/* スライドショーの、区切りごとの入れ場所 (ui/panels/background-card.ts) */
+.slide-zones { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin: 6px 0; }
+.slide-zone { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 8px; border: 1px dashed var(--border); border-radius: 8px; text-align: center; font-size: 12px; color: #9aa1ad; }
+.slide-zone.is-dragover, .background-card.is-dragover { border-color: var(--accent, #f5c542); background: rgba(245, 197, 66, 0.08); }
+.background-card.is-dragover { outline: 2px dashed var(--accent, #f5c542); outline-offset: 4px; }
+.slide-zone-count { min-height: 1.2em; }
 
 /* 歌詞タブの「はじめかた」(3 つの手順) */
 .lyrics-steps .lyrics-step { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; }

@@ -23,10 +23,13 @@ import {
   type MediaLayer,
   defaultSlides,
   MAX_SLIDES,
+  type BackgroundSlide,
   type BackgroundSlides,
   type PresetImage,
 } from './types';
 import { tr } from './i18n';
+import type { SectionKind } from './lyrics/sections';
+import type { SlideEntry } from './render/slide-input';
 import { fetchLibraryFile, findLibraryItem, LIBRARY, libraryRef } from './library';
 
 type Listener = () => void;
@@ -40,6 +43,9 @@ export const MAX_SLIDE_BYTES = 100 * 2 ** 20;
 export function isSlideImage(file: File): boolean {
   return file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|avif|bmp)$/i.test(file.name);
 }
+
+/** スライドショーの画像 1 枚の設定 (区切りの指定があるときだけ kind を持つ) */
+const slideItem = (ref: string, sha256: string, kind?: SectionKind): BackgroundSlide => ({ ref, sha256, ...(kind ? { kind } : {}) });
 
 /** ファイル名の順 (数字は数として: 2 < 10) */
 export const byFileName = (a: File, b: File): number => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
@@ -203,29 +209,94 @@ class Store {
   }
 
   /**
-   * スライドショーにする画像を選ぶ (フォルダの中身・複数のファイル)。画像以外は飛ばし、ファイル名の順に並べる (MAX_SLIDES 枚まで)。
-   * 1 枚だけなら今までどおりの 1 枚の背景。見た目の調整値 (暗さ・ぼかしなど) と切り替えの設定は引き継ぐ
+   * スライドショーにする画像を選ぶ (フォルダの中身・複数のファイル・ドラッグ&ドロップ)。画像以外は飛ばす (MAX_SLIDES 枚まで)。
+   * - 既定 (add なし): 今のスライドショーを置き換える。ファイル名の順に並べる。区切りの指定が無い画像が 1 枚だけなら、
+   *   今までどおりの 1 枚の背景。
+   * - add あり: 今のスライドショー (1 枚の背景ならその 1 枚も) に足す。同じ画像 (sha256) はもう一度足さず、区切りの指定だけ上書きする。
+   * 入れ方の kind は、その画像を使う区切り (入れ場所・フォルダ名で決めたもの)。見た目の調整値 (暗さ・ぼかしなど) と
+   * 切り替えの設定は引き継ぐ
    */
-  async setBackgroundSlides(files: readonly File[]): Promise<{ count: number; skipped: number }> {
-    const images = files.filter(isSlideImage).sort(byFileName);
-    const used = images.slice(0, MAX_SLIDES).filter((f) => f.size <= MAX_SLIDE_BYTES);
-    const skipped = files.length - used.length;
-    if (used.length === 0) throw new Error(tr('画像が見つかりませんでした (PNG / JPEG / WebP など)', 'No images found (PNG / JPEG / WebP etc.)'));
-    if (used.length === 1) {
-      await this.setBackgroundFile(used[0]!, 'image');
-      return { count: 1, skipped };
+  async setBackgroundSlides(input: readonly (File | SlideEntry)[], opts: { add?: boolean } = {}): Promise<{ count: number; skipped: number }> {
+    const entries: SlideEntry[] = input.map((e) => ('file' in e ? e : { file: e }));
+    const usable = entries.filter((e) => isSlideImage(e.file) && e.file.size <= MAX_SLIDE_BYTES);
+    const skipped = entries.length - usable.length;
+    if (usable.length === 0) throw new Error(tr('画像が見つかりませんでした (PNG / JPEG / WebP など)', 'No images found (PNG / JPEG / WebP etc.)'));
+    if (!opts.add) {
+      const sorted = [...usable].sort((a, b) => byFileName(a.file, b.file)).slice(0, MAX_SLIDES);
+      if (sorted.length === 1 && !sorted[0]!.kind) {
+        await this.setBackgroundFile(sorted[0]!.file, 'image');
+        return { count: 1, skipped: skipped + usable.length - sorted.length };
+      }
+      const hashes = await Promise.all(sorted.map(async (e) => sha256Hex(await e.file.arrayBuffer())));
+      const items = sorted.map((e, i) => slideItem(e.file.name, hashes[i]!, e.kind));
+      this.applySlides(items, sorted.map((e) => e.file));
+      return { count: sorted.length, skipped: skipped + usable.length - sorted.length };
     }
-    const hashes = await Promise.all(used.map(async (f) => sha256Hex(await f.arrayBuffer())));
-    const items = used.map((f, i) => ({ ref: f.name, sha256: hashes[i]! }));
+    const hashes = await Promise.all(usable.map(async (e) => sha256Hex(await e.file.arrayBuffer())));
+    // 今の画像 (スライドショーならその全部、1 枚の背景ならその 1 枚)。途中で背景が変わっていても、読み終わった今の状態から足す
     const cur = this._background;
-    const base = cur && cur.kind === 'image' ? cur : defaultBackground(items[0]!.ref, items[0]!.sha256, 'image');
+    const items: BackgroundSlide[] = [];
+    const files: (File | null)[] = [];
+    if (cur?.slides) {
+      cur.slides.items.forEach((it, i) => {
+        items.push({ ...it });
+        files.push(this._slideFiles[i] ?? null);
+      });
+    } else if (cur?.kind === 'image' && this._backgroundFile) {
+      items.push(slideItem(cur.ref, cur.sha256));
+      files.push(this._backgroundFile);
+    }
+    let overflow = 0;
+    usable.forEach((e, i) => {
+      const at = items.findIndex((it) => it.sha256 === hashes[i]);
+      if (at >= 0) {
+        // 同じ画像: 区切りの指定だけ上書きして、ファイルが無ければ当てる
+        if (e.kind) items[at] = { ...items[at]!, kind: e.kind };
+        files[at] = files[at] ?? e.file;
+      } else if (items.length < MAX_SLIDES) {
+        items.push(slideItem(e.file.name, hashes[i]!, e.kind));
+        files.push(e.file);
+      } else overflow++;
+    });
+    this.applySlides(items, files);
+    return { count: items.length, skipped: skipped + overflow };
+  }
+
+  /** スライドショーの画像の並びを、そのまま背景にする (見た目の調整値・切り替えの設定は引き継ぐ) */
+  private applySlides(items: BackgroundSlide[], files: (File | null)[]): void {
+    const first = items[0]!;
+    const cur = this._background;
+    const base = cur && cur.kind === 'image' ? cur : defaultBackground(first.ref, first.sha256, 'image');
     const slides: BackgroundSlides = cur?.slides ? { ...cur.slides, items } : defaultSlides(items);
-    this._background = { ...base, kind: 'image', ref: items[0]!.ref, sha256: items[0]!.sha256, slides };
-    this._backgroundFile = used[0]!;
-    this._slideFiles = used;
+    this._background = { ...base, kind: 'image', ref: first.ref, sha256: first.sha256, slides };
+    this._backgroundFile = files.find((f) => f != null) ?? null;
+    this._slideFiles = files;
     this.backgroundGeneration++;
     this.emit();
-    return { count: used.length, skipped };
+  }
+
+  /** スライドショーの 1 枚の、使う区切りを決める (null で、ファイル名の言葉に任せる) */
+  setSlideKind(index: number, kind: SectionKind | null): void {
+    const bg = this._background;
+    const slides = bg?.slides;
+    const it = slides?.items[index];
+    if (!bg || !slides || !it) return;
+    const next = { ref: it.ref, sha256: it.sha256, ...(kind ? { kind } : {}) };
+    this._background = { ...bg, slides: { ...slides, items: slides.items.map((x, i) => (i === index ? next : x)) } };
+    this.emit();
+  }
+
+  /** スライドショーから 1 枚外す (全部外したら背景なし) */
+  removeSlide(index: number): void {
+    const bg = this._background;
+    const slides = bg?.slides;
+    if (!bg || !slides || index < 0 || index >= slides.items.length) return;
+    const items = slides.items.filter((_, i) => i !== index);
+    if (items.length === 0) {
+      this.removeBackground();
+      return;
+    }
+    this.applySlides(items, this._slideFiles.filter((_, i) => i !== index));
   }
 
   /**

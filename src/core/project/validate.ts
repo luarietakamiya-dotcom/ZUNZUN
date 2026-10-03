@@ -30,6 +30,7 @@ import {
   type MotionLevel,
 } from '../types';
 import { SECTION_KINDS } from '../lyrics/section-motion';
+import type { SectionKind } from '../lyrics/sections';
 import { MAX_BLANKS, normalizeBlanks } from '../lyrics/blanks';
 import { defaultSlideMotion, type SlideMotionSettings } from '../render/slide-motion';
 import { normalizeView } from '../render/view';
@@ -291,14 +292,19 @@ function sanitizeSlideMotion(raw: unknown): { motion?: SlideMotionSettings } {
 }
 
 /** スライドショー。画像が 2 枚未満なら無し (1 枚の背景として扱う) */
+/** 画像の区切りに指定できる種類 */
+const SLIDE_KINDS: ReadonlySet<string> = new Set(['intro', 'verse', 'prechorus', 'chorus', 'bridge', 'interlude', 'outro']);
+
 function sanitizeSlides(raw: unknown): { slides?: BackgroundSlides } {
   if (!isPlainObject(raw) || !Array.isArray(raw.items)) return {};
   const items: BackgroundSlide[] = [];
   for (const it of raw.items.slice(0, MAX_SLIDES)) {
     if (!isPlainObject(it) || typeof it.ref !== 'string' || it.ref === '' || typeof it.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(it.sha256)) continue;
-    items.push({ ref: it.ref.slice(0, 512), sha256: it.sha256 });
+    const kind = typeof it.kind === 'string' && SLIDE_KINDS.has(it.kind) ? (it.kind as SectionKind) : undefined;
+    items.push({ ref: it.ref.slice(0, 512), sha256: it.sha256, ...(kind ? { kind } : {}) });
   }
-  if (items.length < 2) return {};
+  // 1 枚だけのスライドショーもある (区切りごとの入れ場所に 1 枚だけ入れたとき)
+  if (items.length < 1) return {};
   const base = defaultSlides(items);
   return {
     slides: {

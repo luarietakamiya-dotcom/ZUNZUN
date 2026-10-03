@@ -44,7 +44,8 @@ export function renderParamsNow(): CommonParams & Record<string, unknown> {
 
 /** 背景を読み込み直す要る変化か (ファイル・種類・ぼかし・スライドショーの画像の並び) を見分けるキー */
 function backgroundLoadKey(bg: BackgroundSettings | null, file: File | null, slideFiles: readonly (File | null)[]): unknown[] {
-  return [bg?.ref, bg?.sha256, bg?.kind, bg?.blur, bg?.slides?.items, file, ...slideFiles];
+  // 画像の区切り (kind) を変えただけでは読み込み直さない (どの画像か = sha256 の並びで見る)
+  return [bg?.ref, bg?.sha256, bg?.kind, bg?.blur, bg?.slides?.items.map((it) => it.sha256).join(','), file, ...slideFiles];
 }
 const sameKey = (a: readonly unknown[], b: readonly unknown[]): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
 
@@ -116,6 +117,7 @@ export function createLivePreview(opts: { onFrame?: () => void } = {}): LivePrev
     if (!slides || !store.audio.isLoaded) return;
     const input = {
       names: slides.items.map((it) => it.ref),
+      kinds: slides.items.map((it) => it.kind),
       pace: slides.pace,
       lyrics: store.lyrics,
       beats: store.audio.analysis?.beats ?? [],
