@@ -203,6 +203,8 @@ export function renderLyricsPanel(): HTMLElement {
   const stepsCard = el('div', { className: 'lyrics-card lyrics-steps' });
   stepsCard.dataset.lyrics = 'steps';
   const stepMark = (): HTMLSpanElement => el('span', { className: 'lyrics-step-mark' });
+  // スマホ表示 (画面が狭く、タッチ操作が主) では、キーの名前を出さない (Space キーが無い)
+  const touchFirst = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   const step1Mark = stepMark();
   const step2Mark = stepMark();
   const step3Mark = stepMark();
@@ -265,11 +267,15 @@ export function renderLyricsPanel(): HTMLElement {
         : tr('下の欄に歌詞を貼りつけるか、LRC / SRT のファイルを読み込みます。[サビ] などの見出しも書けます', 'Paste the lyrics into the box below or load an LRC / SRT file. Headings like [Chorus] are fine too');
     step3Text.textContent =
       tap != null
-        ? tr('タップ中です。下の大きな歌詞の表示を見ながら、各行の歌い出しで Space を叩きます', 'Tapping. Watch the big lyrics display below and press Space at the start of each line')
+        ? touchFirst
+          ? tr('タップ中です。歌詞の表示を見ながら、各行の歌い出しで下の大きなボタンを叩きます', 'Tapping. Watch the lyrics display and tap the big button below at the start of each line')
+          : tr('タップ中です。下の大きな歌詞の表示を見ながら、各行の歌い出しで Space を叩きます', 'Tapping. Watch the big lyrics display below and press Space at the start of each line')
         : !loaded || n === 0
           ? tr('曲と歌詞がそろったら、ここから始められます', 'Once the song and lyrics are ready, start here')
           : synced === 0
-            ? tr('再生が始まるので、各行の歌い出しで Space を叩きます (Esc で止める)。叩いたあと、ずれはタイムラインで直せます', 'Playback starts; press Space at the start of each line (Esc stops). Fix small offsets on the timeline afterwards')
+            ? touchFirst
+              ? tr('再生が始まるので、各行の歌い出しで下の大きなボタンを叩きます。叩いたあと、ずれはタイムラインで直せます', 'Playback starts; tap the big button at the start of each line. Fix small offsets on the timeline afterwards')
+              : tr('再生が始まるので、各行の歌い出しで Space を叩きます (Esc で止める)。叩いたあと、ずれはタイムラインで直せます', 'Playback starts; press Space at the start of each line (Esc stops). Fix small offsets on the timeline afterwards')
             : tr(`${n} 行のうち ${synced} 行の時刻が決まっています。ずれはタイムラインで直せます`, `${synced} of ${n} lines are timed. Fix offsets on the timeline`);
     stepTapBtn.disabled = !loaded || n === 0 || tap != null || rhythmEditor.isTapping;
   }
@@ -444,15 +450,27 @@ export function renderLyricsPanel(): HTMLElement {
   const tapCard = el('div', { className: 'lyrics-tap-controls' });
   const startFirstBtn = button(tr('1 行目からタップ', 'Tap from line 1'), () => startTap(0), 'lyrics-big-button');
   const startSelBtn = button(tr('選んだ行からタップ', 'Tap from selected line'), () => startTap(selectedLine), 'lyrics-big-button');
-  const stopBtn = button(tr('中断 (Esc)', 'Stop (Esc)'), () => stopTap());
+  const stopBtn = button(touchFirst ? tr('中断', 'Stop') : tr('中断 (Esc)', 'Stop (Esc)'), () => stopTap());
   const tapInfo = el('div', { className: 'lyrics-tap-info' });
-  const tapButton = el('button', { className: 'lyrics-tap-button', textContent: tr('ここで叩く (Space / Enter)', 'Tap here (Space / Enter)') });
+  const tapButton = el('button', { className: 'lyrics-tap-button', textContent: touchFirst ? tr('ここで叩く', 'Tap here') : tr('ここで叩く (Space / Enter)', 'Tap here (Space / Enter)') });
   tapButton.type = 'button';
-  // キーボードで押したときの click (detail = 0) は keydown 側で処理済みなので、マウスで押したときだけ叩く
+  // マウス・指で押したとき: 触れた瞬間 (pointerdown) に叩く。click は指を離したあとに届くので、スマホではその分だけ遅れる
+  // (2026-10-03 スマホ表示 M3)。pointerdown で叩いたあとに来る click は、二重に記録しないよう 1 回だけ無視する。
+  // キーボードで押したときの click (detail = 0) は keydown 側で処理済みなので、これも叩かない
+  let tappedByPointer = false;
+  tapButton.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    tappedByPointer = true;
+    doTap();
+  });
   tapButton.addEventListener('click', (e) => {
+    if (tappedByPointer) {
+      tappedByPointer = false;
+      return;
+    }
     if (e.detail > 0) doTap();
   });
-  const tapBackBtn = button(tr('1 つ戻る (Backspace)', 'Undo one (Backspace)'), () => doBack());
+  const tapBackBtn = button(touchFirst ? tr('1 つ戻る', 'Undo one') : tr('1 つ戻る (Backspace)', 'Undo one (Backspace)'), () => doBack());
   const lastSnap = el('div', { className: 'param-label' });
   const snapBtn = button(tr('吸着', 'Snap'), () => doSnapAll(), 'lyrics-snap-button');
   snapBtn.title = tr('手で決めた (タップ・入力した) 行を、まとめて歌い出しの候補か拍に寄せます', 'Moves manually set (tapped or typed) lines to the nearest vocal entry or beat');
@@ -606,7 +624,9 @@ export function renderLyricsPanel(): HTMLElement {
     checkModeBtn.setAttribute('aria-pressed', String(mode === 'check'));
     modeHelp.textContent =
       mode === 'tap'
-        ? tr('再生中に Space で「次の行」の歌い出しを記録します。止まっているときの Space は再生、Esc で一時停止。', 'While playing, Space records the start of the next line. Space while stopped plays, Esc pauses.')
+        ? touchFirst
+          ? tr('再生中に下の大きなボタンを叩くと、「次の行」の歌い出しを記録します。', 'While playing, tap the big button below to record the start of the next line.')
+          : tr('再生中に Space で「次の行」の歌い出しを記録します。止まっているときの Space は再生、Esc で一時停止。', 'While playing, Space records the start of the next line. Space while stopped plays, Esc pauses.')
         : tr('歌詞が歌と合っているかを見るモードです (記録はしません)。Space で再生 / 一時停止、一覧の行を押すとその 1 秒前から再生します。', 'Check whether the lyrics match the singing (nothing is recorded). Space plays / pauses; clicking a line plays from 1 second before it.');
     tapBackBtn.disabled = !tap?.canBack;
     const hasTimeline = loaded && hasLines;

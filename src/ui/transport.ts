@@ -114,7 +114,15 @@ export function createTransport(opts: TransportOptions): HTMLElement {
       seek.disabled = !loaded;
       playBtn.textContent = playing ? '❚❚' : '▶';
       playBtn.setAttribute('aria-label', playing ? tr('一時停止', 'Pause') : tr('再生', 'Play'));
-      time.textContent = loaded ? `${formatTime(t)} / ${formatTime(dur)}` : '--:--';
+      // 今の位置と全体の長さ (スマホ表示では、長さは隠して今の位置だけ。style.css の .transport-total)
+      time.textContent = '';
+      if (!loaded) time.textContent = '--:--';
+      else {
+        const total = document.createElement('span');
+        total.className = 'transport-total';
+        total.textContent = ` / ${formatTime(dur)}`;
+        time.append(formatTime(t), total);
+      }
       name.textContent = loaded ? audio.fileName : tr('曲がまだありません (「音楽」タブで読み込みます)', 'No song yet (load one in the Music tab)');
       name.title = name.textContent;
       if (seek.max !== String(dur)) seek.max = String(dur || 1);
