@@ -4,6 +4,7 @@ import { cityScrollModule } from './city-scroll';
 import { cyberSpaceModule } from './cyber-space';
 import { liveStageModule } from './live-stage';
 import { milkyWayModule } from './milky-way';
+import { noneModule } from './none';
 import { photoMotionModule } from './photo-motion';
 import { solarGateModule } from './solar-gate';
 import { speakerRackModule } from './speaker-rack';
@@ -11,8 +12,9 @@ import { speakerRackModule } from './speaker-rack';
 /**
  * プリセットの登録一覧。新しいプリセットを追加するときは、そのフォルダを作って
  * ここに import + register の 2 行を足すだけでよい (Host/Registry 本体は変更不要)。
- * 登録順がプリセット選択の並び順になり、先頭が既定のプリセットになる。
+ * 登録順がプリセット選択の並び順になり、先頭が既定のプリセットになる (先頭は何も描かない「なし」。2026-10-03)。
  */
+visualizerRegistry.register(noneModule);
 visualizerRegistry.register(solarGateModule);
 visualizerRegistry.register(milkyWayModule);
 visualizerRegistry.register(liveStageModule);

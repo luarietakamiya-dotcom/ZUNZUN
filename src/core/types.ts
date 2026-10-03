@@ -139,6 +139,8 @@ export interface VisualizerManifest {
    * key の名前で入る (core/visualizer/preset-params.ts)。Project JSON の visualizer.params にプリセットごとに保存される
    */
   controls?: PresetControl[];
+  /** 何も描かないプリセット (「なし」)。Host は「ビジュアライザー」の層を描かず、背景・素材・歌詞だけを重ねる */
+  empty?: boolean;
   /** 画像を 1 枚入れられるプリセット (Visualizer タブに「画像を入れる」が出る)。例: Solar Gate のリングの中 */
   imageSlot?: { label: Text2; help: Text2 };
 }
@@ -529,7 +531,7 @@ export const defaultProject = (): ProjectFile => ({
   seed: Date.now() >>> 0,
   audio: null,
   visualizer: {
-    preset: 'solar-gate',
+    preset: 'none',
     presetVersion: 1,
     common: defaultCommonParams(),
     params: {},

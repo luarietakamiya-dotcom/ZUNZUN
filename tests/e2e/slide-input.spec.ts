@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
@@ -82,28 +79,35 @@ test('入れ場所: ファイル名に関係なくその区切りで使い、足
 test('フォルダを選ぶと、下の「イントロ」「サビ」などのフォルダ名で区切りが決まる (直下は指定なし)', async ({ page }) => {
   await openCard(page);
   const [a, b, c, d] = await pngs(page);
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'zunzun-slides-'));
-  try {
-    for (const [dir, name, buf] of [
-      ['イントロ', 'a.png', a!],
-      ['Chorus', 'b.png', b!],
-      ['', 'c.png', c!],
-      ['旅行', 'd.png', d!],
-    ] as const) {
-      fs.mkdirSync(path.join(root, dir), { recursive: true });
-      fs.writeFileSync(path.join(root, dir, name), buf);
-    }
-    await page.locator('[data-background="slides-folder"]').setInputFiles(root);
-    const list = page.locator('[data-background="slide-list"]');
-    await expect(list.locator('.slide-item')).toHaveCount(4);
-    // ファイル名の順 (a, b, c, d)
-    await expect(list.locator('.slide-name')).toHaveText(['a.png', 'b.png', 'c.png', 'd.png']);
-    expect(await savedKinds(page)).toEqual(['intro', 'chorus', null, null]);
-    await expect(page.locator('[data-zone="intro"] .slide-zone-count')).toHaveText('1 枚');
-    await expect(page.locator('[data-zone="chorus"] .slide-zone-count')).toHaveText('1 枚');
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+  // ブラウザはフォルダ選択のファイルに webkitRelativePath (例: 素材/イントロ/a.png) を付ける。それをそのまま再現して選ばせる
+  // (Playwright の setInputFiles にフォルダを渡すと、選んだあとにファイルが読めなくなるため。フォルダの読み取りはブラウザの仕事)
+  await page.evaluate(
+    ({ files }) => {
+      const picked = files.map(({ path, b64 }) => {
+        const f = new File([Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0))], path.split('/').pop()!, { type: 'image/png' });
+        Object.defineProperty(f, 'webkitRelativePath', { value: path });
+        return f;
+      });
+      const input = document.querySelector('[data-background="slides-folder"]') as HTMLInputElement;
+      Object.defineProperty(input, 'files', { configurable: true, value: picked });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+    {
+      files: [
+        { path: '素材/イントロ/a.png', b64: a!.toString('base64') },
+        { path: '素材/Chorus/b.png', b64: b!.toString('base64') },
+        { path: '素材/c.png', b64: c!.toString('base64') },
+        { path: '素材/旅行/d.png', b64: d!.toString('base64') },
+      ],
+    },
+  );
+  const list = page.locator('[data-background="slide-list"]');
+  await expect(list.locator('.slide-item')).toHaveCount(4);
+  // ファイル名の順 (a, b, c, d)
+  await expect(list.locator('.slide-name')).toHaveText(['a.png', 'b.png', 'c.png', 'd.png']);
+  expect(await savedKinds(page)).toEqual(['intro', 'chorus', null, null]);
+  await expect(page.locator('[data-zone="intro"] .slide-zone-count')).toHaveText('1 枚');
+  await expect(page.locator('[data-zone="chorus"] .slide-zone-count')).toHaveText('1 枚');
 });
 
 test('ドラッグ&ドロップ: 入れ場所へ落とすとその区切りに、カードへ落とすと足される。1 枚だけ落とすと 1 枚の背景', async ({ page }) => {
@@ -120,7 +124,7 @@ test('ドラッグ&ドロップ: 入れ場所へ落とすとその区切りに�
     );
   };
   // 1 枚だけをカードへ: 今までどおり 1 枚の背景 (スライドショーではない)
-  await drop('.background-card', [{ name: 'one.png', buf: a! }]);
+  await drop('[data-background="card"]', [{ name: 'one.png', buf: a! }]);
   await expect.poll(() => page.evaluate(async () => (await import('/src/core/store.ts')).store.background?.ref)).toBe('one.png');
   expect(await page.evaluate(async () => (await import('/src/core/store.ts')).store.background?.slides ?? null)).toBeNull();
   // 入れ場所 (サビ) へ 1 枚: 今の 1 枚の背景を含めて、スライドショーになる
@@ -129,7 +133,7 @@ test('ドラッグ&ドロップ: 入れ場所へ落とすとその区切りに�
   await expect(list.locator('.slide-item')).toHaveCount(2);
   expect(await savedKinds(page)).toEqual([null, 'chorus']);
   // カードへ 1 枚 (スライドショーがあるので足される。区切りは指定なし)
-  await drop('.background-card', [{ name: 'more.png', buf: c! }]);
+  await drop('[data-background="card"]', [{ name: 'more.png', buf: c! }]);
   await expect(list.locator('.slide-item')).toHaveCount(3);
   expect(await savedKinds(page)).toEqual([null, 'chorus', null]);
 });

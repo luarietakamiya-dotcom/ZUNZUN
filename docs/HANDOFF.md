@@ -504,6 +504,11 @@ Live Stage のカメラと、奥から手前へ来る光（ユーザー要望 20
 - **ファイル**: `core/render/slide-input.ts` (純粋: `folderKindOf`・`entriesFromFiles`・`entriesFromPaths`・`entriesForZone`・`SLIDE_ZONES`)、`ui/panels/drop-files.ts` (ドロップされたフォルダの中身を `webkitGetAsEntry` で読む。**drop イベントの同期の間に entry を取る**必要あり。フォルダが無ければふつうのファイル一覧)、`store.ts` (`setBackgroundSlides` / `setSlideKind` / `removeSlide`)、`ui/panels/background-card.ts`。ライブプレビューの読み込みキーは画像の sha256 の並び (区切りを変えただけでは読み込み直さない)。
 - **検証したこと**: Vitest (区切りの優先・フォルダ名・足す/置き換え/外す/保存)、E2E (`slide-input.spec.ts`: 入れ場所・フォルダ選択 (実フォルダ)・ドロップ (合成 DataTransfer のファイル)・保存)。**未検証**: 実際のフォルダのドラッグ&ドロップ (ブラウザの `webkitGetAsEntry` でフォルダを読む所。合成のドロップではフォルダを作れない)、iPhone・スマホ (ドラッグ&ドロップはなく、入れ場所の「押して選ぶ」で使う)。
 
+### 2026-10-03 ビジュアライザーの既定を「なし」に（ユーザー「ビジュアライザーは最初は何もつけないのがデフォルトにしよう！」）
+- `src/visualizers/none/`: 何も描かないプリセット `none` (名前「なし / None」)。`manifest.empty = true` で宣言。Host は `empty` のプリセットを「ビジュアライザー」の層として描かない (`available('visualizer')` が false) ので、背景・素材・歌詞だけが見える (ほかのプリセットは黒で覆う)。登録の先頭 = 選択欄の先頭 = 既定。`defaultProject().visualizer.preset` も `'none'`。保存済みのプロジェクト (preset が入っている) は今までどおり。
+- 注意: 書き出しのファイル名は `曲名_none.mp4` になる。「なし」のときも書き出せる (背景・歌詞だけの映像)。
+- 検証したこと: Vitest (none の manifest・登録順・既定)、E2E (`preset-none.spec.ts`: 既定で選ばれている・先頭に出る・「なし」のとき背景の緑が見え、Solar Gate では黒で覆う)。全件 E2E を流している間にコードを変えたので 16 件が落ちたが、**現在のコードで落ちたファイルを再実行したら全部通った** (同時実行の負荷とコード変更が原因)。**教訓: E2E 全件を流している間は、ソースを変えない**。
+
 ### 2026-10-02 スマホ表示（ユーザー「今のはそのままに、機能をそのまま使えるスマホ用メニューつくれば？」「自動ではなくても、スマホ用インデックスでもいいよ」）
 - **M1 済み**: `ui/layout.ts`（PC 表示 / スマホ表示の選び方。画面の幅 760px 以下で自動、`setLayout` で手で選ぶ、アドレスの `?mobile` / `?pc`、localStorage `zunzun.layout`）、`ui/mobile-shell.ts`（下のメニュー 5 つ: 音楽 / 歌詞 / 映像〔ビジュアライザー・リリックモーション・背景と素材〕/ 書き出し / その他〔保存・使い方 + 言語・ライセンス・PC 表示〕。上は再生欄、音楽・書き出しでは小さなプレビューを上に固定）、`main.ts`（切り替えたら枠組みを作り直し、同じパネルを開く）。パネルの中身は PC 表示と同じものを使い、並べ方は style.css の `.mobile-shell` の中だけで変える。
 - PC 表示: `shell.ts` は片づけ（返す関数）と、狭い画面で PC 表示を選んだときだけ出る「スマホ表示」ボタンを足しただけ。広い画面の見た目は変えていない。今のタブはモジュールに置いた（`pcActive` / `selectPcPanel`）。

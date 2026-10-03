@@ -76,7 +76,8 @@ export class VisualizerHost {
   set view(v: ViewSettings) {
     this._view = normalizeView(v);
   }
-  private current: { preset: VisualizerPreset; moduleId: string } | null = null;
+  /** empty = 何も描かないプリセット (manifest.empty。「なし」) */
+  private current: { preset: VisualizerPreset; moduleId: string; empty: boolean } | null = null;
   private width = 1;
   private height = 1;
   /** setPreset() の呼び出し世代。init() が完了する前に別の setPreset() が来た場合に古い方を捨てる */
@@ -152,7 +153,7 @@ export class VisualizerHost {
     // 作ったときの仮の縦横比のまま拡大されて描かれていた。2026-10-02 ユーザー報告)
     preset.resize(this.width, this.height);
     const previous = this.current;
-    this.current = { preset, moduleId: mod.manifest.id };
+    this.current = { preset, moduleId: mod.manifest.id, empty: mod.manifest.empty === true };
     this.postfx.setScene(preset.scene, preset.camera);
     this.postfx.configure(mod.manifest.post ?? {});
     previous?.preset.dispose();
@@ -202,7 +203,7 @@ export class VisualizerHost {
     this.overlay.animate(frame);
     const plan = framePlan(comp, (id) => {
       if (id === 'background') return this.background.active;
-      if (id === 'visualizer') return this.current != null;
+      if (id === 'visualizer') return this.current != null && !this.current.empty;
       if (id === 'lyrics' || id === 'overlays') return true;
       return isMediaLayer(id) && this.media.has(id.slice(6));
     });

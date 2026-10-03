@@ -70,6 +70,7 @@ function thumbUrl(file: File): string {
 
 export function createBackgroundCard(): HTMLElement {
   const root = h('div', 'background-card');
+  root.dataset.background = 'card';
   root.append(
     h('h3', 'lyrics-h3', tr('背景 (写真・動画)', 'Background (photo / video)')),
     h(
