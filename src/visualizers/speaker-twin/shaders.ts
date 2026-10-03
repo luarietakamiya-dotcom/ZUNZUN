@@ -16,6 +16,7 @@ export const MAX_WAVES = 5;
  * - キャビネットの輪郭 (角の丸い四角)
  * - 足元のイコライザー (16 本の棒。左の台は低〜中域、右の台は中〜高域の帯域)
  * 拍の波は、強く鳴った側のウーファーから広がる。
+ * 注意: GLSL の予約語 (half など) や関数名 (main) を変数名にしない (コンパイルが失敗して、描画が真っ黒になる)。
  */
 export function createTwinMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
@@ -88,50 +89,7 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
         return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
       }
 
-      /** 1 台ぶん。p = 画面の位置、c = 中心、cap = ウーファーの動き、tw = ツイーターの強さ */
-      void main() {
-        vUv = uv;
-        gl_Position = vec4(position.xy, 0.0, 1.0);
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      #define RINGS ${WOOFER_RINGS}
-      #define BARS ${STRIP_BARS}
-      #define WAVES ${MAX_WAVES}
-      uniform float aspect;
-      uniform vec2 cL;
-      uniform vec2 cR;
-      uniform float radius;
-      uniform float capL;
-      uniform float capR;
-      uniform float twL;
-      uniform float twR;
-      uniform float exL[RINGS];
-      uniform float exR[RINGS];
-      uniform float stripL[BARS];
-      uniform float stripR[BARS];
-      uniform vec2 waveC[WAVES];
-      uniform float waveR[WAVES];
-      uniform float waveA[WAVES];
-      uniform float stripAmount;
-      uniform float intensity;
-      uniform vec3 colA;
-      uniform vec3 colB;
-      uniform vec3 colCap;
-      varying vec2 vUv;
-
-      float line(float d, float w) {
-        float x = d / w;
-        return exp(-x * x);
-      }
-
-      /** 角の丸い四角の、縁までの距離 (正 = 外) */
-      float roundBox(vec2 q, vec2 hs, float r) {
-        vec2 d = abs(q) - hs + r;
-        return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
-      }
-
-      /** 1 台ぶん。p = 画面の位置、c = 中心、cap = ウーファーの動き、tw = ツイーターの強さ */
+      /** 1 台ぶん。p = 画面の位置、c = 中心、cap = ウーファーの動き、tw = ツイーターの強さ、mc / sc = 主な色と副の色 */
       vec3 speaker(vec2 p, vec2 c, float cap, float tw, float ex[RINGS], float strip[BARS], vec3 mc, vec3 sc) {
         vec2 q = (p - c) / radius;
         vec3 col = vec3(0.0);
