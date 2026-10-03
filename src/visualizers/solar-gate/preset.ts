@@ -1,41 +1,31 @@
 import * as THREE from 'three';
-import { Reflector } from 'three/addons/objects/Reflector.js';
 import { shapeAudio, shapeBands } from '../../core/visualizer/response';
 import type { AudioFrame, CommonParams, VisualizerInitContext, VisualizerPreset } from '../../core/types';
 import { solarGatePalette, type SolarGatePalette } from './palette';
-import {
-  CURTAIN_COUNT,
-  CURTAIN_PLANE,
-  createCurtainMaterial,
-  createFlareMaterial,
-  createPortalMaterial,
-  createSkyMaterial,
-  FRINGE_SECTORS,
-  floorReflectorShader,
-  PLANE_EXTENT,
-} from './shaders';
+import { createFlareMaterial, createPortalMaterial, createSkyMaterial, FRINGE_SECTORS, PLANE_EXTENT } from './shaders';
 import { makeRadialTexture } from './textures';
 
 /**
- * Solar Gate — 黒い宇宙の水面に立つ、金の月食リング。
+ * Solar Gate — 黒い宇宙に浮かぶ、金の月食リング。
  * 2026-10-03 ユーザー「金の月食リング。オーロラ (フレア)、棒というよりもオーロラみたいなのが伸びる感じ。ほかももっといい感じに」で作り直した
- * (上書き)。以前の 200 本の細い光線は、オーロラの縁とフレアに変えた。
+ * (上書き)。以前の 200 本の細い光線は、オーロラの縁とフレアに変えた。同日「フレアの棒が目立つ → 隣の光と曲線でつなぐ」
+ * 「リングの中は真っ暗 (画像を入れられる)」「周りの光柱と水面は入れず、宇宙にする」で、筋をゆるいうねりにし、
+ * 光のカーテンと水面を外した (リングの中へ画像を入れるときは、オーバーレイで画像を重ねる)。
  *
  * 反応の仕組み (docs/ARCHITECTURE.md「プリセット初期3種の反応設計」):
  * - 円環そのものは拡大縮小しない (常に scale 1)。明るさだけが変わる。
  * - 月食リングのフレア: リングの 1 か所が太陽のように燃え (ダイヤモンド)、そこからオーロラのようなフレアが外へ流れる。
  *   燃える位置はゆっくり輪を回り (約 40 秒で 1 周)、拍で少し速くなる。強さは rms・mid・beat で変わる。
  * - bass: 輪のまわりに、やわらかいオーロラの縁が伸びる。方位ごとに担当の帯域を持たせ、スペクトルの形も出す。
- * - beat: 地面から立ち上がるオーロラのカーテン (9 本) がフラッシュする。カーテンの高さと明るさは、担当の帯域と低音で変わる。
+ * - beat: 円環と、燃えるフレアが光る (光過敏への配慮で、立ち上がりは速く、戻りはゆっくり)。
  * - high: 円周から火の粉のような粒子が放出される。ビートの瞬間には小さなバーストも出す。星が金色にまたたく。
- * - mid: 門の内側の膜 (portal) の輝き。rms: 空の星雲のもや。
- * - 水面 (Reflector) に全体が縦に長く映り込み、さざ波が立ち、Bloom でにじむ。
+ * - 門の内側は真っ暗 (不透明な黒)。rms: 空の星雲のもや。Bloom でにじむ。
  *
  * 乱数は Host から渡される ctx.rng (project.seed 由来) だけを使い、Math.random は使わない。
  */
 
 const RING_RADIUS = 2.6;
-const RING_CENTER_Y = RING_RADIUS + 0.32;
+const RING_CENTER_Y = 3;
 /** 輪のまわりのオーロラの縁の方位の数 (shaders.ts の FRINGE_SECTORS と同じ) */
 const RAY_COUNT = FRINGE_SECTORS;
 /** 縁の最大の伸び (世界の長さ) */
@@ -47,28 +37,21 @@ const STAR_COUNT = 1100;
 /** 月食のフレアの燃える位置が輪を 1 周する秒数 (拍・Motion で速くなる)。初めは右上 (ラジアン) */
 const FLARE_PERIOD_SEC = 40;
 const FLARE_START_ANGLE = 0.95;
-/** カーテンの高さ (世界の長さ): 静かなとき → いちばん高いとき */
-const CURTAIN_MIN_H = 4.2;
-const CURTAIN_MAX_H = 11.5;
 const CAMERA_FOV = 42;
 const CAMERA_BASE_DISTANCE = 13;
 /** 画面の横幅に最低限収めたい範囲 (円環 + 光線の根元付近)。縦長の書き出しでもはみ出さないようにする */
 const FIT_HALF_WIDTH = RING_RADIUS + 1.3;
-const LOOK_AT = new THREE.Vector3(0, 2.75, 0);
+const LOOK_AT = new THREE.Vector3(0, RING_CENTER_Y, 0);
 
 export interface SolarGateInspection {
   ringScale: number;
   /** 輪のまわりのオーロラの縁の、方位ごとの伸びの平均 (世界の長さ) */
   meanRayLength: number;
   activeParticles: number;
-  /** カーテンの明るさの倍率 (拍でフラッシュする) */
-  pillarStrength: number;
   cameraDistance: number;
   /** 月食のフレアの強さ (0..) と、燃えている位置 (ラジアン。0 = 右、反時計回り) */
   flareStrength: number;
   flareAngle: number;
-  /** カーテンの高さの平均 (世界の長さ) */
-  curtainHeight: number;
 }
 
 export class SolarGatePreset implements VisualizerPreset {
@@ -76,7 +59,6 @@ export class SolarGatePreset implements VisualizerPreset {
   readonly camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 400);
 
   private rng: () => number = () => 0.5;
-  private renderer: THREE.WebGLRenderer | null = null;
   private themeName = '';
   private palette: SolarGatePalette = solarGatePalette('default');
   private t = 0;
@@ -92,7 +74,7 @@ export class SolarGatePreset implements VisualizerPreset {
   private innerRingMaterial!: THREE.MeshBasicMaterial;
   private tickGroup!: THREE.Group;
   private tickMaterial!: THREE.MeshBasicMaterial;
-  private portalMaterial!: THREE.ShaderMaterial;
+  private portalMaterial!: THREE.MeshBasicMaterial;
 
   // 月食のフレアと、輪のまわりのオーロラの縁
   private flareMaterial!: THREE.ShaderMaterial;
@@ -104,14 +86,9 @@ export class SolarGatePreset implements VisualizerPreset {
   private readonly rayLength = new Float32Array(RAY_COUNT);
   private readonly shapedBands = new Float32Array(64);
 
-  // オーロラのカーテン・床・空
-  private pillarMaterial!: THREE.ShaderMaterial;
-  private readonly curtainLevel = new Float32Array(CURTAIN_COUNT);
-  private readonly curtainHeight = new Float32Array(CURTAIN_COUNT).fill(CURTAIN_MIN_H);
-  private poolMaterial!: THREE.MeshBasicMaterial;
+  // 空 (宇宙)
   private skyMaterial!: THREE.ShaderMaterial;
   private starMaterial!: THREE.PointsMaterial;
-  private reflector!: Reflector;
 
   // 粒子 (固定長のプール。寿命が尽きたものを再利用する)
   private particlePositions!: Float32Array;
@@ -128,15 +105,12 @@ export class SolarGatePreset implements VisualizerPreset {
 
   init(ctx: VisualizerInitContext): void {
     this.rng = ctx.rng;
-    this.renderer = ctx.renderer;
     this.scene.background = new THREE.Color(0x000000);
 
     this.buildSky();
     this.buildStars();
-    this.buildFloor();
     this.buildGate();
     this.buildFlare();
-    this.buildPillar();
     this.buildParticles();
 
     this.applyTheme(String(ctx.params.colorTheme ?? 'default'));
@@ -156,7 +130,6 @@ export class SolarGatePreset implements VisualizerPreset {
 
     this.updateRays(dt, a.bass, intensity);
     this.updateGateLights(dt, a, intensity, motion);
-    this.updateCurtains(dt, a.bass, a.beat, intensity);
     this.updateParticles(dt, frame, a.high, a.beat, intensity, motion);
     this.updateCamera(a.beat, params);
   }
@@ -172,37 +145,27 @@ export class SolarGatePreset implements VisualizerPreset {
     const tanHalfV = Math.tan(THREE.MathUtils.degToRad(CAMERA_FOV / 2));
     const fitDistance = FIT_HALF_WIDTH / (tanHalfV * aspect);
     this.baseDistance = Math.max(CAMERA_BASE_DISTANCE, fitDistance);
-
-    // 反射は半解像度で十分 (シェーダー側で縦方向ににじませるので、細部は見えない)
-    const pr = this.renderer?.getPixelRatio() ?? 1;
-    this.reflector?.getRenderTarget().setSize(Math.max(1, Math.round(w * pr * 0.5)), Math.max(1, Math.round(h * pr * 0.5)));
   }
 
   dispose(): void {
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;
-    this.reflector?.dispose();
     this.scene.clear();
-    this.renderer = null;
   }
 
   /** テスト用: 反応の結果を数値で覗く (描画には使わない)。 */
   inspect(): SolarGateInspection {
     let sum = 0;
     for (let i = 0; i < RAY_COUNT; i++) sum += this.rayLength[i]!;
-    let ch = 0;
-    for (let i = 0; i < CURTAIN_COUNT; i++) ch += this.curtainHeight[i]!;
     let active = 0;
     for (let i = 0; i < PARTICLE_COUNT; i++) if (this.pLife[i]! > 0) active++;
     return {
       ringScale: this.ring.scale.x,
       meanRayLength: sum / RAY_COUNT,
       activeParticles: active,
-      pillarStrength: this.pillarMaterial.uniforms.strength!.value as number,
       cameraDistance: this.baseDistance,
       flareStrength: this.flareMaterial.uniforms.strength!.value as number,
       flareAngle: this.flareAngle,
-      curtainHeight: ch / CURTAIN_COUNT,
     };
   }
 
@@ -229,9 +192,9 @@ export class SolarGatePreset implements VisualizerPreset {
     const positions = new Float32Array(STAR_COUNT * 3);
     const colors = new Float32Array(STAR_COUNT * 3);
     for (let i = 0; i < STAR_COUNT; i++) {
-      // 門の奥側の半球 (仰角 4°〜75°) に散らす
+      // 門の奥側の半球に、上下とも散らす (仰角 -70°〜75°)
       const az = (this.rng() - 0.5) * Math.PI * 1.4;
-      const el = THREE.MathUtils.degToRad(4 + Math.pow(this.rng(), 0.7) * 71);
+      const el = THREE.MathUtils.degToRad(-70 + this.rng() * 145);
       const r = 100;
       positions[i * 3] = Math.sin(az) * Math.cos(el) * r;
       positions[i * 3 + 1] = Math.sin(el) * r;
@@ -260,33 +223,6 @@ export class SolarGatePreset implements VisualizerPreset {
     const stars = new THREE.Points(geo, this.starMaterial);
     stars.renderOrder = -9;
     this.scene.add(stars);
-  }
-
-  private buildFloor(): void {
-    const geo = this.track(new THREE.PlaneGeometry(90, 90));
-    this.reflector = new Reflector(geo, {
-      clipBias: 0.003,
-      textureWidth: 512,
-      textureHeight: 512,
-      color: 0xffffff,
-      shader: floorReflectorShader,
-    });
-    this.reflector.rotation.x = -Math.PI / 2;
-    this.scene.add(this.reflector);
-
-    // 門の足元の光だまり (床に落ちる光)
-    this.poolMaterial = this.track(
-      new THREE.MeshBasicMaterial({
-        map: this.track(makeRadialTexture(64)),
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      }),
-    );
-    const pool = new THREE.Mesh(this.track(new THREE.PlaneGeometry(9, 5)), this.poolMaterial);
-    pool.rotation.x = -Math.PI / 2;
-    pool.position.set(0, 0.01, 0.4);
-    this.scene.add(pool);
   }
 
   private buildGate(): void {
@@ -322,6 +258,7 @@ export class SolarGatePreset implements VisualizerPreset {
     this.tickGroup.add(ticks);
     this.gate.add(this.tickGroup);
 
+    // 真っ暗な内側 (不透明。後ろの星や星雲を隠す)
     this.portalMaterial = this.track(createPortalMaterial());
     const portal = new THREE.Mesh(this.track(new THREE.CircleGeometry(RING_RADIUS * 0.97, 128)), this.portalMaterial);
     portal.position.z = -0.02;
@@ -346,14 +283,6 @@ export class SolarGatePreset implements VisualizerPreset {
       this.rayLength[i] = 0.05;
     }
     this.writeReach();
-  }
-
-  private buildPillar(): void {
-    this.pillarMaterial = this.track(createCurtainMaterial());
-    const plane = new THREE.Mesh(this.track(new THREE.PlaneGeometry(CURTAIN_PLANE.width, CURTAIN_PLANE.height)), this.pillarMaterial);
-    // 板の下の端を地面 (y = 0) に置く。リングの少し奥
-    plane.position.set(0, CURTAIN_PLANE.height / 2, -0.7);
-    this.scene.add(plane);
   }
 
   private buildParticles(): void {
@@ -388,16 +317,11 @@ export class SolarGatePreset implements VisualizerPreset {
     this.skyMaterial.uniforms.topColor!.value.copy(p.skyTop);
     this.skyMaterial.uniforms.horizonColor!.value.copy(p.skyHorizon);
     this.skyMaterial.uniforms.glowColor!.value.copy(p.glow);
-    this.portalMaterial.uniforms.color!.value.copy(p.portal);
-    this.pillarMaterial.uniforms.color!.value.copy(p.pillar);
     // フレア: 燃える所は輪の色を明るく、オーロラの縁は光線の色
     this.flareMaterial.uniforms.color!.value.copy(p.ring).multiplyScalar(1.15);
     this.flareMaterial.uniforms.fringeColor!.value.copy(p.rays);
     this.innerRingMaterial.color.copy(p.ring).multiplyScalar(0.6);
     this.tickMaterial.color.copy(p.ring).multiplyScalar(0.12);
-    const floorUniforms = (this.reflector.material as THREE.ShaderMaterial).uniforms;
-    floorUniforms.floorColor!.value.copy(p.floor);
-    floorUniforms.horizonColor!.value.copy(p.skyHorizon);
   }
 
   private updateRays(dt: number, bass: number, intensity: number): void {
@@ -427,8 +351,6 @@ export class SolarGatePreset implements VisualizerPreset {
     const p = this.palette;
     // 円環: 大きさは変えず、明るさだけを beat/mid で上げる (細い線なので、前より少し明るめに)
     this.ringMaterial.color.copy(p.ring).multiplyScalar(1.0 + a.beat * 0.8 * intensity + a.mid * 0.2);
-    this.portalMaterial.uniforms.strength!.value = 0.02 + a.mid * 0.16 * intensity + a.beat * 0.05;
-    this.portalMaterial.uniforms.time!.value += dt * (0.25 + motion * 1.1);
     this.tickGroup.rotation.z += dt * (0.02 + motion * 0.08);
 
     // 月食のフレア: 強さは rms・mid・beat をなめらかにつないだもの (立ち上がりは速く、戻りはゆっくり。光過敏への配慮)
@@ -443,37 +365,9 @@ export class SolarGatePreset implements VisualizerPreset {
     u.time!.value = this.t;
     u.fringe!.value = 0.55 + 0.4 * a.rms * intensity;
 
-    this.pillarMaterial.uniforms.strength!.value = 0.04 + Math.pow(a.beat, 1.5) * 0.5 * intensity;
-    this.pillarMaterial.uniforms.time!.value = this.t;
-    this.poolMaterial.color.copy(p.glow).multiplyScalar(0.05 + a.bass * 0.3 * intensity + a.beat * 0.12);
     this.skyMaterial.uniforms.glowStrength!.value = 0.22 + a.rms * 0.35 + a.beat * 0.1;
     this.skyMaterial.uniforms.time!.value = this.t;
-    (this.reflector.material as THREE.ShaderMaterial).uniforms.time!.value = this.t;
     this.starMaterial.opacity = 0.55 + a.high * 0.45;
-  }
-
-  /**
-   * オーロラのカーテン: 9 本それぞれが担当の帯域 (左から右へ、低い音 → 高い音 → 低い音と左右対称) と低音で、
-   * 高さと明るさが変わる (立ち上がりは速く、戻りはゆっくり)。静かなときも、低い背の高さで見えている。
-   */
-  private updateCurtains(dt: number, bass: number, beat: number, intensity: number): void {
-    const attack = 1 - Math.exp(-dt * 12);
-    const release = 1 - Math.exp(-dt * 2.2);
-    const heights = this.pillarMaterial.uniforms.height!.value as Float32Array;
-    const levels = this.pillarMaterial.uniforms.level!.value as Float32Array;
-    for (let i = 0; i < CURTAIN_COUNT; i++) {
-      // 中央が低い帯域、両端が高い帯域
-      const dist = Math.abs(i - (CURTAIN_COUNT - 1) / 2) / ((CURTAIN_COUNT - 1) / 2);
-      const bandIdx = Math.min(RAY_BAND_SPAN - 1, Math.floor(dist * RAY_BAND_SPAN * 0.9));
-      const band = this.shapedBands[bandIdx] ?? 0;
-      const target = Math.min(1.4, intensity * (0.5 * bass + 0.6 * band + 0.25 * beat));
-      const cur = this.curtainLevel[i]!;
-      this.curtainLevel[i] = cur + (target - cur) * (target > cur ? attack : release);
-      const lv = this.curtainLevel[i]!;
-      this.curtainHeight[i] = CURTAIN_MIN_H + (CURTAIN_MAX_H - CURTAIN_MIN_H) * Math.min(1, lv);
-      heights[i] = this.curtainHeight[i]!;
-      levels[i] = 0.55 + 0.7 * Math.min(1.2, lv);
-    }
   }
 
   private emitParticle(speedScale: number): void {
@@ -548,7 +442,7 @@ export class SolarGatePreset implements VisualizerPreset {
     const cm = THREE.MathUtils.clamp(params.cameraMotion, 0, 1);
     const orbit = Math.sin(this.t * 0.11) * 0.16 * cm;
     const dist = this.baseDistance * (1 - 0.012 * beat * cm);
-    this.camera.position.set(Math.sin(orbit) * dist, 1.4 + Math.sin(this.t * 0.07) * 0.3 * cm, Math.cos(orbit) * dist);
+    this.camera.position.set(Math.sin(orbit) * dist, RING_CENTER_Y + 0.2 + Math.sin(this.t * 0.07) * 0.3 * cm, Math.cos(orbit) * dist);
     this.camera.lookAt(LOOK_AT);
   }
 }

@@ -92,21 +92,25 @@ describe('SolarGatePreset', () => {
     expect(calm2.inspect().flareAngle).toBe(calm.inspect().flareAngle);
   });
 
-  it('地面のオーロラのカーテンは、低音と帯域で高くなり、静かなときは低い背で見えている', () => {
-    const quiet = makePreset();
-    const loud = makePreset();
-    run(quiet, 90, () => ({}));
-    run(loud, 90, () => ({ bass: 1, beat: 0.5, bands: new Float32Array(64).fill(0.9) }));
-    expect(quiet.inspect().curtainHeight).toBeGreaterThan(3);
-    expect(loud.inspect().curtainHeight).toBeGreaterThan(quiet.inspect().curtainHeight + 3);
-  });
-
-  it('beat でカーテンがフラッシュする', () => {
+  it('リングの中は真っ暗 (不透明な黒)。光の幕と水面は無く、宇宙だけ', () => {
     const p = makePreset();
-    run(p, 5, () => ({ beat: 0 }));
-    const idle = p.inspect().pillarStrength;
-    run(p, 1, () => ({ beat: 1, beatIndex: 0 }));
-    expect(p.inspect().pillarStrength).toBeGreaterThan(idle + 0.3);
+    run(p, 30, () => ({ bass: 1, mid: 1, beat: 1, rms: 1, high: 1 }));
+    const black = p.scene.children
+      .flatMap((c) => [c, ...c.children])
+      .filter((o): o is THREE.Mesh => (o as THREE.Mesh).isMesh === true)
+      .filter((m) => {
+        const mat = m.material as THREE.MeshBasicMaterial;
+        return mat.name === 'SolarGatePortal' && mat.color.getHex() === 0x000000 && !mat.transparent;
+      });
+    expect(black.length).toBe(1);
+    // 水面 (Reflector) と、光の幕・光だまりの板が無い
+    const names: string[] = [];
+    p.scene.traverse((o) => {
+      if ((o as { isReflector?: boolean }).isReflector) names.push('reflector');
+      const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+      if (m && /Curtain|Floor|Pool/.test(m.name)) names.push(m.name);
+    });
+    expect(names).toEqual([]);
   });
 
   it('同じ seed・同じ音声なら粒子の配置まで完全に一致し、seed が違えば変わる (書き出しの再現性)', () => {
