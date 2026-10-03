@@ -114,6 +114,87 @@ describe('SpeakerTwinPreset', () => {
     p.dispose();
   });
 
+  it('波は、最初に速く、遠くでゆっくり広がる (イージング)。広がる一方で、戻らない', () => {
+    const p = makePreset();
+    p.update(frame(0, { bass: 0.8, beat: 1, beatIndex: 0 }), params());
+    const radii: number[] = [];
+    for (let i = 1; i <= 90; i++) {
+      p.update(frame(i / 60, { bass: 0.8, beat: 0.3, beatIndex: 0 }), params());
+      const r = p.inspect().waveRadii[0];
+      if (r !== undefined) radii.push(r);
+    }
+    expect(radii.length).toBeGreaterThan(30);
+    for (let i = 1; i < radii.length; i++) expect(radii[i]!).toBeGreaterThan(radii[i - 1]!);
+    // 最初の 10 コマで進む量 > あとの 10 コマで進む量
+    const early = radii[9]! - radii[0]!;
+    const late = radii[radii.length - 1]! - radii[radii.length - 11]!;
+    expect(early).toBeGreaterThan(late * 2);
+    p.dispose();
+  });
+
+  it('波が反対側のキャビネットに届くと、その輪郭が光る (左から出た波は右、右から出た波は左)。1 つの波で 1 回だけ。やがて戻る', () => {
+    const p = makePreset();
+    // 偶数拍 (左が強い) → 左から波が出て、右が光る
+    p.update(frame(0, { bass: 0.9, beat: 1, beatIndex: 0 }), params({ spacing: 0.3 }));
+    expect(p.inspect().rim.right).toBe(0);
+    let maxRight = 0;
+    let maxLeft = 0;
+    for (let i = 1; i <= 120; i++) {
+      p.update(frame(i / 60, { bass: 0.3, beat: 0.2, beatIndex: 0 }), params({ spacing: 0.3 }));
+      maxRight = Math.max(maxRight, p.inspect().rim.right);
+      maxLeft = Math.max(maxLeft, p.inspect().rim.left);
+    }
+    expect(maxRight).toBeGreaterThan(0.3);
+    expect(maxLeft).toBe(0);
+    // 戻る
+    run(p, 60 * 3, () => ({}), params({ spacing: 0.3 }));
+    expect(p.inspect().rim.right).toBeLessThan(0.02);
+    // 奇数拍 (右が強い) → 右から波が出て、左が光る
+    const q = makePreset();
+    q.update(frame(0, { bass: 0.9, beat: 1, beatIndex: 1 }), params({ spacing: 0.3 }));
+    let leftHit = 0;
+    for (let i = 1; i <= 120; i++) {
+      q.update(frame(i / 60, { bass: 0.3, beat: 0.2, beatIndex: 1 }), params({ spacing: 0.3 }));
+      leftHit = Math.max(leftHit, q.inspect().rim.left);
+    }
+    expect(leftHit).toBeGreaterThan(0.3);
+    p.dispose();
+    q.dispose();
+  });
+
+  it('光るのは 1 つの波につき 1 回だけ (波が通り過ぎたあと、また光り直さない)', () => {
+    const p = makePreset();
+    p.update(frame(0, { bass: 0.9, beat: 1, beatIndex: 0 }), params({ spacing: 0.3 }));
+    // 光って、いったん落ちるまで進める
+    let rises = 0;
+    let prev = 0;
+    for (let i = 1; i <= 300; i++) {
+      p.update(frame(i / 60, { bass: 0, beat: 0, beatIndex: 0 }), params({ spacing: 0.3 }));
+      const r = p.inspect().rim.right;
+      if (r > prev + 0.05) rises++;
+      prev = r;
+    }
+    expect(rises).toBe(1);
+    p.dispose();
+  });
+
+  it('間隔が狭いほど、波は早く反対側に届く (広いと遅い)', () => {
+    const firstHit = (spacing: number): number => {
+      const p = makePreset();
+      p.update(frame(0, { bass: 0.9, beat: 1, beatIndex: 0 }), params({ spacing }));
+      for (let i = 1; i <= 240; i++) {
+        p.update(frame(i / 60, { bass: 0.3, beat: 0.2, beatIndex: 0 }), params({ spacing }));
+        if (p.inspect().rim.right > 0.05) {
+          p.dispose();
+          return i;
+        }
+      }
+      p.dispose();
+      return Infinity;
+    };
+    expect(firstHit(0)).toBeLessThan(firstHit(1));
+  });
+
   it('足元の棒: 左の台は低〜中域、右の台は中〜高域の帯域で伸びる', () => {
     const p = makePreset();
     const bands = new Float32Array(64);

@@ -12,7 +12,8 @@ import { createTwinMaterial, MAX_WAVES, STRIP_BARS, WOOFER_RINGS } from './shade
  * - bass: 両方のウーファーが動く。左は低音そのまま、右は低音を少し弱め、中音を足す (左右で動きが違う)。
  *   その動きが 7 本のリングを中心から外へ、時間差をつけて伝わる。立ち上がりは速く、戻りはゆっくり (光過敏への配慮)。
  * - beat: 拍が変わるたびに、強く鳴る側が左右で入れ替わる (「交互に鳴らす」の量で、もう片方がどれだけ控えめになるか)。
- *   強く鳴った側のウーファーから、圧力波のリングが広がって薄れる (同時に 5 本まで)。
+ *   強く鳴った側のウーファーから、圧力波が広がって薄れる (同時に 5 本まで)。波は先頭が鋭く (R・G・B がずれた縁)、内側へ長い尾と余韻の輪を引き、
+ *   最初に速く遠くでゆっくり広がる。反対側のキャビネットに届くと、その輪郭とウーファーの縁が光る (左右の掛け合い。2026-10-03「波動がださい」で作り直し)。
  * - high: ツイーター (上の小さなコーン) が光る。右の台のほうが少し強い。
  * - 帯域 (bands): 足元の 16 本の棒。左の台は低〜中域、右の台は中〜高域。
  * - intensity: 全体の明るさ。
@@ -28,8 +29,13 @@ const TOTAL_HEIGHT = 4.5;
 const HISTORY_STEP = 1 / 60;
 const RING_DELAY_STEPS = 2;
 const HISTORY_LENGTH = WOOFER_RINGS * RING_DELAY_STEPS + 2;
-const WAVE_SPEED = 1.3;
-const WAVE_FADE = 1.3;
+/** 波の広がり方 (2026-10-03 作り直し): 最初に速く、遠くでゆっくり (イージング)。半径 = 1 + WAVE_REACH × (1 - exp(-経過秒 × WAVE_RATE)) */
+const WAVE_REACH = 3.2;
+const WAVE_RATE = 1.5;
+const WAVE_FADE = 1.0;
+/** 波が反対側のキャビネットの手前 (キャビネットの半幅ぶん手前) に届いたとき、そこが光る強さ (波の明るさにかける) と、戻る速さ */
+const HIT_GAIN = 1.1;
+const RIM_DECAY = 4.5;
 
 interface Palette {
   a: THREE.Color;
@@ -58,6 +64,10 @@ export interface SpeakerTwinInspection {
   /** いま出ている波の数と、波の中心が左右どちらか (-1 = 左、1 = 右) */
   waveCount: number;
   waveSides: number[];
+  /** 波が届いて光る、左右のキャビネットの輪郭の強さ (0 .. 1.2) */
+  rim: { left: number; right: number };
+  /** いま出ている波の半径 (スピーカーの半径 = 1) */
+  waveRadii: number[];
   /** スピーカーの半径と、左右の中心 (画面の高さの半分 = 1) */
   radius: number;
   centers: { left: { x: number; y: number }; right: { x: number; y: number } };
@@ -92,6 +102,11 @@ export class SpeakerTwinPreset implements VisualizerPreset {
   private readonly waveR = new Float32Array(MAX_WAVES);
   private readonly waveA = new Float32Array(MAX_WAVES);
   private readonly waveSide = new Int8Array(MAX_WAVES);
+  private readonly waveAge = new Float32Array(MAX_WAVES);
+  /** 波が反対側に届いたか (1 つの波につき 1 回だけ光らせる) */
+  private readonly waveHit = new Uint8Array(MAX_WAVES);
+  private rimL = 0;
+  private rimR = 0;
   private nextWave = 0;
   private lastBeatIndex = -1;
   private readonly stripL = new Float32Array(STRIP_BARS);
@@ -157,14 +172,29 @@ export class SpeakerTwinPreset implements VisualizerPreset {
       const i = this.nextWave;
       this.nextWave = (this.nextWave + 1) % MAX_WAVES;
       this.waveR[i] = 1.0;
+      this.waveAge[i] = 0;
+      this.waveHit[i] = 0;
       this.waveSide[i] = strongRight ? 1 : -1;
       this.waveA[i] = Math.min(0.85, (0.3 + 0.5 * bass + 0.3 * beat) * (0.6 + 0.8 * intensity));
     }
-    const speed = WAVE_SPEED * (0.6 + 0.8 * motion);
+    // 波: イージングで広がる (Motion で全体が速くなる)。反対側のキャビネットに届いたら、そこの輪郭が光る (1 つの波につき 1 回)
+    const lay = this.layout(params);
+    const reach = (2 * lay.dx) / lay.radius - HALF_WIDTH; // 反対側のキャビネットの手前の端までの、スピーカーの半径の倍数
+    const rate = WAVE_RATE * (0.7 + 0.6 * motion);
+    this.rimL = follow(this.rimL, 0, dt, 1, RIM_DECAY);
+    this.rimR = follow(this.rimR, 0, dt, 1, RIM_DECAY);
     for (let i = 0; i < MAX_WAVES; i++) {
       if (this.waveA[i]! <= 0) continue;
-      this.waveR[i] = this.waveR[i]! + speed * dt;
+      this.waveAge[i] = this.waveAge[i]! + dt;
+      this.waveR[i] = 1 + WAVE_REACH * (1 - Math.exp(-this.waveAge[i]! * rate));
       this.waveA[i] = this.waveA[i]! * Math.exp(-WAVE_FADE * dt);
+      if (!this.waveHit[i] && this.waveR[i]! >= reach) {
+        this.waveHit[i] = 1;
+        const hit = Math.min(1.2, this.waveA[i]! * HIT_GAIN);
+        // 右から出た波 (side = 1) は左を、左から出た波は右を光らせる
+        if (this.waveSide[i]! > 0) this.rimL = Math.max(this.rimL, hit);
+        else this.rimR = Math.max(this.rimR, hit);
+      }
       if (this.waveA[i]! < 0.02) this.waveA[i] = 0;
     }
 
@@ -194,11 +224,13 @@ export class SpeakerTwinPreset implements VisualizerPreset {
     const cl = u.cL!.value as THREE.Vector2;
     const cr = u.cR!.value as THREE.Vector2;
     const waveSides: number[] = [];
+    const waveRadii: number[] = [];
     let waveCount = 0;
     for (let i = 0; i < MAX_WAVES; i++) {
       if (this.waveA[i]! > 0) {
         waveCount++;
         waveSides.push(this.waveSide[i]!);
+        waveRadii.push(this.waveR[i]!);
       }
     }
     return {
@@ -208,6 +240,8 @@ export class SpeakerTwinPreset implements VisualizerPreset {
       strip: { left: Array.from(this.stripL), right: Array.from(this.stripR) },
       waveCount,
       waveSides,
+      rim: { left: this.rimL, right: this.rimR },
+      waveRadii,
       radius: u.radius!.value as number,
       centers: { left: { x: cl.x, y: cl.y }, right: { x: cr.x, y: cr.y } },
       side: this.side,
@@ -223,8 +257,8 @@ export class SpeakerTwinPreset implements VisualizerPreset {
     u.colCap!.value.copy(p.cap);
   }
 
-  private writeUniforms(params: CommonParams & Record<string, unknown>, intensity: number): void {
-    const u = this.material.uniforms;
+  /** 2 台の配置 (半径・中心の左右の距離・中心の高さ)。大きさ・間隔・上下の設定と画面の縦横比から決まる */
+  private layout(params: CommonParams & Record<string, unknown>): { radius: number; dx: number; cy: number } {
     const size = Math.min(1.6, Math.max(0.4, fin(params.size, 1)));
     const radius = BASE_RADIUS * size;
     // 配置: 2 台の中心の間隔は、画面の幅に収まる範囲で (間隔 0 = ぴったり並べる、1 = 左右の端いっぱい)
@@ -239,6 +273,12 @@ export class SpeakerTwinPreset implements VisualizerPreset {
     const oy = Math.min(1, Math.max(-1, fin(params.offsetY, 0)));
     // キャビネットの中心は、足元の棒の下 (-2.45) と上の端 (+2.05) の真ん中 (= -0.2 R) が画面の中心に来るようにする
     const cy = oy * room + radius * 0.2;
+    return { radius, dx, cy };
+  }
+
+  private writeUniforms(params: CommonParams & Record<string, unknown>, intensity: number): void {
+    const u = this.material.uniforms;
+    const { radius, dx, cy } = this.layout(params);
     (u.cL!.value as THREE.Vector2).set(-dx, cy);
     (u.cR!.value as THREE.Vector2).set(dx, cy);
     u.radius!.value = radius;
@@ -246,6 +286,8 @@ export class SpeakerTwinPreset implements VisualizerPreset {
     u.capR!.value = this.capR;
     u.twL!.value = this.twL;
     u.twR!.value = this.twR;
+    u.rimL!.value = this.rimL;
+    u.rimR!.value = this.rimR;
     const exL = u.exL!.value as Float32Array;
     const exR = u.exR!.value as Float32Array;
     for (let k = 0; k < WOOFER_RINGS; k++) {

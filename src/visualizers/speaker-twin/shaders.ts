@@ -15,7 +15,9 @@ export const MAX_WAVES = 5;
  * - ツイーター (q = (0, 1.45)、半径 0.38): 小さなドームと輪。高音で光る
  * - キャビネットの輪郭 (角の丸い四角)
  * - 足元のイコライザー (16 本の棒。左の台は低〜中域、右の台は中〜高域の帯域)
- * 拍の波は、強く鳴った側のウーファーから広がる。
+ * 拍の波 (2026-10-03 ユーザー「波動がちょっとださい」で作り直し): 強く鳴った側のウーファーから広がる。先頭は鋭く明るく (R・G・B が少しずれた縁)、
+ * 内側へ長くやわらかい尾を引き、後ろに 2 本の余韻の輪が付く。色は鳴った側の色 (左 = colA、右 = colB)。
+ * 波が反対側のキャビネットに届くと、そのキャビネットの輪郭とウーファーの縁が光る (rimL / rimR。左右の掛け合い)。
  * 注意: GLSL の予約語 (half など) や関数名 (main) を変数名にしない (コンパイルが失敗して、描画が真っ黒になる)。
  */
 export function createTwinMaterial(): THREE.ShaderMaterial {
@@ -32,6 +34,8 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
       capR: { value: 0 },
       twL: { value: 0 },
       twR: { value: 0 },
+      rimL: { value: 0 },
+      rimR: { value: 0 },
       exL: { value: new Float32Array(WOOFER_RINGS) },
       exR: { value: new Float32Array(WOOFER_RINGS) },
       stripL: { value: new Float32Array(STRIP_BARS) },
@@ -64,6 +68,8 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
       uniform float capR;
       uniform float twL;
       uniform float twR;
+      uniform float rimL;
+      uniform float rimR;
       uniform float exL[RINGS];
       uniform float exR[RINGS];
       uniform float stripL[BARS];
@@ -90,7 +96,7 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
       }
 
       /** 1 台ぶん。p = 画面の位置、c = 中心、cap = ウーファーの動き、tw = ツイーターの強さ、mc / sc = 主な色と副の色 */
-      vec3 speaker(vec2 p, vec2 c, float cap, float tw, float ex[RINGS], float strip[BARS], vec3 mc, vec3 sc) {
+      vec3 speaker(vec2 p, vec2 c, float cap, float tw, float rim, float ex[RINGS], float strip[BARS], vec3 mc, vec3 sc) {
         vec2 q = (p - c) / radius;
         vec3 col = vec3(0.0);
 
@@ -105,7 +111,7 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
           float uu = (0.3 + 0.48 * fk) * (1.0 + 0.07 * e * (0.5 + fk));
           col += mix(mc, sc, fk * 0.5) * line(u - uu, 0.011 + 0.004 * fk) * (0.34 + 0.85 * e);
         }
-        col += mc * (line(u - 0.9, 0.05) * (0.15 + 0.3 * cap) + line(u - 0.9, 0.012) * (0.45 + 0.5 * cap));
+        col += mc * (line(u - 0.9, 0.05) * (0.15 + 0.3 * cap) + line(u - 0.9, 0.012) * (0.45 + 0.5 * cap)) * (1.0 + 0.8 * rim);
 
         // ツイーター (中心 (0, 1.45)、半径 0.38)
         vec2 t = q - vec2(0.0, 1.45);
@@ -115,7 +121,7 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
 
         // キャビネットの輪郭
         float box = roundBox(q - vec2(0.0, 0.1), vec2(1.28, 1.95), 0.28);
-        col += sc * line(box, 0.02) * 0.5;
+        col += sc * line(box, 0.02) * (0.5 + 1.1 * rim);
 
         // 足元のイコライザー (16 本)
         vec2 s = q - vec2(0.0, -2.35);
@@ -134,15 +140,24 @@ export function createTwinMaterial(): THREE.ShaderMaterial {
       void main() {
         vec2 p = vec2((vUv.x - 0.5) * 2.0 * aspect, (vUv.y - 0.5) * 2.0);
         vec3 col = vec3(0.0);
-        col += speaker(p, cL, capL, twL, exL, stripL, colA, colB);
-        col += speaker(p, cR, capR, twR, exR, stripR, colB, colA);
+        col += speaker(p, cL, capL, twL, rimL, exL, stripL, colA, colB);
+        col += speaker(p, cR, capR, twR, rimR, exR, stripR, colB, colA);
 
-        // 拍の波 (強く鳴った側のウーファーから)
+        // 拍の波 (強く鳴った側のウーファーから)。先頭 + 内側の尾 + 余韻の輪 2 本
         for (int i = 0; i < WAVES; i++) {
           float a = waveA[i];
           if (a > 0.001) {
             float d = length(p - waveC[i]) / radius;
-            col += mix(colA, colB, 0.5) * line(d - waveR[i], 0.05 + 0.03 * waveR[i]) * a;
+            float x = d - waveR[i]; // 負 = 先頭より内側
+            vec3 tint = waveC[i].x < 0.0 ? colA : colB;
+            float w = 0.035 + 0.02 * waveR[i];
+            // 先頭: R・G・B が少しずれた縁
+            vec3 fr = vec3(line(x + 0.025, w), line(x, w), line(x - 0.025, w));
+            // 尾: 先頭から内側へ長くやわらかく消える
+            float tail = x < 0.0 ? exp(x / 0.4) * 0.3 * smoothstep(-1.6, -0.05, x) : 0.0;
+            // 余韻の輪
+            float echo = line(x + 0.38, 0.03) * 0.45 + line(x + 0.78, 0.03) * 0.22;
+            col += (fr * (0.45 + 0.55 * tint) * 0.9 + tint * (tail + echo)) * a;
           }
         }
         gl_FragColor = vec4(col * intensity, 1.0);
