@@ -6,8 +6,9 @@ import type { ParticleKind } from './scenes';
  *
  * 背景 (createCityMaterial):
  * - 横長の絵を画面の高さいっぱいに置き、横に流す (scroll は絵の横幅を 1 とした位置)。
- * - つなぎ目: 絵の右端の SEAM の幅と、次の絵 (1 枚なら自分) の左端の SEAM の幅を重ねて、なめらかに溶かす。
- *   1 枚の長さは 1 - SEAM になり、何枚つないでも、どこで切れることもなく回り続ける。
+ * - つなぎ目: 絵を何枚か (別の絵を) つなげて流すときは、絵の右端の seam の幅と、次の絵の左端の seam の幅を重ねて、
+ *   なめらかに溶かす (seam = SEAM)。1 枚の長さは 1 - seam になる。
+ *   1 枚だけ流すときは seam = 0: 絵そのものが左右の端でつながるように作ってある (2026-10-03 の 3 枚をつないだ絵) ので、溶かさない。
  * - ぼかし: 円の中の 16 か所を重みつきで混ぜる (blur = 半径。絵の高さを 1 とした長さ)。
  * - きらめき: 絵を小さな升に分け、升ごとに 1 か所、まわりより明るい所 (窓の灯り・街灯・ネオン・水面の照り返し)
  *   にだけ、十字の光をまたたかせる (空や雲のように一様に明るい所では光らない)。位置とまたたきの速さは升ごとの
@@ -21,7 +22,7 @@ import type { ParticleKind } from './scenes';
 /** 隣の絵と重ねて溶かす幅 (絵の横幅に対する割合) */
 export const SEAM = 0.08;
 /** つなげられる絵の数 (シェーダーのテクスチャの数) */
-export const MAX_SCENES = 6;
+export const MAX_SCENES = 9;
 
 const VERT = /* glsl */ `
 varying vec2 vUv;
@@ -38,6 +39,9 @@ uniform sampler2D map2;
 uniform sampler2D map3;
 uniform sampler2D map4;
 uniform sampler2D map5;
+uniform sampler2D map6;
+uniform sampler2D map7;
+uniform sampler2D map8;
 uniform int count;
 uniform float period;
 uniform float seam;
@@ -58,7 +62,10 @@ vec3 tex(int i, vec2 uv) {
   if (i == 2) return texture2D(map2, uv).rgb;
   if (i == 3) return texture2D(map3, uv).rgb;
   if (i == 4) return texture2D(map4, uv).rgb;
-  return texture2D(map5, uv).rgb;
+  if (i == 5) return texture2D(map5, uv).rgb;
+  if (i == 6) return texture2D(map6, uv).rgb;
+  if (i == 7) return texture2D(map7, uv).rgb;
+  return texture2D(map8, uv).rgb;
 }
 
 /** 並べた絵の上の位置 s (絵の横幅 = 1)、高さ v の色。つなぎ目は溶かす */
@@ -69,7 +76,7 @@ vec3 seq(float s, float v) {
   float local = s - float(i) * period;
   v = clamp(v, texelV * 0.5, 1.0 - texelV * 0.5);
   vec3 c = tex(i, vec2(local, v));
-  if (local < seam) {
+  if (seam > 0.0 && local < seam) {
     int p = i == 0 ? count - 1 : i - 1;
     float w = smoothstep(0.0, 1.0, local / seam);
     c = mix(tex(p, vec2(local + period, v)), c, w);
@@ -156,6 +163,9 @@ export function createCityMaterial(): THREE.ShaderMaterial {
       map3: { value: null },
       map4: { value: null },
       map5: { value: null },
+      map6: { value: null },
+      map7: { value: null },
+      map8: { value: null },
       count: { value: 1 },
       period: { value: 1 - SEAM },
       seam: { value: SEAM },

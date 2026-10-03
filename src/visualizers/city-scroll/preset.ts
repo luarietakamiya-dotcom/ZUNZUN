@@ -22,9 +22,27 @@ import { createCityMaterial, createParticleMaterial, MAX_SCENES, PARTICLE_CODE, 
 /** 舞うものの最大の数 */
 export const MAX_PARTICLES = 240;
 
-export type TextureLoaderFn = (url: string) => Promise<THREE.Texture>;
-const defaultLoader: TextureLoaderFn = async (url) => {
+/** maxWidth: 横幅がこれより大きい絵は、この幅まで縮めて読む (GPU のメモリと、端末のテクスチャの大きさの上限のため) */
+export type TextureLoaderFn = (url: string, maxWidth?: number) => Promise<THREE.Texture>;
+/** 1 枚だけ流すときの絵の横幅の上限 (原画は 5940)。何枚もつなげるときは半分ほどに縮める (9 枚で約 60MB) */
+const SINGLE_MAX_WIDTH = 6000;
+const MULTI_MAX_WIDTH = 3000;
+const defaultLoader: TextureLoaderFn = async (url, maxWidth = SINGLE_MAX_WIDTH) => {
   const tex = await new THREE.TextureLoader().loadAsync(url);
+  const img = tex.image as HTMLImageElement | undefined;
+  if (img && img.width > maxWidth) {
+    const k = maxWidth / img.width;
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.width * k));
+    c.height = Math.max(1, Math.round(img.height * k));
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+    tex.dispose();
+    const small = new THREE.CanvasTexture(c);
+    small.colorSpace = THREE.SRGBColorSpace;
+    small.minFilter = THREE.LinearFilter;
+    small.generateMipmaps = false;
+    return small;
+  }
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;
@@ -36,8 +54,10 @@ export interface CityScrollInspection {
   loaded: boolean;
   /** つないでいる絵の数 */
   count: number;
-  /** 流れた位置 (絵の横幅 = 1。0 .. 枚数 × (1 - SEAM)) */
+  /** 流れた位置 (絵の横幅 = 1。0 .. 枚数 × (1 - seam)。1 枚だけなら seam = 0) */
   scroll: number;
+  /** つなぎ目を溶かす幅 (別の絵をつなげるときだけ SEAM、1 枚だけなら 0) */
+  seam: number;
   blur: number;
   sparkle: number;
   sparkleBoost: number;
@@ -103,6 +123,10 @@ export class CityScrollPreset implements VisualizerPreset {
 
   /** 読んだ絵 (url ごと) */
   private readonly textures = new Map<string, THREE.Texture>();
+  /** 端末が扱えるテクスチャの横幅の上限 (init で WebGL から読む) */
+  private maxTextureSize = 4096;
+  /** つなぎ目を溶かす幅 (1 枚だけなら 0) */
+  private seam = 0;
   private sequence: CityScene[] = [SCENES[0]!];
   private loaded = false;
   private wanted = '';
@@ -144,6 +168,8 @@ export class CityScrollPreset implements VisualizerPreset {
 
   async init(ctx: VisualizerInitContext): Promise<void> {
     this.resize(ctx.width, ctx.height);
+    const max = (ctx.renderer as { capabilities?: { maxTextureSize?: number } }).capabilities?.maxTextureSize;
+    if (typeof max === 'number' && max >= 1024) this.maxTextureSize = max;
     // 舞うものの位置・大きさ・回り方 (seed で決まる)
     const a = this.pGeometry.getAttribute('seedA') as THREE.InstancedBufferAttribute;
     const b = this.pGeometry.getAttribute('seedB') as THREE.InstancedBufferAttribute;
@@ -175,7 +201,7 @@ export class CityScrollPreset implements VisualizerPreset {
     const imgAspect = this.sequence[0]?.aspect ?? 5;
     const dir = params.direction === 'right' ? -1 : 1;
     const v = (scrollSpeed(num(params.speed, 0.35)) / imgAspect) * (1 + 0.4 * motion * k * this.bassSlow);
-    const total = this.sequence.length * (1 - SEAM);
+    const total = this.sequence.length * (1 - this.seam);
     this.scroll = (((this.scroll + dir * v * dt) % total) + total) % total;
     // 舞うものも景色といっしょに流れる (画面の幅 = 1)
     const z = Math.max(1, this.aspect / imgAspect);
@@ -208,6 +234,7 @@ export class CityScrollPreset implements VisualizerPreset {
       loaded: this.loaded,
       count: u.count!.value as number,
       scroll: this.scroll,
+      seam: this.seam,
       blur: u.blur!.value as number,
       sparkle: u.sparkle!.value as number,
       sparkleBoost: u.sparkleBoost!.value as number,
@@ -226,23 +253,26 @@ export class CityScrollPreset implements VisualizerPreset {
     this.wanted = typeof id === 'string' ? id : '';
     const seq = sceneSequence(id);
     const my = ++this.generation;
-    const missing = seq.filter((s) => !this.textures.has(s.url));
-    const got = await Promise.all(missing.map((s) => CityScrollPreset.loadTexture(s.url).catch(() => null)));
+    // 1 枚だけなら原画の大きさ、何枚もつなげるときは縮めて読む (端末のテクスチャの上限も超えない)。大きさが変わったら読み直す
+    const width = Math.min(this.maxTextureSize, seq.length > 1 ? MULTI_MAX_WIDTH : SINGLE_MAX_WIDTH);
+    const keyOf = (s: CityScene): string => `${s.url}@${width}`;
+    const missing = seq.filter((s) => !this.textures.has(keyOf(s)));
+    const got = await Promise.all(missing.map((s) => CityScrollPreset.loadTexture(s.url, width).catch(() => null)));
     if (my !== this.generation) {
       for (const t of got) t?.dispose();
       return;
     }
     missing.forEach((s, i) => {
       const t = got[i];
-      if (t) this.textures.set(s.url, t);
+      if (t) this.textures.set(keyOf(s), t);
     });
-    const usable = seq.filter((s) => this.textures.has(s.url)).slice(0, MAX_SCENES);
+    const usable = seq.filter((s) => this.textures.has(keyOf(s))).slice(0, MAX_SCENES);
     if (usable.length === 0) return;
     // 使わない絵を片づける
-    for (const [url, t] of [...this.textures]) {
-      if (!usable.some((s) => s.url === url)) {
+    for (const [key, t] of [...this.textures]) {
+      if (!usable.some((s) => keyOf(s) === key)) {
         t.dispose();
-        this.textures.delete(url);
+        this.textures.delete(key);
       }
     }
     const changed = usable.length !== this.sequence.length || usable.some((s, i) => s.id !== this.sequence[i]?.id);
@@ -250,10 +280,14 @@ export class CityScrollPreset implements VisualizerPreset {
     this.loaded = true;
     if (changed) this.scroll = 0;
     const u = this.bgMaterial.uniforms;
-    for (let i = 0; i < MAX_SCENES; i++) u[`map${i}`]!.value = this.textures.get((usable[i] ?? usable[0]!).url) ?? null;
+    for (let i = 0; i < MAX_SCENES; i++) u[`map${i}`]!.value = this.textures.get(keyOf(usable[i] ?? usable[0]!)) ?? null;
     u.count!.value = usable.length;
+    // 別の絵をつなげるときだけ、つなぎ目を溶かす (1 枚は絵そのものが左右でつながっている)
+    this.seam = usable.length > 1 ? SEAM : 0;
+    u.seam!.value = this.seam;
+    u.period!.value = 1 - this.seam;
     u.imgAspect!.value = usable[0]!.aspect;
-    const img = this.textures.get(usable[0]!.url)?.image as { height?: number } | undefined;
+    const img = this.textures.get(keyOf(usable[0]!))?.image as { height?: number } | undefined;
     u.texelV!.value = 1 / Math.max(1, img?.height ?? 400);
   }
 
