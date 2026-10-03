@@ -90,6 +90,8 @@ async function measure(page: Page, preset: string, extra: Record<string, unknown
 const CASES: [string, Record<string, unknown>][] = [
   ['solar-gate', {}],
   ['speaker-cone', {}],
+  ['led-matrix', {}],
+  ['led-matrix', { columns: '24', layout: 'center', height: 1, dot: 1, grid: 1 }],
   ['spectrum-wave', {}],
   ['spectrum-wave', { height: 1, ribbons: 1, fill: 1, mirror: 1 }],
   ['edge-equalizer', {}],
