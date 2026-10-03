@@ -50,9 +50,9 @@ const seeds = (p: CityScrollPreset): number[] => {
 };
 
 describe('場面の定義と設定', () => {
-  it('街並みは 10 枚で、「全部つなげる」は 10 枚の並び。設定の項目は場面・向き・速さ・ぼかし・きらめき・舞うもの・量', () => {
-    expect(SCENES.map((s) => s.id)).toEqual(['grand-avenue', 'neon-night', 'old-downtown', 'harbor-town', 'tram-street', 'palace-plaza', 'residential', 'rainy-street', 'country-road', 'marathon']);
-    expect(sceneSequence('all')).toHaveLength(10);
+  it('街並みは 11 枚で、「全部つなげる」は 11 枚の並び。設定の項目は場面・向き・速さ・ぼかし・きらめき・舞うもの・量', () => {
+    expect(SCENES.map((s) => s.id)).toEqual(['grand-avenue', 'neon-night', 'old-downtown', 'harbor-town', 'tram-street', 'palace-plaza', 'residential', 'rainy-street', 'shopping-street', 'country-road', 'marathon']);
+    expect(sceneSequence('all')).toHaveLength(11);
     // 絵は 5940 × 1195 (1980 × 1195 を 3 枚つないだもの)
     for (const s of SCENES) expect(s.aspect).toBeCloseTo(5940 / 1195, 6);
     expect(sceneSequence('neon-night').map((s) => s.id)).toEqual(['neon-night']);
@@ -77,7 +77,7 @@ describe('場面の定義と設定', () => {
 });
 
 describe('CityScrollPreset', () => {
-  it('最初の絵を読んでから描き始める。場面を変えると読み直し、使わなくなった絵は片づける。全部つなげると 10 枚 (縮めて読み直す)', async () => {
+  it('最初の絵を読んでから描き始める。場面を変えると読み直し、使わなくなった絵は片づける。全部つなげると 11 枚 (縮めて読み直す)', async () => {
     const p = await makePreset(params({ scene: 'neon-night' }));
     expect(p.inspect()).toMatchObject({ scene: 'neon-night', loaded: true, count: 1 });
     const first = loaded[0]!;
@@ -85,9 +85,9 @@ describe('CityScrollPreset', () => {
     first.addEventListener('dispose', () => (disposed = true));
     p.update(frame(0), params({ scene: 'all' }));
     await settle();
-    expect(p.inspect()).toMatchObject({ scene: 'all', count: 10 });
-    // 何枚もつなげるときは縮めて読むので、1 枚のときに読んだ絵 (原画の大きさ) は片づけて、10 枚とも読み直す
-    expect(loaded).toHaveLength(1 + 10);
+    expect(p.inspect()).toMatchObject({ scene: 'all', count: 11 });
+    // 何枚もつなげるときは縮めて読むので、1 枚のときに読んだ絵 (原画の大きさ) は片づけて、11 枚とも読み直す
+    expect(loaded).toHaveLength(1 + 11);
     expect(disposed).toBe(true);
     p.update(frame(0), params({ scene: 'harbor-town' }));
     await settle();
@@ -127,11 +127,11 @@ describe('CityScrollPreset', () => {
   it('別の絵をつなげて流す (全部つなげる) ときだけ、つなぎ目を溶かす。1 周は 枚数 × (1 - SEAM)', async () => {
     const pr = params({ scene: 'all', direction: 'left', speed: 1 });
     const all = await makePreset(pr);
-    expect(all.inspect()).toMatchObject({ count: 10, seam: SEAM });
+    expect(all.inspect()).toMatchObject({ count: 11, seam: SEAM });
     run(all, 60 * 600, () => ({}), pr);
     const s = all.inspect().scroll;
     expect(s).toBeGreaterThanOrEqual(0);
-    expect(s).toBeLessThan(10 * (1 - SEAM));
+    expect(s).toBeLessThan(11 * (1 - SEAM));
     // 1 枚に戻すと、溶かさない
     all.update(frame(0), params({ scene: 'neon-night' }));
     await settle();
@@ -156,7 +156,7 @@ describe('CityScrollPreset', () => {
     await mk(small, 'neon-night');
     widths.length = 0;
     await mk(big, 'all');
-    expect(widths).toHaveLength(10);
+    expect(widths).toHaveLength(11);
     expect(new Set(widths)).toEqual(new Set([3000]));
     // 1 枚: 大きな端末は原画 (6000 以上なら全部)、上限 4096 の端末は 4096 まで
     const singles: (number | undefined)[] = [];
@@ -251,7 +251,7 @@ describe('CityScrollPreset', () => {
       (m.material as THREE.Material).addEventListener('dispose', () => mat++);
     }
     p.dispose();
-    expect(disposed.size).toBe(10);
+    expect(disposed.size).toBe(11);
     expect(geo).toBe(2);
     expect(mat).toBe(2);
     expect(p.scene.children).toHaveLength(0);

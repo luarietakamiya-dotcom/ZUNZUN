@@ -22,7 +22,7 @@ import type { ParticleKind } from './scenes';
 /** 隣の絵と重ねて溶かす幅 (絵の横幅に対する割合) */
 export const SEAM = 0.08;
 /** つなげられる絵の数 (シェーダーのテクスチャの数) */
-export const MAX_SCENES = 10;
+export const MAX_SCENES = 11;
 
 const VERT = /* glsl */ `
 varying vec2 vUv;
@@ -43,6 +43,7 @@ uniform sampler2D map6;
 uniform sampler2D map7;
 uniform sampler2D map8;
 uniform sampler2D map9;
+uniform sampler2D map10;
 uniform int count;
 uniform float period;
 uniform float seam;
@@ -67,7 +68,8 @@ vec3 tex(int i, vec2 uv) {
   if (i == 6) return texture2D(map6, uv).rgb;
   if (i == 7) return texture2D(map7, uv).rgb;
   if (i == 8) return texture2D(map8, uv).rgb;
-  return texture2D(map9, uv).rgb;
+  if (i == 9) return texture2D(map9, uv).rgb;
+  return texture2D(map10, uv).rgb;
 }
 
 /** 並べた絵の上の位置 s (絵の横幅 = 1)、高さ v の色。つなぎ目は溶かす */
@@ -169,6 +171,7 @@ export function createCityMaterial(): THREE.ShaderMaterial {
       map7: { value: null },
       map8: { value: null },
       map9: { value: null },
+      map10: { value: null },
       count: { value: 1 },
       period: { value: 1 - SEAM },
       seam: { value: SEAM },

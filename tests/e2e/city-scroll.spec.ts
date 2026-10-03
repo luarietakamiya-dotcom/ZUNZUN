@@ -1,13 +1,13 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * 「流れる街並み」の E2E: 10 枚の街並みと「全部つなげる」が読み込まれて映り (真っ黒でない)、時間がたつと絵が流れて変わる。
+ * 「流れる街並み」の E2E: 11 枚の街並みと「全部つなげる」が読み込まれて映り (真っ黒でない)、時間がたつと絵が流れて変わる。
  * 同じ音・同じ seed なら同じ絵 (乱数は ctx.rng だけ)。ぼかしを上げると細かい模様が減る。
  */
 
 test.describe.configure({ timeout: 180_000 });
 
-for (const scene of ['grand-avenue', 'neon-night', 'old-downtown', 'harbor-town', 'tram-street', 'palace-plaza', 'residential', 'rainy-street', 'country-road', 'marathon', 'all']) {
+for (const scene of ['grand-avenue', 'neon-night', 'old-downtown', 'harbor-town', 'tram-street', 'palace-plaza', 'residential', 'rainy-street', 'shopping-street', 'country-road', 'marathon', 'all']) {
   test(`流れる街並み (${scene}): 絵が映り、時間がたつと流れ、同じなら同じ絵、ぼかすと細かさが減る`, async ({ page }) => {
     await page.goto('/');
     const r = await page.evaluate(async (scene) => {
