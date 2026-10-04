@@ -18,6 +18,7 @@ import type { CommonParams, ExportSettings, OverlayLayer } from '../../core/type
 import { visualizerRegistry } from '../../visualizers';
 import { buildLyricsView } from '../../core/lyrics/view';
 import { sectionCuesFrom } from '../../core/lyrics/section-cues';
+import { checkExportSupport } from '../../core/export/support';
 import { layoutMode } from '../layout';
 import { sizeOptionText } from '../size-select';
 
@@ -318,7 +319,15 @@ export function renderExportPanel(): HTMLElement {
     const running = status.kind === 'running';
     const audioReady = store.audio.isLoaded && store.audio.audioBuffer != null;
 
-    if (!audioReady) {
+    const support = checkExportSupport();
+    if (!support.ok) {
+      // このブラウザには書き出しに必要な機能 (WebCodecs) が無い。始める前に案内する
+      prereq.style.display = '';
+      prereq.textContent = tr(
+        `このブラウザでは MP4 を書き出せません (${support.missing.join('・')} が使えません)。最新の Chrome / Edge で開いてください。プレビューと編集は、このブラウザでも使えます。`,
+        `This browser cannot export MP4 (${support.missing.join(', ')} is not available). Please open this page in the latest Chrome or Edge. Preview and editing still work here.`,
+      );
+    } else if (!audioReady) {
       prereq.style.display = '';
       prereq.textContent = tr('曲が読み込まれていません。「音楽」タブで曲を読み込むと書き出せます。', 'No song loaded. Load one in the Music tab to export.');
     } else {
@@ -335,7 +344,7 @@ export function renderExportPanel(): HTMLElement {
       prereq.textContent = notes.join(' ');
     }
 
-    startBtn.disabled = running || !audioReady;
+    startBtn.disabled = running || !audioReady || !support.ok;
     cancelBtn.disabled = !running;
     downloadBtn.style.display = status.kind === 'done' ? '' : 'none';
     for (const c of settingControls) c.disabled = running;

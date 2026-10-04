@@ -52,3 +52,13 @@ SOFTWARE.
 ## 書体 (SIL Open Font License 1.1)
 
 - JIZURA が使う書体（Noto Sans JP ほか）。同梱せず、Google Fonts から読み込む（上の JIZURA の項を参照）。
+
+## 同梱の画像 (AI 生成)
+
+- 対象: `src/assets/city-scroll/`（流れる街並み）、`src/assets/cyber-space/`（サイバー空間）、`src/assets/library/`（用意された背景）、
+  `src/assets/photo-motion/`（写真に動き）。作者が ChatGPT (OpenAI の画像生成) で作ったもの。
+  `src/assets/help/` は、このアプリの画面を撮った使い方の画面写真。
+- 実在の人物・ブランド・他人の作品の写真やイラストをもとにした画像は含めない。
+- 注意: リポジトリの MIT ライセンス (`LICENSE`) はソフトウェアに対するもの。AI が生成した画像の著作権は国・内容によって扱いが定まっておらず、
+  再利用の条件 (そのまま使ってよいか、クレジットが要るか) は別に決める必要がある。決めたら、ここと README に書く。
+- 画像の作り方の目安 (出どころの記録): 画像ごとの生成日・プロンプトは記録していない。今後足すときは、ここに出どころを 1 行足す。
