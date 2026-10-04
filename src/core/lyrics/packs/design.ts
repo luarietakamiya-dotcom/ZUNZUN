@@ -400,7 +400,7 @@ export const designPack: MotionPack = {
       fx: {},
     };
     st.decor = {};
-    st.name = '図案 (ZUNZUN)';
+    st.name = '図案 (VisualSync)';
     st.desc = '画面の組み方をオリジナルで。のぞき窓・升目・反復・ポスター・走る帯・縦と横・大きな一文字・切り取り線・円の打ち抜き・二分割・タイムライン・テロップ・原稿用紙・新聞の見出し・スコア表示・楽譜・ネオン看板・地図のピン';
     return st;
   },

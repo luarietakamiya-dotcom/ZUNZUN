@@ -354,7 +354,7 @@ export const popPack: MotionPack = {
       fx: {},
     };
     st.decor = { zzSparkle: 7, zzBeatDots: 5, zzConfettiBeat: 5 };
-    st.name = '弾む (ZUNZUN)';
+    st.name = '弾む (VisualSync)';
     st.desc = 'ポップ・明るい曲向け。丸い文字が跳ねて着地し、拍でぴょこぴょこ、ぱちんと弾けて消える。光る演出なし';
     return st;
   },

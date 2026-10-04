@@ -1,9 +1,10 @@
-# ZUNZUN3
+# VisualSync
 
 曲を読み込んで、**音に反応する映像（ビジュアライザー）と歌詞の動き（リリックモーション）** を作り、MP4 に書き出せる、ブラウザだけで動くツールです。
 **曲・歌詞・画像は外部に送信しません**（すべてこのブラウザの中だけで処理します。外に出る通信は、歌詞の書体を Google Fonts から読み込むときだけです）。
 
 - 使ってみる: https://luarietakamiya-dotcom.github.io/ZUNZUN/
+  （2026-10-04 にアプリの名前を VisualSync から VisualSync に変えました。リポジトリ名と公開 URL は ZUNZUN のままです）
 - 設計: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)　/　開発の現在地・引き継ぎ: [docs/HANDOFF.md](docs/HANDOFF.md)
 
 ![ビジュアライザーの画面](src/assets/help/visualizer.webp)
@@ -64,6 +65,6 @@ TypeScript + Vite + three.js + WebCodecs / Mediabunny。プリセットは `src/
 ## ライセンス・画像・権利
 
 - ソースコードは MIT License（[LICENSE](LICENSE)）。中で使っているもののライセンスは [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)（アプリの「使い方」タブにも載せています）。
-- 同梱の画像（街並み・サイバー空間・用意された背景・写真に動き）は、作者が ChatGPT（OpenAI の画像生成）で作ったもので、**MIT ライセンスの対象外**です。
+- 同梱の画像（街並み・サイバー空間・用意された背景・写真に動き）とロゴは、作者が ChatGPT（OpenAI の画像生成）で作ったもので、**MIT ライセンスの対象外**です。
   いまの取り決め（仮。正式公開までに見直します）: これらの画像を使って作った映像は、公開・配信してかまいません（クレジット不要）。画像ファイルそのものの再配布や、別の製品への利用は許可していません。
 - 生成した映像の権利は、使用した曲・画像の権利者の許諾範囲に従います。

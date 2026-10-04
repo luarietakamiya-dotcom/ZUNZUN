@@ -445,7 +445,7 @@ export function sanitizeProject(raw: unknown): ProjectFile {
     throw new ProjectParseError(tr('プロジェクトファイルの形が正しくありません (JSON のオブジェクトではありません)', 'Invalid project file (not a JSON object)'));
   }
   if (raw.format !== 'zunzun-project') {
-    throw new ProjectParseError(tr('ZUNZUN のプロジェクトファイルではありません', 'Not a ZUNZUN project file'));
+    throw new ProjectParseError(tr('VisualSync のプロジェクトファイルではありません', 'Not a VisualSync project file'));
   }
   if (raw.version !== 1) {
     throw new ProjectParseError(tr(`対応していないバージョンです (version: ${String(raw.version)})`, `Unsupported version (version: ${String(raw.version)})`));

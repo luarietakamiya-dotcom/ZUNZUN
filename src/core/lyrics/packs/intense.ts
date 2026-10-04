@@ -302,7 +302,7 @@ export const intensePack: MotionPack = {
       fx: {},
     };
     st.decor = { zzSpeedLines: 8, zzEqBars: 6, zzEdgeFlash: 5 };
-    st.name = '衝撃 (ZUNZUN)';
+    st.name = '衝撃 (VisualSync)';
     st.desc = 'EDM・速い曲向け。拍で叩きつけ、拍で脈打つ。光る演出は毎秒 3 回まで';
     return st;
   },

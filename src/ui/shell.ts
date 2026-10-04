@@ -1,5 +1,6 @@
 import type { PanelId } from './panels';
 import { PANELS } from './panels';
+import { createBrandLogo } from './brand';
 import { createSizeSelect } from './size-select';
 import { createTransport } from './transport';
 import { lang, onLangChange, setLang, t2, tr, type Lang } from '../core/i18n';
@@ -28,13 +29,7 @@ export function mountShell(root: HTMLElement): () => void {
   const header = document.createElement('header');
   header.className = 'app-header';
 
-  const title = document.createElement('h1');
-  // ロゴ: ZUNZUN3 (3 だけ黄色)
-  const three = document.createElement('span');
-  three.className = 'logo-3';
-  three.textContent = '3';
-  title.append('ZUNZUN', three);
-  header.appendChild(title);
+  header.appendChild(createBrandLogo());
 
   const tabs = document.createElement('div');
   tabs.className = 'tabs';

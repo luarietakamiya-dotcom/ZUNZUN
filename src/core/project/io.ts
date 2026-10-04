@@ -38,7 +38,7 @@ export async function saveProjectToFile(project: ProjectFile, suggestedName = 'p
     try {
       const handle = await w.showSaveFilePicker({
         suggestedName: fileName,
-        types: [{ description: 'ZUNZUN Project', accept: { 'application/json': ['.json'] } }],
+        types: [{ description: 'VisualSync Project', accept: { 'application/json': ['.json'] } }],
       });
       const writable = await handle.createWritable();
       await writable.write(json);

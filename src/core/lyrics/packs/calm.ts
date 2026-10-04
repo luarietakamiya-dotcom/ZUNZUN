@@ -277,7 +277,7 @@ export const calmPack: MotionPack = {
       cam: { ...(bias.cam ?? {}), zzFloat: 10 },
     };
     st.decor = { zzDust: 10, zzHairline: 7 };
-    st.name = '静寂 (ZUNZUN)';
+    st.name = '静寂 (VisualSync)';
     st.desc = 'バラード・アンビエント向け。細い明朝で、ゆっくり浮かんでゆっくり消える。グリッチや揺れは使わない';
     return st;
   },

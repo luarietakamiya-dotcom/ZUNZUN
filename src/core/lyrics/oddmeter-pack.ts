@@ -192,7 +192,7 @@ export function buildOddMeterStyle(base: Record<string, unknown> & { name: strin
   const bias = (st.bias ?? {}) as Record<string, Record<string, number>>;
   st.bias = { ...bias, cam: { ...(bias.cam ?? {}), zzBarPunch: 12 } };
   st.decor = { ...((st.decor as Record<string, number>) ?? {}), zzMeterBar: 24 };
-  st.name = '変拍子 (ZUNZUN)';
+  st.name = '変拍子 (VisualSync)';
   st.desc = '小節の頭とまとまり (2+2+3 など) に合わせて脈打つ。Lyrics タブの「リズム (変拍子)」で小節と拍子を決めて使う';
   return st;
 }

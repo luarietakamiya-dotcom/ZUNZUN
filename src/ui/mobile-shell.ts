@@ -1,6 +1,7 @@
 import type { PanelId } from './panels';
 import { PANELS } from './panels';
 import { createLivePreview } from './panels/live-preview';
+import { createBrandLogo } from './brand';
 import { createSizeSelect } from './size-select';
 import { createTransport } from './transport';
 import { lang, onLangChange, setLang, t2, tr, type Lang, type Text2 } from '../core/i18n';
@@ -59,12 +60,8 @@ export function mountMobileShell(root: HTMLElement): () => void {
 
   const header = document.createElement('header');
   header.className = 'm-header';
-  const title = document.createElement('h1');
-  const three = document.createElement('span');
-  three.className = 'logo-3';
-  three.textContent = '3';
-  title.append('ZUNZUN', three);
-  header.append(title, createTransport({ spaceHandledByPanel: () => mobileActive().panel === 'lyrics' }));
+
+  header.append(createBrandLogo(), createTransport({ spaceHandledByPanel: () => mobileActive().panel === 'lyrics' }));
   // 画面の大きさ: ヘッダーは 1 行で余裕が無いので、そのすぐ下に細い 1 行を固定して置く (どのタブでも見える)
   const sizeBar = document.createElement('div');
   sizeBar.className = 'm-sizebar';

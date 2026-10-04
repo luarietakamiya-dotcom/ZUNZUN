@@ -14,7 +14,7 @@ test.describe.configure({ timeout: 180_000 });
 
 async function openApp(page: Page): Promise<void> {
   await page.goto('/');
-  await expect(page).toHaveTitle('ZUNZUN3');
+  await expect(page).toHaveTitle('VisualSync');
 }
 
 interface Shot {

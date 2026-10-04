@@ -18,11 +18,11 @@ test('「使い方」タブ: 5 つの手順とくわしい使い方が出て、�
   }
 });
 
-test('ロゴは ZUNZUN3 (3 だけ黄色)。「使い方」のいちばん下に MIT ライセンスと、中で使っているもののライセンスが出る', async ({ page }) => {
+test('ロゴは VisualSync (画像)。「使い方」のいちばん下に MIT ライセンスと、中で使っているもののライセンスが出る', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.app-header h1')).toHaveText('ZUNZUN3');
-  const color = await page.locator('.app-header h1 .logo-3').evaluate((el) => getComputedStyle(el).color);
-  expect(color).toBe('rgb(255, 210, 63)');
+  const logo = page.locator('.app-header h1 img.brand-logo');
+  await expect(logo).toHaveAttribute('alt', 'VisualSync');
+  expect(await logo.evaluate((el) => (el as HTMLImageElement).complete && (el as HTMLImageElement).naturalWidth > 0)).toBe(true); // 画像が読めている
   // 右上の「ライセンス」から、どのタブにいても使い方のライセンス欄へ飛ぶ
   await page.getByRole('tab').nth(3).click();
   await page.locator('[data-shell="license"]').click();

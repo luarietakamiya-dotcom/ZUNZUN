@@ -56,7 +56,7 @@ SOFTWARE.
 ## 同梱の画像 (AI 生成)
 
 - 対象: `src/assets/city-scroll/`（流れる街並み）、`src/assets/cyber-space/`（サイバー空間）、`src/assets/library/`（用意された背景）、
-  `src/assets/photo-motion/`（写真に動き）。作者が ChatGPT (OpenAI の画像生成) で作ったもの。
+  `src/assets/photo-motion/`（写真に動き）、`src/assets/brand/`（ロゴ・アイコン）。作者が ChatGPT (OpenAI の画像生成) で作ったもの。
   `src/assets/help/` は、このアプリの画面を撮った使い方の画面写真。
 - 実在の人物・ブランド・他人の作品の写真やイラストをもとにした画像は含めない。
 - **MIT ライセンスの対象外**: リポジトリの MIT ライセンス (`LICENSE`) はソースコードに対するもので、上の同梱の画像には及ばない

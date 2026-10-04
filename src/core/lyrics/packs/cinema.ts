@@ -290,7 +290,7 @@ export function buildCinemaStyle(J: PackJ, palette: PackPalette | null): Record<
     cam: { zzDolly: 10 },
   };
   st.decor = {};
-  st.name = '余白 (ZUNZUN)';
+  st.name = '余白 (VisualSync)';
   st.desc = '背景が動画・写真のとき向け。背景の色を文字に使い、板を敷かず、中央を空けて、映画の字幕のように静かに出る';
   return st;
 }

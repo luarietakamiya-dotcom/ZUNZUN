@@ -292,7 +292,7 @@ export const rockPack: MotionPack = {
       fx: {},
     };
     st.decor = { zzScratches: 8, zzStrings: 6 };
-    st.name = '轟音 (ZUNZUN)';
+    st.name = '轟音 (VisualSync)';
     st.desc = 'ロック向け。黒・赤・白、太くて荒い書体。スタンプで押し、拍でうなずき、引き裂いて消える';
     return st;
   },
