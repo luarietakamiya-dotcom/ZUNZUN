@@ -321,7 +321,10 @@ export function renderLyricsPanel(): HTMLElement {
   // ------------------------------------------------------------ 再生とプレビュー
   const playCard = el('div', { className: 'lyrics-card' });
   const audioStatus = el('div', { className: 'param-label' });
-  const playBtn = button(tr('再生', 'Play'), () => (store.audio.isPlaying ? store.audio.pause() : store.audio.play()));
+  const playBtn = button(tr('再生', 'Play'), () => {
+    if (store.audio.isPlaying) { stopTap(true); }
+    else store.audio.play();
+  });
   const backBtn = button(tr('−3秒', '−3s'), () => store.audio.seek(Math.max(0, store.audio.currentTime - 3)));
   const fwdBtn = button(tr('+3秒', '+3s'), () => store.audio.seek(Math.min(store.audio.duration, store.audio.currentTime + 3)));
   const timeLabel = el('span', { className: 'lyrics-time', textContent: '0:00.00' });
@@ -450,7 +453,14 @@ export function renderLyricsPanel(): HTMLElement {
   const tapCard = el('div', { className: 'lyrics-tap-controls' });
   const startFirstBtn = button(tr('1 行目からタップ', 'Tap from line 1'), () => startTap(0), 'lyrics-big-button');
   const startSelBtn = button(tr('選んだ行からタップ', 'Tap from selected line'), () => startTap(selectedLine), 'lyrics-big-button');
-  const stopBtn = button(touchFirst ? tr('中断', 'Stop') : tr('中断 (Esc)', 'Stop (Esc)'), () => stopTap());
+  const stopBtn = button(touchFirst ? tr('タップを中止して停止', 'Stop tapping and pause') : tr('タップを中止して停止 (Esc)', 'Stop tapping and pause (Esc)'), () => stopTap(true), 'lyrics-big-button');
+  const resumeBtn = button(tr('続きから再開', 'Resume tapping'), () => { if (resumeLine != null) startTap(resumeLine); }, 'lyrics-big-button');
+  const restartLine = el('select', { className: 'select' });
+  restartLine.style.maxWidth = '100%';
+  restartLine.setAttribute('aria-label', tr('やり直す行', 'Line to re-tap'));
+  restartLine.addEventListener('change', () => selectLine(Number(restartLine.value), false));
+  const tapStatus = el('div', { className: 'param-label', textContent: tr('中止しても記録済みの時刻は残ります。戻ってやり直すときは行を選んで再開。', 'Recorded times remain after stopping. Select a line to re-tap from there.') });
+  let restartText = '';
   const tapInfo = el('div', { className: 'lyrics-tap-info' });
   const tapButton = el('button', { className: 'lyrics-tap-button', textContent: touchFirst ? tr('ここで叩く', 'Tap here') : tr('ここで叩く (Space / Enter)', 'Tap here (Space / Enter)') });
   tapButton.type = 'button';
@@ -488,7 +498,7 @@ export function renderLyricsPanel(): HTMLElement {
   });
   const tapActive = el('div', { className: 'lyrics-tap-active' }, [tapInfo, el('div', { className: 'row-gap lyrics-row-wrap' }, [tapButton, tapBackBtn, stopBtn]), lastSnap]);
   // タップの始め方と、タップ中の操作は、大きな歌詞の表示のすぐ下に置く (表示とタイムラインを一緒に見ながら叩けるように)
-  tapCard.append(el('div', { className: 'row-gap lyrics-row-wrap' }, [startFirstBtn, startSelBtn]), tapActive);
+  tapCard.append(tapStatus, el('div', { className: 'row-gap lyrics-row-wrap' }, [resumeBtn, restartLine, startSelBtn, startFirstBtn]), tapActive);
   playCard.appendChild(tapCard);
   const snapCard = el('div', { className: 'lyrics-card' });
   snapCard.append(
@@ -536,6 +546,8 @@ export function renderLyricsPanel(): HTMLElement {
   /** プレビュー用: 未同期の行は開始を +∞ にして「今の行」にならないようにした時刻 */
   let syncedTimes = { starts: [] as number[], ends: [] as number[] };
   let tap: TapSession | null = null;
+  let resumeLine: number | null = null;
+  let tapStopped = false;
   let shownLine = -2;
   let shownTime = '';
   let rows: HTMLTableRowElement[] = [];
@@ -616,7 +628,21 @@ export function renderLyricsPanel(): HTMLElement {
     const barTapping = rhythmEditor.isTapping;
     startFirstBtn.disabled = !loaded || !hasLines || tap != null || barTapping;
     startSelBtn.disabled = !loaded || !hasLines || tap != null || barTapping;
-    startSelBtn.textContent = tr(`選んだ行 (${selectedLine + 1} 行目) からタップ`, `Tap from selected line (${selectedLine + 1})`);
+    startSelBtn.textContent = tr(`選んだ ${selectedLine + 1} 行目からやり直す`, `Re-tap from line ${selectedLine + 1}`);
+    if (restartText !== currentLyrics().text || restartLine.options.length !== view.parsed.lines.length) {
+      if (restartText && restartText !== currentLyrics().text) resumeLine = null;
+      restartText = currentLyrics().text;
+      restartLine.replaceChildren(...view.parsed.lines.map((line, i) => {
+        const option = el('option', { textContent: `${i + 1}. ${line.interlude ? '〔間奏〕' : line.text}` });
+        option.value = String(i);
+        return option;
+      }));
+    }
+    restartLine.value = String(selectedLine);
+    restartLine.disabled = tap != null || !hasLines;
+    resumeBtn.hidden = resumeLine == null || resumeLine >= view.parsed.lines.length;
+    resumeBtn.disabled = !loaded || tap != null || barTapping;
+    resumeBtn.textContent = tr(`続き (${(resumeLine ?? 0) + 1} 行目) から再開`, `Resume from line ${(resumeLine ?? 0) + 1}`);
     tapActive.hidden = tap == null;
     tapCard.hidden = mode !== 'tap';
     nowBox.classList.toggle('mode-check', mode === 'check');
@@ -626,8 +652,9 @@ export function renderLyricsPanel(): HTMLElement {
       mode === 'tap'
         ? touchFirst
           ? tr('再生中に下の大きなボタンを叩くと、「次の行」の歌い出しを記録します。', 'While playing, tap the big button below to record the start of the next line.')
-          : tr('再生中に Space で「次の行」の歌い出しを記録します。止まっているときの Space は再生、Esc で一時停止。', 'While playing, Space records the start of the next line. Space while stopped plays, Esc pauses.')
+          : tr('再生中に Space で「次の行」の歌い出しを記録します。止まっているときの Space は再生、Esc でタップを中止して停止。', 'While playing, Space records the start of the next line. Space while stopped plays, Esc pauses.')
         : tr('歌詞が歌と合っているかを見るモードです (記録はしません)。Space で再生 / 一時停止、一覧の行を押すとその 1 秒前から再生します。', 'Check whether the lyrics match the singing (nothing is recorded). Space plays / pauses; clicking a line plays from 1 second before it.');
+    if (mode === 'tap' && tapStopped) modeHelp.textContent = tr('再開ボタンを押すまでは記録しません。Space は再生 / 一時停止です。', 'No recording until you resume tapping. Space plays / pauses.');
     tapBackBtn.disabled = !tap?.canBack;
     const hasTimeline = loaded && hasLines;
     loopBtn.disabled = !hasTimeline;
@@ -778,6 +805,10 @@ export function renderLyricsPanel(): HTMLElement {
     syncHistoryWithStore();
     const session = new TapSession(view.parsed.lines.length, line);
     tap = session;
+    tapStopped = false;
+    resumeLine = null;
+    loopOn = false;
+    tapStatus.textContent = tr('タップ中です。「タップを中止して停止」で曲も停止し、記録済みの時刻は残ります。', 'Tapping. Stop tapping and pause keeps recorded times.');
     lastSnap.textContent = '';
     refreshControls();
     tapButton.focus();
@@ -820,7 +851,14 @@ export function renderLyricsPanel(): HTMLElement {
     playCard.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
   }
 
-  function stopTap(): void {
+  function stopTap(pause = false): void {
+    if (tap) {
+      resumeLine = tap.line;
+      selectedLine = Math.min(tap.line, Math.max(0, view.parsed.lines.length - 1));
+      tapStopped = true;
+      tapStatus.textContent = tr(`タップを中止しました。記録済みの時刻は残っています。続きは ${tap.line + 1} 行目から再開できます。`, `Tapping stopped. Recorded times remain. Resume from line ${tap.line + 1}.`);
+    }
+    if (pause) store.audio.pause();
     tap?.stop();
     tap = null;
     refreshControls();
@@ -828,7 +866,7 @@ export function renderLyricsPanel(): HTMLElement {
 
   /** 今の行の開始として、聞こえている位置をそのまま記録する (吸着は叩き終えてから「吸着」ボタンでまとめて)。 */
   function doTap(): void {
-    if (!tap || !tap.isActive) return;
+    if (!tap || !tap.isActive || !store.audio.isPlaying) return;
     const raw = store.audio.heardTime;
     const cur = history.current;
     const lineTimes = tap.tap(cur.lineTimes, Math.round(raw * 10000) / 10000);
@@ -840,6 +878,8 @@ export function renderLyricsPanel(): HTMLElement {
     refresh();
     if (!tap.isActive) {
       tap = null;
+      resumeLine = null;
+      tapStopped = true;
       lastSnap.textContent += tr(' / すべての行を叩き終えました', ' / all lines tapped');
       refreshControls();
     }
@@ -1040,12 +1080,16 @@ export function renderLyricsPanel(): HTMLElement {
         else store.audio.play();
         return;
       }
-      if (tap) doTap();
-      else if (store.audio.isPlaying && view.parsed.lines.length > 0) {
+      if (tap) {
+        if (store.audio.isPlaying) doTap();
+        else store.audio.play();
+      }
+      else if (!tapStopped && store.audio.isPlaying && view.parsed.lines.length > 0) {
         // 再生中に叩いたら、その場でタップを始めて「次に叩く行」の頭として記録する
         beginTapAt(nextLineToTap(store.audio.heardTime));
         doTap();
-      } else store.audio.play();
+      } else if (store.audio.isPlaying) store.audio.pause();
+      else store.audio.play();
       return;
     }
     if (tap) {
@@ -1054,8 +1098,7 @@ export function renderLyricsPanel(): HTMLElement {
         doBack();
       } else if (e.key === 'Escape') {
         e.preventDefault();
-        stopTap();
-        store.audio.pause();
+        stopTap(true);
       }
       return;
     }
@@ -1109,6 +1152,7 @@ export function renderLyricsPanel(): HTMLElement {
       timeLabel.textContent = label;
     }
     const playing = store.audio.isPlaying;
+    if (tap && !playing) stopTap();
     // ループ試聴: 選んだ行の終わりまで来たら、行の少し前へ戻す
     const region = loopRegion();
     if (region && playing && t >= region.end) store.audio.seek(region.start);
