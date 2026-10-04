@@ -4,6 +4,7 @@ import { store } from '../../core/store';
 import { type CommonParams, defaultView, VIEW_ZOOM_MAX, VIEW_ZOOM_MIN, type ViewSettings } from '../../core/types';
 import { visualizerRegistry } from '../../visualizers';
 import { t2, tr, type Text2 } from '../../core/i18n';
+import { createPresetCards } from './preset-cards';
 import { sliderRow } from './panel-helpers';
 import { resolvePresetParams } from '../../core/visualizer/preset-params';
 
@@ -154,6 +155,18 @@ export function renderVisualizerPanel(): HTMLElement {
   );
   el.appendChild(p);
 
+  // 種類を選ぶカード (サムネイルつき)。下の「一覧から選ぶ」の選択欄とつながっている (キーボード・読み上げ向けにも残す)
+  const cards = createPresetCards((id) => {
+    presetSelect.value = id;
+    applyPreset(id);
+  });
+  el.appendChild(cards.element);
+
+  const presetRow = document.createElement('label');
+  presetRow.className = 'preset-select-row';
+  const presetRowLabel = document.createElement('span');
+  presetRowLabel.className = 'param-help';
+  presetRowLabel.textContent = tr('一覧から選ぶ', 'Pick from a list');
   const presetSelect = document.createElement('select');
   presetSelect.className = 'select';
   presetSelect.title = tr('映像の種類', 'Visual preset');
@@ -163,7 +176,8 @@ export function renderVisualizerPanel(): HTMLElement {
     opt.textContent = m.name;
     presetSelect.appendChild(opt);
   }
-  el.appendChild(presetSelect);
+  presetRow.append(presetRowLabel, presetSelect);
+  el.appendChild(presetRow);
 
   // 映像のプレビュー (背景と素材タブと同じ部品。ui/panels/live-preview.ts)
   // 歌詞の時刻だけを変えたあと、歌詞の動きに反映するボタン (Lyrics タブと同じもの)
@@ -339,6 +353,7 @@ export function renderVisualizerPanel(): HTMLElement {
     const mod = visualizerRegistry.get(id);
     if (!mod) return;
     store.setPresetId(id);
+    cards.refresh(id);
     buildPresetControls(id);
   };
 

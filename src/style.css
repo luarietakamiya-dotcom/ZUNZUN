@@ -727,3 +727,38 @@ input[type='range'], input[type='checkbox'], input[type='radio'] { accent-color:
 .export-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 14px 0; }
 .music-play { margin: 16px 0 8px; }
 .mobile-shell .export-controls .btn-primary { flex: 1 1 100%; }
+
+/* ビジュアライザーを選ぶカード (2026-10-04 UI を正式版に合わせる。段階 4) */
+.preset-picker { margin: 14px 0 6px; }
+.preset-picker-summary {
+  display: flex; align-items: baseline; gap: 12px; padding: 10px 14px; cursor: pointer; list-style: none;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-weight: 600;
+}
+.preset-picker-summary::-webkit-details-marker { display: none; }
+.preset-picker-summary::before { content: '▸'; color: var(--accent-cyan); transition: transform 0.15s; }
+.preset-picker[open] > .preset-picker-summary::before { transform: rotate(90deg); }
+.preset-picker-summary:hover { border-color: rgba(90, 140, 255, 0.55); }
+.preset-picker-summary .param-help { margin: 0; font-weight: 400; }
+.preset-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin: 14px 0 10px; }
+.preset-card {
+  display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 6px 6px 9px; cursor: pointer;
+  font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  transition: transform 0.12s, border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.preset-card:hover { transform: translateY(-2px); border-color: rgba(90, 140, 255, 0.55); background: var(--panel-2); }
+.preset-card[aria-pressed='true'] {
+  border-color: rgba(90, 160, 255, 0.9); background: linear-gradient(180deg, rgba(106, 61, 255, 0.2), rgba(25, 217, 255, 0.08));
+  box-shadow: 0 0 0 1px rgba(25, 217, 255, 0.35), 0 0 20px rgba(50, 130, 255, 0.4);
+}
+.preset-card-pic { position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 8px; background: #000; }
+.preset-card-pic img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.preset-card-none { display: flex; align-items: center; justify-content: center; font-size: 34px; color: var(--fg-dim); background: radial-gradient(circle at 50% 40%, #151a28, #05070c); }
+.preset-card-badge {
+  position: absolute; left: 6px; bottom: 6px; padding: 2px 7px; border-radius: 999px; font-size: 10px; line-height: 1.4; white-space: nowrap;
+  color: #dfe9ff; background: rgba(8, 10, 18, 0.72); border: 1px solid rgba(90, 140, 255, 0.45); backdrop-filter: blur(3px);
+}
+.preset-card-name { font-size: 13px; font-weight: 600; padding: 0 3px; }
+.preset-card-about { font-size: 11px; line-height: 1.4; color: var(--fg-dim); padding: 0 3px; min-height: 2.8em; }
+.preset-select-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; }
+.preset-select-row .param-help { margin: 0; }
+.mobile-shell .preset-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
