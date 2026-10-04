@@ -762,3 +762,20 @@ input[type='range'], input[type='checkbox'], input[type='radio'] { accent-color:
 .preset-select-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; }
 .preset-select-row .param-help { margin: 0; }
 .mobile-shell .preset-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+
+/* おまかせで作る (音楽タブ。2026-10-04 UI 刷新の段階 5) */
+.omakase-card {
+  margin: 18px 0; padding: 16px 18px; border-radius: 14px;
+  border: 1px solid rgba(90, 140, 255, 0.4);
+  background: linear-gradient(135deg, rgba(106, 61, 255, 0.16), rgba(25, 217, 255, 0.07));
+  box-shadow: 0 0 24px rgba(50, 110, 255, 0.15);
+}
+.omakase-card h3 { margin: 0 0 4px; font-size: 16px; }
+.omakase-card .param-help { margin: 0 0 12px; }
+.omakase-go { width: 100%; max-width: 420px; }
+.omakase-go::before { content: '✦'; font-size: 1.1em; }
+.omakase-result { margin: 14px 0 4px; padding: 10px 12px; border-radius: 10px; background: rgba(8, 10, 18, 0.55); border: 1px solid var(--border); }
+.omakase-result[hidden], .omakase-actions[hidden] { display: none; }
+.omakase-line { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.omakase-result .param-help { margin: 2px 0 0; }
+.omakase-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
