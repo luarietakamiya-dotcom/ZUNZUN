@@ -34,6 +34,23 @@ export interface AudioFrame {
   flux: number;
   /** 64 帯域の周波数エネルギー (各 0..1) */
   bands: Float32Array;
+  /**
+   * 曲全体から前もって計算した情報 (音源があるときだけ。無いプリセットは使わなくてよい)。解析結果と歌詞の区切りだけから決まるので、
+   * 再生位置を飛ばしても、書き出しでも、同じ時刻なら同じ値 (core/audio/mood.ts)
+   */
+  song?: SongContext;
+}
+
+/** 曲の中での「いま」 (AudioFrame.song) */
+export interface SongContext {
+  /** 曲調 0..1 (その曲の中で、0 = 静かな所、1 = いちばん激しい所。数秒ならして、曲全体の分布で正規化したもの) */
+  mood: number;
+  /** 区間の番号 (0 から。歌詞の見出し [サビ] などがあればその区切り、なければ音の変化から見つけた区切り) */
+  section: number;
+  /** この区間が始まった時刻 (秒) */
+  sectionStart: number;
+  /** 区間の数 */
+  sectionCount: number;
 }
 
 /** 全プリセット共通の UI パラメータ (docs/ARCHITECTURE.md 9 UI 参照)。 */

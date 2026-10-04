@@ -16,6 +16,8 @@ import { resolvePresetParams } from '../../core/visualizer/preset-params';
 import { t2, tr, type Text2 } from '../../core/i18n';
 import type { CommonParams, ExportSettings, OverlayLayer } from '../../core/types';
 import { visualizerRegistry } from '../../visualizers';
+import { buildLyricsView } from '../../core/lyrics/view';
+import { sectionCuesFrom } from '../../core/lyrics/section-cues';
 import { layoutMode } from '../layout';
 import { sizeOptionText } from '../size-select';
 
@@ -136,6 +138,8 @@ function createRunnerFromStore(): { runner: ExportRunner; fileName: string } {
   const rhythm = store.rhythm ? (JSON.parse(JSON.stringify(store.rhythm)) as typeof store.rhythm) : null;
   const background = store.background && store.backgroundFile ? { config: { ...store.background }, file: store.backgroundFile, slideFiles: [...store.slideFiles] } : null;
   const seed = store.seed;
+  // 区間の境目は書き出し開始時点の歌詞の見出しで固定する (書き出し中に歌詞を直しても、途中から変わらない)
+  const exportTimeline = timeline.withCues(lyrics ? sectionCuesFrom(buildLyricsView(lyrics, timeline.duration).sections) : null);
 
   const runner: ExportRunner = (ctx) =>
     renderMp4(
@@ -145,7 +149,7 @@ function createRunnerFromStore(): { runner: ExportRunner; fileName: string } {
         fps: settings.fps,
         quality: settings.quality,
         audioBuffer,
-        timeline,
+        timeline: exportTimeline,
         preset,
         seed,
         params,

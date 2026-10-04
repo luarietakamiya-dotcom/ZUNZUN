@@ -15,6 +15,8 @@ import { AudioTimeline } from './timeline';
 export class AudioEngine {
   private _analysis: AudioAnalysis | null = null;
   private _timeline: AudioTimeline | null = null;
+  /** 区間の境目 (歌詞の見出しから)。音源を読み込み直しても持ち越す */
+  private _sectionCues: readonly number[] | null = null;
   private _player: AudioPlayer | null = null;
   private _audioBuffer: AudioBuffer | null = null;
   private _fileName = '';
@@ -69,6 +71,7 @@ export class AudioEngine {
     const decoded = await decodeAudioFile(file);
     this._analysis = analyzeSamples(decoded.mono, decoded.sampleRate, opts);
     this._timeline = new AudioTimeline(this._analysis);
+    this._timeline.setSectionCues(this._sectionCues);
     this._player = new AudioPlayer(decoded.audioBuffer);
     this._audioBuffer = decoded.audioBuffer;
     this._fileName = file.name;
@@ -129,6 +132,16 @@ export class AudioEngine {
     const frame = this._timeline.at(t, this._lastT);
     this._lastT = t;
     return frame;
+  }
+
+  /** 区間の境目を決める (歌詞の [サビ] などの見出しの時刻。null で、音の変化からの自動に戻す) */
+  setSectionCues(times: readonly number[] | null): void {
+    this._sectionCues = times && times.length > 0 ? times : null;
+    this._timeline?.setSectionCues(this._sectionCues);
+  }
+
+  get sectionCues(): readonly number[] | null {
+    return this._sectionCues;
   }
 
   /** 書き出し用: 再生に関係なく、任意の時刻のフレームを直接取り出す。 */

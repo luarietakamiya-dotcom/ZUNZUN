@@ -1,4 +1,6 @@
 import { BAND_COUNT } from '../../core/audio';
+import { buildLyricsView } from '../../core/lyrics/view';
+import { sectionCuesFrom } from '../../core/lyrics/section-cues';
 import { slidePlan, slidePlanKey } from '../../core/render/slideshow';
 import { store } from '../../core/store';
 import type { AudioFrame, BackgroundSettings, CommonParams, OverlayLayer } from '../../core/types';
@@ -130,6 +132,17 @@ export function createLivePreview(opts: { onFrame?: () => void } = {}): LivePrev
     host.background.setSlideCues(slidePlan(input), input.beats);
   };
 
+  // 区間の境目 (歌詞の [サビ] などの見出しから。無ければ音の変化から自動。歌詞か曲が変わったときだけ作り直す)
+  let cuesLyrics: unknown = Symbol('none');
+  let cuesDuration = -1;
+  const syncSectionCues = (): void => {
+    const dur = store.audio.isLoaded ? store.audio.duration : 0;
+    if (store.lyrics === cuesLyrics && dur === cuesDuration) return;
+    cuesLyrics = store.lyrics;
+    cuesDuration = dur;
+    store.audio.setSectionCues(store.lyrics && dur > 0 ? sectionCuesFrom(buildLyricsView(store.lyrics, dur).sections) : null);
+  };
+
   // 素材レイヤー・重ねる画像 (ファイルを選び直していないものは飛ばす。ファイルが変わったときだけ読み込み直す)
   let mediaKey: unknown[] = [Symbol('none')];
   const syncMedia = (): void => {
@@ -191,6 +204,7 @@ export function createLivePreview(opts: { onFrame?: () => void } = {}): LivePrev
     syncBackground();
     syncPresetImage();
     syncSlides();
+    syncSectionCues();
     syncMedia();
     syncOverlays();
     const t = performance.now() / 1000;

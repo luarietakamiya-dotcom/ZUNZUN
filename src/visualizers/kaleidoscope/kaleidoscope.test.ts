@@ -21,16 +21,20 @@ function frame(t: number, o: Partial<AudioFrame> = {}): AudioFrame {
   return { t, dt: 1 / 60, bass: 0, mid: 0, high: 0, rms: 0, peak: 0, beat: 0, beatIndex: -1, spectralEnergy: 0, flux: 0, bands: new Float32Array(64), ...o };
 }
 
+/** プリセットごとの時計 (run を続けて呼んでも、時刻が 0 に戻って「再生位置が戻った」と見なされないように) */
+const clocks = new WeakMap<KaleidoscopePreset, number>();
 function run(p: KaleidoscopePreset, frames: number, o: (i: number) => Partial<AudioFrame>, pr: Params = params()): void {
-  for (let i = 0; i < frames; i++) p.update(frame(i / 60, o(i)), pr);
+  const t0 = clocks.get(p) ?? 0;
+  for (let i = 0; i < frames; i++) p.update(frame((t0 + i) / 60, o(i)), pr);
+  clocks.set(p, t0 + frames);
 }
 
 const LOUD = { rms: 0.5, spectralEnergy: 0.5, flux: 0.5, bass: 0.6, mid: 0.4, high: 0.3 };
 
 describe('KaleidoscopePreset', () => {
-  it('定義: 設定は 鏡の枚数・模様の細かさ・回転の速さ・キラキラ', () => {
+  it('定義: 設定は 鏡の枚数・模様の細かさ・回転の速さ・曲調の追従・キラキラ', () => {
     expect(manifest.id).toBe('kaleidoscope');
-    expect(manifest.controls!.map((c) => c.key)).toEqual(['segments', 'detail', 'spin', 'sparkle']);
+    expect(manifest.controls!.map((c) => c.key)).toEqual(['segments', 'detail', 'spin', 'follow', 'sparkle']);
     const p = makePreset();
     p.dispose();
   });
@@ -66,8 +70,8 @@ describe('KaleidoscopePreset', () => {
     run(p, 30, () => ({ bass: 0.9 }), params({ sensitivity: 1 }));
     const loud = p.inspect();
     expect(loud.bass).toBeGreaterThan(0.5);
-    expect(loud.zoom).toBeGreaterThan(1.03);
-    expect(loud.zoom).toBeLessThanOrEqual(1.08);
+    expect(loud.zoom).toBeGreaterThan(1.015);
+    expect(loud.zoom).toBeLessThanOrEqual(1.04);
     run(p, 6, () => ({}));
     expect(p.inspect().bass).toBeGreaterThan(0.2); // 6 フレームではまだ戻りきらない
     p.dispose();
@@ -75,6 +79,7 @@ describe('KaleidoscopePreset', () => {
 
   it('曲調: 激しい曲が続くと mood が数秒かけて上がり、静かになるとゆっくり戻る。急には変わらない', () => {
     const p = makePreset();
+    run(p, 1, () => ({})); // 最初のフレームは曲調を目標へすぐ合わせる。静かな音で始める
     run(p, 6, () => LOUD);
     expect(p.inspect().mood).toBeLessThan(0.1); // 0.1 秒では動かない
     run(p, 60 * 12, () => LOUD);
@@ -95,10 +100,11 @@ describe('KaleidoscopePreset', () => {
     };
     run(p, 10, () => ({}));
     const calm = col();
+    const t0 = clocks.get(p)!;
     let prev = calm;
     let maxStep = 0;
     for (let i = 0; i < 60 * 14; i++) {
-      p.update(frame(i / 60, LOUD), params());
+      p.update(frame((t0 + i) / 60, LOUD), params());
       const now = col();
       maxStep = Math.max(maxStep, Math.abs(now[0]! - prev[0]!), Math.abs(now[1]! - prev[1]!), Math.abs(now[2]! - prev[2]!));
       prev = now;
@@ -134,6 +140,96 @@ describe('KaleidoscopePreset', () => {
     p.update(frame(0), params({ sparkle: Number.NaN }));
     expect(p.inspect().sparkle).toBe(0.5);
     p.dispose();
+  });
+
+  const withSong = (t: number, song: { mood: number; section: number }, o: Partial<AudioFrame> = {}): AudioFrame =>
+    frame(t, { ...o, song: { mood: song.mood, section: song.section, sectionStart: 0, sectionCount: 4 } });
+
+  it('曲全体の曲調 (frame.song) を使う: ライブの音が静かでも、曲の中で激しい所なら mood が上がる', () => {
+    const p = makePreset();
+    for (let i = 0; i < 60 * 25; i++) p.update(withSong(i / 60, { mood: 0.9, section: 0 }), params());
+    expect(p.inspect().usingSong).toBe(true);
+    expect(p.inspect().mood).toBeGreaterThan(0.7);
+    for (let i = 0; i < 60 * 40; i++) p.update(withSong(25 + i / 60, { mood: 0.1, section: 0 }, LOUD), params());
+    expect(p.inspect().mood).toBeLessThan(0.35); // ライブの音が大きくても、曲の中で静かな所なら低い
+    p.dispose();
+  });
+
+  it('曲全体の情報が無いときは、ライブの音量だけで決める (今までどおり)', () => {
+    const p = makePreset();
+    run(p, 60 * 15, () => LOUD);
+    expect(p.inspect().usingSong).toBe(false);
+    expect(p.inspect().mood).toBeGreaterThan(0.6);
+    p.dispose();
+  });
+
+  it('曲調の追従の設定: 小さいほど遅く、大きいほど速く mood が動く', () => {
+    const slow = makePreset();
+    const fast = makePreset();
+    // 最初のフレームは曲調を目標へすぐ合わせるので、静かな所 (0) から始めて、激しい所 (1) へ移る
+    slow.update(withSong(0, { mood: 0, section: 0 }), params({ follow: 0 }));
+    fast.update(withSong(0, { mood: 0, section: 0 }), params({ follow: 1 }));
+    for (let i = 1; i <= 60 * 3; i++) {
+      slow.update(withSong(i / 60, { mood: 1, section: 0 }), params({ follow: 0 }));
+      fast.update(withSong(i / 60, { mood: 1, section: 0 }), params({ follow: 1 }));
+    }
+    expect(fast.inspect().mood).toBeGreaterThan(0.65); // 目標は 0.85 (曲調 0.85 + ライブの音 0.15 分は無音)
+    expect(slow.inspect().mood).toBeLessThan(0.25);
+    expect(fast.inspect().mood).toBeGreaterThan(slow.inspect().mood * 3);
+    slow.update(withSong(3.02, { mood: 1, section: 0 }), params({ follow: Number.NaN })); // 壊れた値は既定
+    expect(Number.isFinite(slow.inspect().mood)).toBe(true);
+    slow.dispose();
+    fast.dispose();
+  });
+
+  it('区間が変わると、約 2.4 秒かけて少し暗くなり、真ん中で破片の並びを入れ替え、元の明るさに戻る', () => {
+    const p = makePreset();
+    for (let i = 0; i < 60; i++) p.update(withSong(i / 60, { mood: 0.5, section: 0 }), params());
+    expect(p.inspect()).toMatchObject({ section: 0, fade: 1 });
+    let minFade = 1;
+    let swappedAt = -1;
+    let maxStep = 0;
+    let prevFade = 1;
+    for (let i = 0; i < 60 * 3; i++) {
+      const t = 1 + i / 60;
+      p.update(withSong(t, { mood: 0.5, section: 1 }), params());
+      const s = p.inspect();
+      minFade = Math.min(minFade, s.fade);
+      maxStep = Math.max(maxStep, Math.abs(s.fade - prevFade));
+      prevFade = s.fade;
+      if (swappedAt < 0 && s.section === 1) swappedAt = i / 60;
+    }
+    expect(minFade).toBeGreaterThan(0.45);
+    expect(minFade).toBeLessThan(0.6); // 少し暗くなる (真っ暗にはしない)
+    expect(swappedAt).toBeGreaterThan(1.0); // 真ん中 (1.2 秒) で入れ替える。最初ではない
+    expect(swappedAt).toBeLessThan(1.4);
+    expect(maxStep).toBeLessThan(0.02); // 1 フレームの明るさの変化はごく小さい (急に光らない)
+    expect(p.inspect()).toMatchObject({ section: 1, fade: 1 });
+    p.dispose();
+  });
+
+  it('再生位置を飛ばしたときは、切り替えの演出をせず、その区間の並びにすぐ変える', () => {
+    const p = makePreset();
+    for (let i = 0; i < 30; i++) p.update(withSong(i / 60, { mood: 0.5, section: 0 }), params());
+    p.update(withSong(40, { mood: 0.5, section: 2 }), params()); // 40 秒へ飛んだ
+    expect(p.inspect()).toMatchObject({ section: 2, fade: 1 });
+    p.update(withSong(10, { mood: 0.5, section: 1 }), params()); // 戻った
+    expect(p.inspect()).toMatchObject({ section: 1, fade: 1 });
+    p.dispose();
+  });
+
+  it('区間の番号で色の割り当てと破片の並びが変わる (番号から決まる = 同じ区間なら同じ)', () => {
+    const grab = (section: number): number[] => {
+      const p = makePreset();
+      p.update(withSong(0, { mood: 0.5, section }), params());
+      const u = (p as unknown as { material: THREE.ShaderMaterial }).material.uniforms;
+      const out = [u.secSeed!.value as number, u.colRot!.value as number];
+      p.dispose();
+      return out;
+    };
+    expect(grab(1)).not.toEqual(grab(2));
+    expect(grab(3)).toEqual(grab(3));
+    expect(grab(0)[1]).toBe(0);
   });
 
   it('拍で回転が一瞬だけ速くなる', () => {

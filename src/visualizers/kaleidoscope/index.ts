@@ -43,6 +43,16 @@ export const manifest: VisualizerManifest = {
     },
     {
       type: 'range',
+      key: 'follow',
+      label: { ja: '曲調の追従', en: 'Mood tracking' },
+      help: { ja: '曲の激しさに合わせて色や模様が変わる速さ (小さいとゆっくり、大きいとせわしなく)', en: 'How fast the colors and patterns follow the mood of the song (low = slow, high = quick)' },
+      min: 0,
+      max: 1,
+      step: 0.01,
+      default: 0.5,
+    },
+    {
+      type: 'range',
       key: 'sparkle',
       label: { ja: 'キラキラ', en: 'Sparkle' },
       help: { ja: '小さな星のきらめきの量 (0 で出さない。高い音で増えます)', en: 'Amount of small twinkling stars (0 = off; more on high sounds)' },

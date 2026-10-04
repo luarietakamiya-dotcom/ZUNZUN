@@ -19,6 +19,9 @@ import { createKaleidoscopeMaterial, KALEIDO_BANDS } from './shaders';
  *   音の明るさ (tone) で 2 色の混ざり方が偏る。ゆっくりなので、色や模様が急に変わって光ることはない。
  * - beat: 回転が一瞬だけ速くなる (明るさは跳ねない)。
  * - Motion: 回転と変化の速さ。intensity: 全体の明るさ。
+ * 曲全体の情報 (frame.song): 曲調は「その曲の中での激しさ」(曲全体の分布で 0..1 にしたもの) を使うので、録音の音量が違う曲でも全体を使う。
+ *   区間 (歌詞の [サビ] などの見出し、なければ音の変化から自動) が変わると、約 2.4 秒かけて少し暗くしながら、破片の並びと色の割り当てを入れ替える。
+ *   追従の速さは設定「曲調の追従」。
  * 設定: 鏡の枚数 (3..12)・模様の細かさ・回転の速さ・キラキラの量 (2026-10-04 ユーザー「キラキラさせるのも追加できるように」。
  *   小さな星のきらめきが、別々のタイミングで短くまたたく。0 で出さない。高音で増える)。
  * 乱数は使わない (時刻の積み重ねと、プロジェクトの seed から決めた初期の位相だけ = 同じプロジェクトなら同じ映像)。
@@ -60,6 +63,11 @@ const PALETTES: Record<string, () => { calm: Palette; lively: Palette }> = {
   }),
 };
 
+/** 区間の切り替えにかける秒数。前半で少し暗くなりながら、真ん中で破片の並びと色の割り当てを入れ替え、後半で戻る (急に光らない) */
+const TRANSITION_SEC = 2.4;
+/** 切り替えのいちばん暗いところの明るさ (1 = そのまま) */
+const TRANSITION_DIP = 0.5;
+
 export interface KaleidoscopeInspection {
   /** 鏡の枚数 (整数) */
   segments: number;
@@ -71,6 +79,10 @@ export interface KaleidoscopeInspection {
   warp: number;
   /** 中心の宝石の強さ 0..1 */
   bass: number;
+  /** 区間: いま使っている区間の番号と、切り替えの途中の明るさ (1 = 切り替え中でない)。曲全体の情報 (frame.song) を使っているか */
+  section: number;
+  fade: number;
+  usingSong: boolean;
   /** キラキラの量 0..1 (設定) */
   sparkle: number;
   /** 曲調 0..1 (0 = 静か・おだやか、1 = 激しい・にぎやか。数秒かけてゆっくり変わる) */
@@ -105,6 +117,17 @@ export class KaleidoscopePreset implements VisualizerPreset {
   private beatEnv = 0;
   private zoom = 1;
   private mood = 0;
+  /** 破片の大きさ用の、mood よりゆっくり追いかける値 */
+  private shape = 0;
+  /** 区間の切り替え: いま使っている区間の番号 (破片の並び・色の割り当ての元) */
+  private appliedSection = 0;
+  private pendingSection = 0;
+  private seenSection = -1;
+  /** 切り替えの経過秒 (-1 = 切り替え中でない) と、途中の明るさ */
+  private transT = -1;
+  private fade = 1;
+  private lastT = Number.NaN;
+  private songMood = false;
   private sparkle = 0.5;
   private tone = 0.5;
   private palette = PALETTES.default!();
@@ -140,10 +163,25 @@ export class KaleidoscopePreset implements VisualizerPreset {
     this.high = follow(this.high, Math.min(1, a.high), dt, 14, 5);
     // 拍: 回転が一瞬だけ速くなる (明るさは変えない)
     this.beatEnv = follow(this.beatEnv, Math.min(1, a.beat), dt, 8, 3);
-    // 曲調: 音量・音の動き (flux)・音の明るさを、数秒〜10 秒かけてならす (速い変化には反応しない = 色や模様が急に変わらない)
+    // 曲調: 曲全体から前もって計算した値 (frame.song。その曲の中での激しさ。再生位置を飛ばしても書き出しでも同じ) を使い、
+    // ライブの音量・音の動きを少しだけ混ぜる。曲全体の情報が無いとき (テスト・解析前) は、ライブの音量・音の動きだけで決める。
+    // 追従の速さ (設定「曲調の追従」) で、目標に近づく速さを決める (0 = 約 16 秒かけてゆっくり、1 = 約 2 秒でせわしなく)
     const loud = Math.min(1, Math.max(fin(frame.rms, 0) * 1.8, fin(frame.spectralEnergy, 0) * 1.4));
-    const active = Math.min(1, fin(frame.flux, 0) * 2.5);
-    this.mood = follow(this.mood, 0.65 * loud + 0.35 * active, dt, 0.25, 0.12);
+    const activity = Math.min(1, fin(frame.flux, 0) * 2.5);
+    const live = 0.65 * loud + 0.35 * activity;
+    const song = frame.song;
+    this.songMood = song != null && Number.isFinite(song.mood);
+    const target = this.songMood ? 0.85 * Math.min(1, Math.max(0, song!.mood)) + 0.15 * live : live;
+    const rate = 0.06 * Math.pow(10, unit(params.follow, 0.5)); // 0.06〜0.6 /秒 (最大でも約 2 秒かけて動く。それより速いと、色が急に変わって光って見える)
+    const jumped = this.updateSection(frame, dt);
+    if (jumped) {
+      // 最初のフレームと、再生位置を飛ばしたあとは、曲調を目標へすぐ合わせる (曲の頭や飛んだあとに、数秒かけて色が動かないように)
+      this.mood = target;
+      this.shape = target;
+    } else {
+      this.mood = follow(this.mood, target, dt, rate, rate * 0.5);
+      this.shape = follow(this.shape, this.mood, dt, rate * 0.5, rate * 0.5);
+    }
     let sum = 0;
     let weighted = 0;
     for (let i = 0; i < 64; i++) {
@@ -152,11 +190,14 @@ export class KaleidoscopePreset implements VisualizerPreset {
       weighted += v * i;
     }
     if (sum > 0.01) this.tone = follow(this.tone, Math.min(1, (weighted / sum / 63) * 2), dt, 0.2, 0.2);
-    this.zoom = 1 + 0.07 * this.bass;
+    this.zoom = 1 + 0.035 * this.bass * (1 - 0.85 * this.shape); // 破片が細かい (激しい曲) ほど、拡大の脈動は弱くする (細かい模様が拍ごとに動くと、画面全体の明るさが変わって光って見える)
     this.sparkle = unit(params.sparkle, 0.5);
     this.segments = Math.min(12, Math.max(3, Math.round(fin(params.segments, 6))));
     this.t += dt * (0.4 + 0.8 * motion);
-    this.rot += dt * ((0.03 + 0.22 * spin) * (0.5 + motion) * (0.6 + 0.8 * this.mood) + 0.12 * this.beatEnv * (0.3 + spin));
+    // 破片が細かいほど、同じ回転でも模様の線が速く動いて見える (画面全体の明るさが変わって光って見える) ので、細かさに合わせて回転を落とす
+    const fineness = (0.6 + 1.2 * unit(params.detail, 0.5)) * (0.8 + 0.7 * this.shape);
+    const rotScale = Math.min(1.3, Math.max(0.3, 1.2 / fineness));
+    this.rot += dt * rotScale * ((0.03 + 0.17 * spin) * (0.5 + motion) * (0.6 + 0.8 * this.mood) + 0.12 * this.beatEnv * (0.3 + spin));
 
     // 帯: 64 本を 16 本にまとめる (4 本ずつの平均)。立ち上がりは速く、戻りはゆっくり
     const per = Math.floor(64 / KALEIDO_BANDS);
@@ -188,12 +229,51 @@ export class KaleidoscopePreset implements VisualizerPreset {
       zoom: this.zoom,
       warp: this.material.uniforms.warp!.value as number,
       bass: this.bass,
+      section: this.appliedSection,
+      fade: this.fade,
+      usingSong: this.songMood,
       sparkle: this.sparkle,
       mood: this.mood,
       tone: this.tone,
       bands: Array.from(this.bandLevel),
       aspect: this.aspect,
     };
+  }
+
+  /**
+   * 区間の切り替え: 区間の番号が変わったら、約 2.4 秒かけて、少し暗くしながら破片の並びと色の割り当てを入れ替える。
+   * 再生位置を飛ばしたとき (時刻が大きく動いた・戻った) は、切り替えの演出をせず、その区間の並びにすぐ変える
+   */
+  private updateSection(frame: AudioFrame, dt: number): boolean {
+    const section = frame.song && Number.isFinite(frame.song.section) ? Math.max(0, Math.floor(frame.song.section)) : 0;
+    const t = fin(frame.t, 0);
+    const jumped = !Number.isFinite(this.lastT) || t < this.lastT - 1e-6 || t - this.lastT > 0.5;
+    this.lastT = t;
+    if (this.seenSection < 0 || jumped) {
+      this.seenSection = section;
+      this.appliedSection = section;
+      this.pendingSection = section;
+      this.transT = -1;
+      this.fade = 1;
+      return true;
+    }
+    if (section !== this.seenSection) {
+      this.seenSection = section;
+      this.pendingSection = section;
+      if (this.transT < 0) this.transT = 0; // 切り替え中なら、行き先だけ変えて続ける
+    }
+    if (this.transT >= 0) {
+      this.transT += dt;
+      if (this.transT >= TRANSITION_SEC / 2) this.appliedSection = this.pendingSection;
+      if (this.transT >= TRANSITION_SEC) {
+        this.transT = -1;
+        this.appliedSection = this.pendingSection;
+        this.fade = 1;
+      } else {
+        this.fade = 1 - (1 - TRANSITION_DIP) * Math.sin((Math.PI * this.transT) / TRANSITION_SEC);
+      }
+    }
+    return false;
   }
 
   private applyTheme(name: string): void {
@@ -215,8 +295,12 @@ export class KaleidoscopePreset implements VisualizerPreset {
     const u = this.material.uniforms;
     this.mixColors();
     u.mood!.value = this.mood;
+    u.shape!.value = this.shape;
     u.tone!.value = this.tone;
     u.sparkle!.value = this.sparkle;
+    u.secSeed!.value = (this.appliedSection * 7.31) % 97;
+    u.colRot!.value = (this.appliedSection % 4) * 0.25;
+    u.fade!.value = this.fade;
     u.t!.value = this.t;
     u.rot!.value = this.rot;
     u.zoom!.value = this.zoom;

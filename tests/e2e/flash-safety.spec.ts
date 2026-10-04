@@ -49,7 +49,7 @@ async function measure(page: Page, preset: string, extra: Record<string, unknown
         const bp = (t % 0.5) / 0.5;
         const bands = new Float32Array(64).fill(0.5);
         host.render(
-          { t, dt: 1 / FPS, bass: Math.exp(-bp * 5), mid: 0.6, high: 0.8, rms: 0.6, peak: 0.8, beat: Math.exp(-bp * 5), beatIndex: Math.floor(t / 0.5), spectralEnergy: 0.6, flux: 0.5, bands },
+          { t, dt: 1 / FPS, bass: Math.exp(-bp * 5), mid: 0.6, high: 0.8, rms: 0.6, peak: 0.8, beat: Math.exp(-bp * 5), beatIndex: Math.floor(t / 0.5), spectralEnergy: 0.6, flux: 0.5, bands, ...(extra.__songSwitch ? { song: { mood: 0.5 + 0.5 * Math.sin(t * 0.8), section: Math.floor(t / (extra.__songSwitch as number)), sectionStart: 0, sectionCount: 99 } } : {}) },
           params,
         );
         tg.drawImage(canvas, 0, 0);
@@ -93,6 +93,8 @@ const CASES: [string, Record<string, unknown>][] = [
   ['led-matrix', {}],
   ['led-matrix', { columns: '24', layout: 'center', height: 1, dot: 1, grid: 1 }],
   ['kaleidoscope', {}],
+  // 区間を 2 秒ごとに切り替え続ける最悪ケース (実際の区間は 14 秒以上空く)。切り替えの暗くなって戻る動きと、曲調の変化が引っかからないこと
+  ['kaleidoscope', { follow: 1, __songSwitch: 2 }],
   ['kaleidoscope', { segments: 12, detail: 1, spin: 1, sparkle: 1 }],
   ['spectrum-wave', {}],
   ['spectrum-wave', { height: 1, ribbons: 1, fill: 1, mirror: 1 }],

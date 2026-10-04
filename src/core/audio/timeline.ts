@@ -1,11 +1,15 @@
-import type { AudioFrame } from '../types';
+import type { AudioFrame, SongContext } from '../types';
 import type { AudioAnalysis } from './analyze';
 import { BAND_COUNT } from './analyze';
+import { buildSongMood, type SongMood } from './mood';
 
 const EMPTY_BANDS = new Float32Array(BAND_COUNT);
 
 /** ビートパルスの減衰時間 (秒)。ビート直後を 1、ここで指定した秒数で概ね減衰しきる。 */
 const BEAT_DECAY = 0.18;
+
+/** 曲全体の前計算 (曲調・自動の区間) は解析結果ごとに 1 回だけ。withCues() で作った複製とも共有する */
+const moodCache = new WeakMap<object, SongMood>();
 
 /**
  * AudioAnalysis (固定フレームレートの特徴量シリーズ) から、任意の時刻 t の AudioFrame を
@@ -13,7 +17,42 @@ const BEAT_DECAY = 0.18;
  * 音ズレが原理的に起きないようにする (docs/ARCHITECTURE.md の「解析は事前、描画は時刻駆動」)。
  */
 export class AudioTimeline {
+  /** 歌詞の見出しなどから決めた区間の境目 (秒、昇順)。null なら音の変化から自動で見つけたものを使う */
+  private cues: readonly number[] | null = null;
+
   constructor(private readonly analysis: AudioAnalysis) {}
+
+  /** 区間の境目を外から決める (歌詞の [サビ] などの見出しの時刻)。null / 空で自動に戻す */
+  setSectionCues(times: readonly number[] | null): void {
+    this.cues = times && times.length > 0 ? [...times].filter((t) => Number.isFinite(t)).sort((a, b) => a - b) : null;
+  }
+
+  /** 区間の境目だけが違う複製 (書き出しの開始時点の歌詞の区切りを固定するため。解析結果と前計算は共有) */
+  withCues(times: readonly number[] | null): AudioTimeline {
+    const copy = new AudioTimeline(this.analysis);
+    copy.setSectionCues(times);
+    return copy;
+  }
+
+  private songMood(): SongMood {
+    let m = moodCache.get(this.analysis);
+    if (!m) {
+      m = buildSongMood(this.analysis);
+      moodCache.set(this.analysis, m);
+    }
+    return m;
+  }
+
+  /** 時刻 t の曲全体の情報 (曲調・区間)。曲が空なら undefined */
+  private songAt(t: number, i0: number, i1: number, frac: number): SongContext | undefined {
+    const sm = this.songMood();
+    if (sm.mood.length === 0) return undefined;
+    const mood = sm.mood[i0]! + (sm.mood[i1]! - sm.mood[i0]!) * frac;
+    const bounds = this.cues ?? sm.autoBoundaries;
+    let section = 0;
+    while (section < bounds.length && bounds[section]! <= t) section++;
+    return { mood, section, sectionStart: section > 0 ? bounds[section - 1]! : 0, sectionCount: bounds.length + 1 };
+  }
 
   get duration(): number {
     return this.analysis.duration;
@@ -67,6 +106,7 @@ export class AudioTimeline {
       spectralEnergy: lerp(a.spectralEnergy),
       flux: lerp(a.flux),
       bands: lerpBand(),
+      song: this.songAt(clamped, i0, i1, frac),
     };
   }
 

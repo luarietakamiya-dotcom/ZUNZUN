@@ -28,8 +28,12 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
       seg: { value: 6 },
       detail: { value: 1 },
       mood: { value: 0 },
+      shape: { value: 0 },
       tone: { value: 0.5 },
       sparkle: { value: 0.5 },
+      secSeed: { value: 0 },
+      colRot: { value: 0 },
+      fade: { value: 1 },
       bass: { value: 0 },
       high: { value: 0 },
       bandLevel: { value: new Float32Array(KALEIDO_BANDS) },
@@ -56,7 +60,11 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
       uniform float seg;
       uniform float detail;
       uniform float mood; // 曲調: 0 = 静か・おだやか、1 = 激しい・にぎやか (ゆっくり変わる)
+      uniform float shape; // 破片の大きさ用の曲調 (mood よりさらにゆっくり変わる。細かい模様が画面全体で動くと明るさが変わる画素が増えるため)
       uniform float tone; // 音の明るさ (0 = 低い音が中心、1 = 高い音が中心。ゆっくり変わる)
+      uniform float secSeed; // 区間ごとの破片の並びの違い (区間の番号から)
+      uniform float colRot; // 区間ごとの色の割り当ての回転 (0, 0.25, 0.5, 0.75)
+      uniform float fade; // 区間の切り替えの間の明るさ (1 = そのまま。切り替えの途中で少し暗くなる)
       uniform float sparkle; // キラキラの量 (設定。0 = 出さない)
       uniform float bass;
       uniform float high;
@@ -115,7 +123,8 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
       }
 
       /** 破片の色 (4 色から 1 つ。破片ごとに決まる) */
-      vec3 pickColor(float h) {
+      vec3 pickColor(float h0) {
+        float h = fract(h0 + colRot);
         vec3 c = colA;
         c = mix(c, colB, step(0.25, h));
         c = mix(c, colC, step(0.5, h));
@@ -224,12 +233,12 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
         a = mod(a, s);
         a = abs(a - 0.5 * s);
         // 扇形の中の見る場所は、ゆっくり動く (万華鏡の中の物が動く)。静かな曲は大きな破片、激しい曲は細かい破片
-        float scale = 2.1 * detail * (0.8 + 0.7 * mood);
+        float scale = 2.1 * detail * (0.8 + 0.7 * shape);
         vec2 q = (r * vec2(cos(a), sin(a)) + vec2(0.55, 0.25) + warp * 0.35 * vec2(sin(t * 0.11), cos(t * 0.09))) * scale;
         float tm = t * (0.25 + 0.35 * mood);
         // 大きな破片 + 小さな破片を半透明に重ねる (激しい曲ほど 2 層目が強い)
-        vec3 col = shards(q, tm, 0.0);
-        vec3 col2 = shards(q * 1.9 + vec2(3.7, 1.3), tm * 1.3, 17.0);
+        vec3 col = shards(q + vec2(secSeed * 1.37, secSeed * 0.71), tm, secSeed);
+        vec3 col2 = shards(q * 1.9 + vec2(3.7, 1.3) + vec2(secSeed * 0.53, secSeed * 1.11), tm * 1.3, 17.0 + secSeed);
         col = mix(col, col2 * 1.1, 0.12 + 0.3 * mood); // 半透明に重ねる (足し算にすると色が白く薄くなる)
         // 縁の虹色のにじみ (高音で強まる): 破片の境目のあたりに、角度で色相が回る薄い光
         float f1x;
@@ -270,7 +279,7 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
         float lum = dot(col, vec3(0.299, 0.587, 0.114));
         col = max(vec3(0.0), mix(vec3(lum), col, 1.45));
         col = col / (1.0 + 0.8 * col);
-        gl_FragColor = vec4(col * intensity, 1.0);
+        gl_FragColor = vec4(col * intensity * fade, 1.0);
       }
     `,
   });
