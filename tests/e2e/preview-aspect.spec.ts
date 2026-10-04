@@ -32,4 +32,23 @@ test('プレビューの縦横比が、書き出しの画面の大きさに合�
   // 2:3 を選ぶと、書き出しの表示も追従する
   await size.selectOption('1080x1620');
   await expect(page.locator('[data-export="size-text"]')).toContainText('2:3');
+
+  // 形のアイコンのボタン (2026-10-04): 押すとその比率になり、選んだものが光る (aria-pressed)。プルダウンも追従する
+  await page.click('button[data-panel="music"]');
+  const pressed = async (ratio: string): Promise<string | null> => page.locator(`[data-size-ratio="${ratio}"]`).getAttribute('aria-pressed');
+  await page.locator('[data-size-ratio="16:9"]').click();
+  await expect(size).toHaveValue('1920x1080');
+  expect([await pressed('16:9'), await pressed('9:16'), await pressed('2:3')]).toEqual(['true', 'false', 'false']);
+  await page.locator('[data-size-ratio="3:2"]').click();
+  await expect(size).toHaveValue('1620x1080');
+  expect(await pressed('3:2')).toBe('true');
+  await page.locator('[data-size-ratio="9:16"]').click();
+  await expect(size).toHaveValue('1080x1920');
+  await page.click('button[data-panel="visualizer"]');
+  await expect.poll(ratio).toBeCloseTo(9 / 16, 1);
+  // プルダウンで同じ比率の別サイズ (1280×720) にしても、16:9 のアイコンが光る。そのとき 16:9 のアイコンを押しても大きさは変えない
+  await size.selectOption('1280x720');
+  expect(await pressed('16:9')).toBe('true');
+  await page.locator('[data-size-ratio="16:9"]').click();
+  await expect(size).toHaveValue('1280x720');
 });

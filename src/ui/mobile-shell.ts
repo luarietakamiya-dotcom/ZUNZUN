@@ -2,7 +2,7 @@ import type { PanelId } from './panels';
 import { PANELS } from './panels';
 import { createLivePreview } from './panels/live-preview';
 import { createBrandLogo } from './brand';
-import { createSizeSelect } from './size-select';
+import { createSizeSwitcher } from './size-select';
 import { createTransport } from './transport';
 import { lang, onLangChange, setLang, t2, tr, type Lang, type Text2 } from '../core/i18n';
 import { setLayout } from './layout';
@@ -65,10 +65,7 @@ export function mountMobileShell(root: HTMLElement): () => void {
   // 画面の大きさ: ヘッダーは 1 行で余裕が無いので、そのすぐ下に細い 1 行を固定して置く (どのタブでも見える)
   const sizeBar = document.createElement('div');
   sizeBar.className = 'm-sizebar';
-  const sizeLabel = document.createElement('span');
-  const sizeLabelText = (): string => tr('画面の大きさ', 'Screen size');
-  sizeLabel.textContent = sizeLabelText();
-  sizeBar.append(sizeLabel, createSizeSelect());
+  sizeBar.appendChild(createSizeSwitcher());
 
   const previewBox = document.createElement('div');
   previewBox.className = 'm-preview';
@@ -189,7 +186,6 @@ export function mountMobileShell(root: HTMLElement): () => void {
 
   render();
   const offLang = onLangChange(() => {
-    sizeLabel.textContent = sizeLabelText();
     render();
   });
   return () => {

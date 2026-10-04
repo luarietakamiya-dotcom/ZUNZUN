@@ -507,8 +507,28 @@ input[type='range'], input[type='checkbox'], input[type='radio'] { accent-color:
 /* 共通の再生欄 (ヘッダー) */
 .app-header { flex-wrap: wrap; }
 .size-select { flex: none; width: auto; max-width: 150px; padding: 4px 6px; font-size: 12px; }
-.mobile-shell .m-sizebar { position: sticky; top: calc(var(--m-header-h) + env(safe-area-inset-top)); z-index: 18; display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: var(--m-bar-h); box-sizing: border-box; padding: 0 12px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--fg-dim); }
-.mobile-shell .size-select { max-width: 200px; padding: 3px 6px; font-size: 12px; }
+/* 画面の大きさ: 比率の形のアイコンボタン + プルダウン */
+.size-switch { display: flex; align-items: center; gap: 4px; flex: none; }
+.size-ratio {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  width: 42px; height: 40px; padding: 0; border: 1px solid transparent; border-radius: 8px; cursor: pointer;
+  background: transparent; color: var(--fg-dim); font: inherit;
+  transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.size-ratio:hover { color: var(--fg); background: rgba(120, 150, 255, 0.07); }
+.size-ratio-icon { display: block; border: 1.6px solid currentColor; border-radius: 3px; box-sizing: border-box; }
+.size-ratio-label { font-size: 9.5px; line-height: 1; letter-spacing: 0.02em; }
+.size-ratio[aria-pressed='true'] {
+  color: #fff;
+  background: linear-gradient(180deg, rgba(106, 61, 255, 0.3), rgba(25, 217, 255, 0.12));
+  border-color: rgba(90, 140, 255, 0.55);
+  box-shadow: var(--glow);
+}
+.size-ratio[aria-pressed='true'] .size-ratio-icon { border-color: var(--accent-cyan); box-shadow: 0 0 6px rgba(25, 217, 255, 0.5); }
+.mobile-shell .m-sizebar { position: sticky; top: calc(var(--m-header-h) + env(safe-area-inset-top)); z-index: 18; display: flex; align-items: center; justify-content: center; gap: 8px; height: var(--m-bar-h); box-sizing: border-box; padding: 0 8px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--fg-dim); }
+.mobile-shell .size-switch { gap: 2px; }
+.mobile-shell .size-ratio { width: 38px; height: 42px; }
+.mobile-shell .size-select { max-width: 124px; padding: 3px 2px; font-size: 11px; }
 .transport { display: flex; align-items: center; gap: 6px; margin-left: auto; min-width: 0; }
 .transport-button { padding: 4px 8px; font-variant-numeric: tabular-nums; }
 .transport-play { min-width: 2.6em; color: var(--fg); border-color: var(--border); }
@@ -586,7 +606,7 @@ input[type='range'], input[type='checkbox'], input[type='radio'] { accent-color:
 /* ---------------------------------------------------------------------------------------------
  * スマホ表示 (ui/mobile-shell.ts)。ここから下は .mobile-shell の中だけに効く (PC 表示は変えない)
  * ------------------------------------------------------------------------------------------- */
-.mobile-shell { --m-header-h: 53px; --m-bar-h: 36px; --m-stack-h: calc(var(--m-header-h) + var(--m-bar-h)); display: block; height: auto; min-height: 100%; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+.mobile-shell { --m-header-h: 53px; --m-bar-h: 50px; --m-stack-h: calc(var(--m-header-h) + var(--m-bar-h)); display: block; height: auto; min-height: 100%; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
 .mobile-shell .m-header {
   position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px;
   padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top));

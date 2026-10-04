@@ -1,7 +1,7 @@
 import type { PanelId } from './panels';
 import { PANELS } from './panels';
 import { createBrandLogo } from './brand';
-import { createSizeSelect } from './size-select';
+import { createSizeSwitcher } from './size-select';
 import { createTransport } from './transport';
 import { lang, onLangChange, setLang, t2, tr, type Lang } from '../core/i18n';
 import { isNarrowScreen, setLayout } from './layout';
@@ -46,7 +46,7 @@ export function mountShell(root: HTMLElement): () => void {
   // 共通の再生欄 (どのタブでも使える)。Lyrics タブでは Space をタップに使うので、そのタブの処理に任せる
   header.appendChild(createTransport({ spaceHandledByPanel: () => active === 'lyrics' }));
   // 画面の大きさ (縦横比)。どのタブでも今の大きさが分かり、ここで選ぶ
-  header.appendChild(createSizeSelect());
+  header.appendChild(createSizeSwitcher());
 
   // ライセンス: どの画面からでも 1 回で見られるように、右上に置く (押すと「使い方」タブのライセンス欄へ)
   const licenseLink = document.createElement('button');
