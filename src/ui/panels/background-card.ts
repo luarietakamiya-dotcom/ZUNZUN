@@ -381,11 +381,11 @@ export function createBackgroundCard(): HTMLElement {
     for (const def of SLIDERS.filter((d) => d.key !== 'blur' || bg.kind === 'image')) {
       const { row: r, input: range, setLabel } = sliderRow(def.label, def.help, 0, 1, 0.01);
       range.value = String(bg[def.key]);
-      setLabel(bg[def.key].toFixed(2));
+      setLabel(def.key === 'dim' ? `${Math.round(bg.dim * 100)}%` : bg.blur.toFixed(2));
       range.addEventListener('input', () => {
         const v = parseFloat(range.value);
         store.updateBackground({ [def.key]: v });
-        setLabel(v.toFixed(2));
+        setLabel(def.key === 'dim' ? `${Math.round(v * 100)}%` : v.toFixed(2));
       });
       grid.appendChild(r);
     }
@@ -553,11 +553,11 @@ export function createBackgroundCard(): HTMLElement {
     for (const def of SLIDERS) {
       const { row: r, input: range, setLabel } = sliderRow(def.label, def.help, 0, 1, 0.01);
       range.value = String(bg[def.key]);
-      setLabel(bg[def.key].toFixed(2));
+      setLabel(def.key === 'dim' ? `${Math.round(bg.dim * 100)}%` : bg.blur.toFixed(2));
       range.addEventListener('input', () => {
         const v = parseFloat(range.value);
         store.updateBackground({ [def.key]: v });
-        setLabel(v.toFixed(2));
+        setLabel(def.key === 'dim' ? `${Math.round(v * 100)}%` : v.toFixed(2));
       });
       grid.appendChild(r);
     }

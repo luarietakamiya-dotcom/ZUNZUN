@@ -207,7 +207,7 @@ describe('sanitizeProject', () => {
     // 古いプロジェクトの背景の重ね方 (知らない値は既定) は、レイヤーの設定へ移る
     expect(sanitizeProject(raw).composition).toMatchObject({ visualizerBlend: 'screen', visualizerOpacity: 0.5 });
     raw.background = { ref: 'a.mp4', sha256: sha, kind: 'video', blend: 'over' };
-    expect(sanitizeProject(raw).background).toMatchObject({ kind: 'video', fit: 'cover', dim: 0.35 });
+    expect(sanitizeProject(raw).background).toMatchObject({ kind: 'video', fit: 'cover', dim: 0 });
     expect(sanitizeProject(raw).composition).toMatchObject({ visualizerBlend: 'over', visualizerOpacity: 1 });
     for (const bad of [{ ref: '', sha256: sha }, { ref: 'a', sha256: 'zz' }, 'a.png']) {
       raw.background = bad;

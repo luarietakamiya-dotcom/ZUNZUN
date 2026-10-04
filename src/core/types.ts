@@ -291,7 +291,7 @@ export const defaultBackground = (ref: string, sha256: string, kind: BackgroundS
   sha256,
   kind,
   fit: 'cover',
-  dim: 0.35,
+  dim: 0,
   blur: 0,
   loop: true,
 });
