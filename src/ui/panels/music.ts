@@ -27,22 +27,36 @@ export function renderMusicPanel(): HTMLElement {
   status.className = 'placeholder-card';
   el.appendChild(status);
 
-  const controls = document.createElement('div');
-  controls.className = 'row-gap';
-
+  // 再生 ⇄ 一時停止 (1 つの大きなボタン。上の再生ボタンと同じ動き)
   const playBtn = document.createElement('button');
   playBtn.type = 'button';
-  playBtn.className = 'tab-button';
-  playBtn.textContent = tr('再生', 'Play');
-
-  const pauseBtn = document.createElement('button');
-  pauseBtn.type = 'button';
-  pauseBtn.className = 'tab-button';
-  pauseBtn.textContent = tr('一時停止', 'Pause');
-
-  controls.appendChild(playBtn);
-  controls.appendChild(pauseBtn);
-  el.appendChild(controls);
+  playBtn.className = 'btn-primary btn-large music-play';
+  playBtn.dataset.music = 'play';
+  el.appendChild(playBtn);
+  const setPlayLabel = (): void => {
+    const playing = store.audio.isPlaying;
+    playBtn.classList.toggle('btn-icon-pause', playing);
+    playBtn.classList.toggle('btn-icon-play', !playing);
+    playBtn.textContent = playing ? tr('一時停止', 'Pause') : tr('再生', 'Play');
+  };
+  setPlayLabel();
+  // 上の再生ボタンや Space キーで変わったときも合わせる (パネルが外れたら止める)
+  let seen = store.audio.isPlaying;
+  let mounted = false;
+  const watch = (): void => {
+    if (!playBtn.isConnected) {
+      if (mounted) return;
+      requestAnimationFrame(watch);
+      return;
+    }
+    mounted = true;
+    if (store.audio.isPlaying !== seen) {
+      seen = store.audio.isPlaying;
+      setPlayLabel();
+    }
+    requestAnimationFrame(watch);
+  };
+  requestAnimationFrame(watch);
 
   const refreshStatus = (): void => {
     const { audio } = store;
@@ -51,7 +65,6 @@ export function renderMusicPanel(): HTMLElement {
         ? tr(`曲がまだ読み込まれていません (開いたプロジェクトは「${store.expectedAudio.name}」を使っています。同じファイルを選んでください)`, `No song loaded yet (the opened project uses "${store.expectedAudio.name}" — please pick that file)`)
         : tr('曲がまだ読み込まれていません', 'No song loaded yet');
       playBtn.disabled = true;
-      pauseBtn.disabled = true;
       return;
     }
     const bpmText = audio.bpm > 0 ? `${audio.bpm} BPM` : tr('テンポ (BPM) を見つけられませんでした', 'Tempo (BPM) not detected');
@@ -64,7 +77,6 @@ export function renderMusicPanel(): HTMLElement {
     }
     status.textContent = text;
     playBtn.disabled = false;
-    pauseBtn.disabled = false;
   };
   refreshStatus();
 
@@ -73,7 +85,6 @@ export function renderMusicPanel(): HTMLElement {
     if (!file) return;
     status.textContent = tr('曲を調べています…', 'Analyzing the song…');
     playBtn.disabled = true;
-    pauseBtn.disabled = true;
     store.audio
       .load(file)
       .then(refreshStatus)
@@ -82,8 +93,13 @@ export function renderMusicPanel(): HTMLElement {
       });
   });
 
-  playBtn.addEventListener('click', () => store.audio.play());
-  pauseBtn.addEventListener('click', () => store.audio.pause());
+  playBtn.addEventListener('click', () => {
+    if (!store.audio.isLoaded) return;
+    if (store.audio.isPlaying) store.audio.pause();
+    else store.audio.play();
+    seen = store.audio.isPlaying;
+    setPlayLabel();
+  });
 
   return el;
 }

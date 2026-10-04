@@ -200,7 +200,10 @@ export function renderExportPanel(): HTMLElement {
   const showSize = (): void => {
     const { width, height } = store.exportSettings;
     const p = EXPORT_SIZE_PRESETS.find((x) => x.width === width && x.height === height);
-    sizeText.textContent = `${p ? sizeOptionText(p) : `${width}×${height}`} ${tr('(上のメニューで選べます)', '(choose it in the top menu)')}`;
+    const hint = document.createElement('span');
+    hint.className = 'param-help';
+    hint.textContent = tr('上のメニューで選べます', 'Choose it in the top menu');
+    sizeText.replaceChildren(p ? sizeOptionText(p) : `${width}×${height}`, hint);
   };
   showSize();
   settingsGrid.appendChild(labeledRow(tr('画面の大きさ', 'Size'), sizeText));
@@ -285,18 +288,18 @@ export function renderExportPanel(): HTMLElement {
   el.appendChild(prereq);
 
   const controls = document.createElement('div');
-  controls.className = 'row-gap';
+  controls.className = 'export-controls';
   const startBtn = document.createElement('button');
   startBtn.type = 'button';
-  startBtn.className = 'tab-button';
+  startBtn.className = 'btn-primary btn-large btn-icon-export';
   startBtn.textContent = tr('書き出しを始める', 'Start export');
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
-  cancelBtn.className = 'tab-button';
+  cancelBtn.className = 'btn-secondary';
   cancelBtn.textContent = tr('やめる', 'Cancel');
   const downloadBtn = document.createElement('button');
   downloadBtn.type = 'button';
-  downloadBtn.className = 'tab-button';
+  downloadBtn.className = 'btn-secondary';
   downloadBtn.textContent = tr('もう一度保存する', 'Save again');
   controls.appendChild(startBtn);
   controls.appendChild(cancelBtn);

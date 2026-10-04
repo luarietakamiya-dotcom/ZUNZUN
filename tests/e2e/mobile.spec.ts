@@ -113,7 +113,7 @@ test('表示を行き来しても、Space 1 回で再生が 1 回だけ切り替
   expect(await page.evaluate(async () => (await import('/src/core/store.ts')).store.audio.isPlaying)).toBe(true);
 });
 
-test('スマホ表示のヘッダー: どの幅 (320〜430px) でも、ロゴが再生ボタンに重ならず、1 行 (高さ 53px) で、横にはみ出さない', async ({ page }) => {
+test('スマホ表示のヘッダー: どの幅 (320〜430px) でも、ロゴが再生ボタンに重ならず、1 行 (高さ 57px) で、横にはみ出さない', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('zunzun.lang', 'ja'));
   for (const width of [320, 360, 390, 430]) {
     await page.setViewportSize({ width, height: 800 });
@@ -124,7 +124,7 @@ test('スマホ表示のヘッダー: どの幅 (320〜430px) でも、ロゴが
       const play = document.querySelector('.transport-play')!.getBoundingClientRect();
       return { overlap: logo.right > play.left + 0.5, headerH: Math.round(document.querySelector('.m-header')!.getBoundingClientRect().height), over: document.documentElement.scrollWidth - innerWidth };
     });
-    expect(r, `${width}px`).toEqual({ overlap: false, headerH: 53, over: 0 });
+    expect(r, `${width}px`).toEqual({ overlap: false, headerH: 57, over: 0 });
   }
 });
 

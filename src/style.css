@@ -606,7 +606,7 @@ input[type='range'], input[type='checkbox'], input[type='radio'] { accent-color:
 /* ---------------------------------------------------------------------------------------------
  * スマホ表示 (ui/mobile-shell.ts)。ここから下は .mobile-shell の中だけに効く (PC 表示は変えない)
  * ------------------------------------------------------------------------------------------- */
-.mobile-shell { --m-header-h: 53px; --m-bar-h: 50px; --m-stack-h: calc(var(--m-header-h) + var(--m-bar-h)); display: block; height: auto; min-height: 100%; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+.mobile-shell { --m-header-h: 57px; --m-bar-h: 50px; --m-stack-h: calc(var(--m-header-h) + var(--m-bar-h)); display: block; height: auto; min-height: 100%; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
 .mobile-shell .m-header {
   position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px;
   padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top));
@@ -619,7 +619,7 @@ input[type='range'], input[type='checkbox'], input[type='radio'] { accent-color:
 .mobile-shell .transport-name { display: none; }
 .mobile-shell .transport-button { padding: 6px 7px; min-height: 36px; white-space: nowrap; font-size: 12px; }
 /* 再生 (▶) と一時停止 (❚❚) で幅が変わって、ロゴに重ならないように、幅を決めて文字は中央に */
-.mobile-shell .transport-play { flex: none; width: 44px; min-width: 44px; padding: 6px 0; text-align: center; font-size: 14px; letter-spacing: 0; }
+.mobile-shell .transport-play { width: 40px; min-width: 40px; height: 40px; }
 .mobile-shell .transport-time { font-size: 11px; flex: none; }
 .mobile-shell .transport-total { display: none; }
 @media (max-width: 350px) {
@@ -680,3 +680,50 @@ input[type='range'], input[type='checkbox'], input[type='radio'] { accent-color:
   border-color: var(--accent-cyan);
   background: rgba(245, 197, 66, 0.08);
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * ボタンの共通部品 (2026-10-04 UI を正式版に合わせる。段階 3)
+ * .btn-primary = その画面の主役 (大きく、グラデーションに光る)。.btn-secondary = 控えめ (輪郭だけ)
+ * ------------------------------------------------------------------------------------------- */
+.btn-primary, .btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: inherit; font-size: 14px; font-weight: 600; letter-spacing: 0.02em;
+  min-height: 40px; padding: 8px 20px; border-radius: 10px; cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.15s, filter 0.15s, background 0.15s, border-color 0.15s;
+}
+.btn-primary {
+  color: #fff; border: 1px solid rgba(160, 200, 255, 0.35);
+  background: linear-gradient(100deg, #6a3dff, #1f7bff 55%, #19d9ff);
+  box-shadow: 0 0 18px rgba(50, 120, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  text-shadow: 0 1px 2px rgba(0, 0, 40, 0.5);
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.12); box-shadow: 0 0 26px rgba(60, 150, 255, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3); }
+.btn-primary:active:not(:disabled) { transform: translateY(1px) scale(0.99); }
+.btn-primary:disabled { cursor: not-allowed; color: var(--fg-dim); background: var(--panel-2); border-color: var(--border); box-shadow: none; text-shadow: none; }
+.btn-secondary { color: var(--fg); background: transparent; border: 1px solid rgba(90, 140, 255, 0.45); }
+.btn-secondary:hover:not(:disabled) { background: rgba(90, 140, 255, 0.12); box-shadow: var(--glow); }
+.btn-secondary:disabled { cursor: not-allowed; color: var(--fg-dim); border-color: var(--border); }
+.btn-large { min-height: 52px; padding: 12px 32px; font-size: 16px; border-radius: 12px; }
+.btn-icon-play::before { content: '▶'; font-size: 0.85em; }
+.btn-icon-pause::before { content: '❚❚'; font-size: 0.8em; letter-spacing: -1px; }
+.btn-icon-export::before { content: '⤓'; font-size: 1.15em; }
+
+/* 画面の上の再生ボタン (丸く、光る主役) */
+.transport-play.tab-button, .transport-play {
+  width: 40px; min-width: 40px; height: 40px; padding: 0; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; text-align: center; font-size: 14px; letter-spacing: 0;
+  color: #fff; border: 1px solid rgba(160, 200, 255, 0.4);
+  background: linear-gradient(120deg, #6a3dff, #1f7bff 60%, #19d9ff);
+  box-shadow: 0 0 14px rgba(50, 120, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.transport-play:hover:not(:disabled) { filter: brightness(1.15); box-shadow: 0 0 22px rgba(60, 150, 255, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.3); color: #fff; background: linear-gradient(120deg, #6a3dff, #1f7bff 60%, #19d9ff); }
+.transport-play:disabled { color: var(--fg-dim); background: var(--panel-2); border-color: var(--border); box-shadow: none; opacity: 0.8; }
+
+/* 進み具合のバー (書き出し) */
+.export-progress { width: 100%; height: 10px; border: 0; border-radius: 5px; overflow: hidden; background: var(--panel-2); appearance: none; -webkit-appearance: none; }
+.export-progress::-webkit-progress-bar { background: var(--panel-2); border-radius: 5px; }
+.export-progress::-webkit-progress-value { background: linear-gradient(90deg, #6a3dff, #1f7bff 55%, #19d9ff); border-radius: 5px; box-shadow: 0 0 10px rgba(40, 140, 255, 0.6); }
+.export-progress::-moz-progress-bar { background: linear-gradient(90deg, #6a3dff, #1f7bff 55%, #19d9ff); border-radius: 5px; }
+.export-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 14px 0; }
+.music-play { margin: 16px 0 8px; }
+.mobile-shell .export-controls .btn-primary { flex: 1 1 100%; }
