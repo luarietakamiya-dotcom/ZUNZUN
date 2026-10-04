@@ -7,6 +7,9 @@ import { createKaleidoscopeMaterial, KALEIDO_BANDS } from './shaders';
  * Kaleidoscope — 万華鏡。2026-10-04 ユーザー「万華鏡のビジュアライザー追加。背景は考えないでいい」
  * (背景の絵に重ねる前提ではなく、画面いっぱいに描く。黒ではなく暗い色の地に、ガラス片の模様が広がる)。
  *
+ * 見た目 (2026-10-04 ユーザーが実物の万華鏡の写真を見せて「こんなのがいい」): くっきりした多面体のガラス片 (破片ごとに色・面の明るさ・透け具合が違い、
+ *   ゆっくり漂って回る)、縁の暗い線と光る線、虹色のにじみ。
+ *
  * 反応の仕組み (docs/ARCHITECTURE.md「プリセット初期3種の反応設計」にならう):
  * - bands: 中心から外へ、スペクトル (中心 = 低音、外 = 高音) が 16 本の同心の帯になり、強い帯ほど模様が明るくなる。
  * - bass: 中心の宝石がふくらみ、全体がわずかに拡大する (立ち上がりは速く、戻りはゆっくり。光過敏への配慮)。
@@ -20,23 +23,40 @@ import { createKaleidoscopeMaterial, KALEIDO_BANDS } from './shaders';
  * 乱数は使わない (時刻の積み重ねと、プロジェクトの seed から決めた初期の位相だけ = 同じプロジェクトなら同じ映像)。
  */
 
+/** 破片の 4 色 */
 interface Palette {
   a: THREE.Color;
   b: THREE.Color;
   c: THREE.Color;
+  d: THREE.Color;
 }
-const c = (r: number, g: number, b: number): THREE.Color => new THREE.Color(r, g, b);
-const pal = (a: [number, number, number], b: [number, number, number], cc: [number, number, number]): Palette => ({ a: c(...a), b: c(...b), c: c(...cc) });
+type Rgb = [number, number, number];
+const pal = (a: Rgb, b: Rgb, c: Rgb, d: Rgb): Palette => ({ a: new THREE.Color(...a), b: new THREE.Color(...b), c: new THREE.Color(...c), d: new THREE.Color(...d) });
 /**
- * 配色 (線形色空間。共通パラメータ Color Theme に対応)。曲調に合わせて、おだやか (calm) とにぎやか (lively) の間を混ぜる。
- * 既定は、静かな曲 = 深い青と青緑、激しい曲 = マゼンタとオレンジ
+ * 配色 (線形色空間。共通パラメータ Color Theme に対応。破片ごとに 4 色のどれかになる)。曲調に合わせて、おだやか (calm) とにぎやか (lively) の間を混ぜる。
+ * 既定は、静かな曲 = 青・青緑・淡い氷色・青紫 (実物の青い万華鏡)、激しい曲 = 赤・青・黄緑・琥珀 (実物のカラフルな万華鏡)
  */
 const PALETTES: Record<string, () => { calm: Palette; lively: Palette }> = {
-  default: () => ({ calm: pal([0.1, 0.25, 0.8], [0.1, 0.65, 0.75], [0.7, 0.9, 1.0]), lively: pal([0.9, 0.1, 0.6], [1.0, 0.45, 0.15], [1.0, 0.9, 0.4]) }),
-  gold: () => ({ calm: pal([0.6, 0.35, 0.1], [0.8, 0.6, 0.3], [1.0, 0.9, 0.7]), lively: pal([1.0, 0.45, 0.1], [1.0, 0.8, 0.3], [1.0, 0.97, 0.75]) }),
-  ice: () => ({ calm: pal([0.15, 0.3, 0.7], [0.3, 0.6, 0.85], [0.8, 0.92, 1.0]), lively: pal([0.4, 0.5, 1.0], [0.5, 1.0, 0.95], [1.0, 1.0, 1.0]) }),
-  neon: () => ({ calm: pal([0.5, 0.2, 0.9], [0.2, 0.6, 1.0], [0.8, 0.7, 1.0]), lively: pal([1.0, 0.15, 0.7], [0.15, 1.0, 0.8], [1.0, 0.95, 0.3]) }),
-  mono: () => ({ calm: pal([0.4, 0.42, 0.5], [0.6, 0.62, 0.7], [0.9, 0.9, 0.95]), lively: pal([0.7, 0.72, 0.8], [0.9, 0.92, 0.97], [1.0, 1.0, 1.0]) }),
+  default: () => ({
+    calm: pal([0.03, 0.14, 0.9], [0.03, 0.5, 0.8], [0.15, 0.62, 1.0], [0.3, 0.15, 0.85]),
+    lively: pal([1.0, 0.08, 0.03], [0.03, 0.28, 1.0], [0.42, 0.68, 0.03], [0.95, 0.42, 0.05]),
+  }),
+  gold: () => ({
+    calm: pal([0.55, 0.28, 0.06], [0.8, 0.5, 0.15], [0.95, 0.75, 0.4], [0.4, 0.18, 0.05]),
+    lively: pal([1.0, 0.35, 0.05], [1.0, 0.65, 0.1], [1.0, 0.9, 0.3], [0.8, 0.12, 0.04]),
+  }),
+  ice: () => ({
+    calm: pal([0.1, 0.3, 0.8], [0.25, 0.6, 0.9], [0.7, 0.88, 1.0], [0.05, 0.15, 0.55]),
+    lively: pal([0.3, 0.5, 1.0], [0.4, 0.95, 0.95], [0.85, 0.95, 1.0], [0.55, 0.4, 1.0]),
+  }),
+  neon: () => ({
+    calm: pal([0.5, 0.15, 0.9], [0.15, 0.55, 1.0], [0.75, 0.6, 1.0], [0.9, 0.2, 0.7]),
+    lively: pal([1.0, 0.1, 0.65], [0.1, 0.95, 0.85], [1.0, 0.9, 0.2], [0.6, 0.2, 1.0]),
+  }),
+  mono: () => ({
+    calm: pal([0.3, 0.32, 0.4], [0.5, 0.52, 0.6], [0.8, 0.82, 0.88], [0.18, 0.2, 0.25]),
+    lively: pal([0.55, 0.57, 0.65], [0.8, 0.82, 0.9], [1.0, 1.0, 1.0], [0.35, 0.37, 0.45]),
+  }),
 };
 
 export interface KaleidoscopeInspection {
@@ -182,6 +202,7 @@ export class KaleidoscopePreset implements VisualizerPreset {
     u.colA!.value.copy(this.palette.calm.a).lerp(this.palette.lively.a, this.mood);
     u.colB!.value.copy(this.palette.calm.b).lerp(this.palette.lively.b, this.mood);
     u.colC!.value.copy(this.palette.calm.c).lerp(this.palette.lively.c, this.mood);
+    u.colD!.value.copy(this.palette.calm.d).lerp(this.palette.lively.d, this.mood);
   }
 
   private writeUniforms(params: CommonParams & Record<string, unknown>, intensity: number): void {
@@ -192,7 +213,7 @@ export class KaleidoscopePreset implements VisualizerPreset {
     u.t!.value = this.t;
     u.rot!.value = this.rot;
     u.zoom!.value = this.zoom;
-    u.warp!.value = 0.2 + 0.4 * this.mood + 0.4 * this.mid;
+    u.warp!.value = 0.3 + 0.3 * this.mood + 0.4 * this.mid;
     u.seg!.value = this.segments;
     u.detail!.value = 0.6 + 1.2 * unit(params.detail, 0.5);
     u.bass!.value = this.bass;
