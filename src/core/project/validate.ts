@@ -1,3 +1,4 @@
+import { sanitizeMotionEdits } from '../lyrics/motion-edit';
 import { formatGrouping, parseGrouping } from '../rhythm/grouping';
 import { normalizeBars } from '../rhythm/grid';
 import {
@@ -227,6 +228,7 @@ function sanitizeLyricsMotion(raw: unknown): LyricsMotion {
     decor: unit(raw.decor, base.decor),
     density: unit(raw.density, base.density),
     custom: sanitizeCustomStyle(raw.custom),
+    ...sanitizeMotionEdits(raw),
     ...(isPlainObject(raw.sections) ? { sections: sanitizeSectionMotion(raw.sections) } : {}),
   };
 }

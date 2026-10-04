@@ -779,3 +779,11 @@ input[type='range'], input[type='checkbox'], input[type='radio'] { accent-color:
 .omakase-line { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
 .omakase-result .param-help { margin: 2px 0 0; }
 .omakase-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+
+
+/* 個別の歌詞編集: 長い行の選択欄をパネルの幅に収める */
+.lyrics-individual-editor { min-width: 0; }
+.lyrics-individual-editor > .select { width: 100%; min-width: 0; max-width: 100%; }
+.lyrics-individual-editor .param-grid > * { min-width: 0; }
+.lyrics-individual-editor .param-grid .select { max-width: 100%; }
+.lyrics-individual-editor summary { cursor: pointer; padding: 6px 0; }

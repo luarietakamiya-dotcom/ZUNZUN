@@ -1,3 +1,4 @@
+import { createMotionEditor } from './lyrics-motion-editor';
 import { tr } from '../../core/i18n';
 import { customFromStyle, jizuraStyles, loadJizura, type JizuraApi } from '../../core/lyrics/jizura-adapter';
 import { previewMotionProvider } from '../../core/lyrics/motion-provider';
@@ -77,6 +78,7 @@ export function renderLyricMotionPanel(): HTMLElement {
     motionInputs.set(def.key, { input, label });
     return el('label', { className: 'param-row' }, [label, input, el('span', { className: 'param-help', textContent: def.help })]);
   });
+  const individualEditor = createMotionEditor(updateMotion);
   const motionCanvas = el('canvas', { className: 'lyrics-motion-canvas' });
   motionCanvas.width = 640;
   motionCanvas.height = 360;
@@ -170,7 +172,7 @@ export function renderLyricMotionPanel(): HTMLElement {
     applyNotice.element,
     motionCanvas,
   ]);
-  root.append(noLyrics, motionCard, sectionCard);
+  root.append(noLyrics, motionCard, individualEditor.element, sectionCard);
 
   /** スタイルの一覧は JIZURA を読み込んでから埋める (読み込むまでは今のスタイルだけ出す) */
   let styleOptions: [string, string][] | null = null;
@@ -179,6 +181,7 @@ export function renderLyricMotionPanel(): HTMLElement {
       jz = J;
       styleOptions = jizuraStyles(J);
       styleEditor.setJizura(J);
+      individualEditor.setJizura(J);
       refreshMotionControls();
     })
     .catch(() => {
@@ -186,6 +189,7 @@ export function renderLyricMotionPanel(): HTMLElement {
     });
 
   function refreshMotionControls(): void {
+    individualEditor.refresh();
     const m = currentLyrics().motion;
     motionEnabled.checked = m.enabled;
     // マイスタイルがあれば、一覧の先頭に「★ 名前」で出す
@@ -274,6 +278,7 @@ export function renderLyricMotionPanel(): HTMLElement {
     if (root.isConnected) root.dataset.mounted = '1';
     drawMotionPreview(store.audio.isLoaded ? store.audio.heardTime : 0);
     applyNotice.update();
+    individualEditor.refresh();
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);

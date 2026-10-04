@@ -1,3 +1,4 @@
+import { applyMotionEdits } from './motion-edit';
 import type { AudioAnalysis } from '../audio/analyze';
 import { deriveSeed, hashString, makeRng } from '../random';
 import { buildRhythmGrid, rhythmPositionAt, type RhythmGrid, type RhythmPosition } from '../rhythm';
@@ -52,7 +53,7 @@ export interface JizuraPlan {
   W: number;
   H: number;
   duration: number;
-  lines: { text: string; start: number; end: number }[];
+  lines: { text: string; start: number; end: number; seed?: number }[];
   cuts: unknown[];
   style: { schemes: JizuraScheme[] };
   /** J.plan が audio.beats を複製して持つビート (行の中のカットの切れ目の吸着・拍の脈動・演出の env.beat に使う) */
@@ -81,6 +82,10 @@ interface JizuraTiming {
 }
 
 export interface JizuraApi {
+  order(group: string): string[];
+  registry(group: string): Record<string, { name: string; special?: boolean; tags?: string[]; pack?: string }>;
+  randomOk?(project: Record<string, unknown>, group: string, key: string): boolean;
+  lineSnapshot(plan: JizuraPlan, line: number): Record<string, unknown>[] | null;
   defaultProject(): Record<string, unknown> & { timing: Record<string, unknown> };
   plan(project: Record<string, unknown>, audio: JizuraAudio | null): JizuraPlan;
   Renderer: new () => JizuraRenderer;
@@ -625,6 +630,7 @@ export class LyricMotion {
       oddMeter: usesOddMeterPack(lyrics.motion, opts.rhythm),
     });
     applyMotionPack(project, lyrics.motion, J as unknown as PackJ, { palette: opts.palette ?? null });
+    applyMotionEdits(project, lyrics.motion, buildLyricsView(lyrics).parsed.lines.map((l) => l.text), { layout: COVERING_LAYOUTS, trans: COVERING_TRANSITIONS });
     const makePlan = (fx?: MotionFx): JizuraPlan => {
       const p = fx ? { ...project, fx: { ...(project.fx as Record<string, unknown>), ...fx } } : project;
       return attachRhythm(keepLightTextSchemes(J.plan(p, audio), (c) => J.lum(c)), opts.rhythm ?? null);

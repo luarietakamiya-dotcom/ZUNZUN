@@ -441,6 +441,25 @@ export interface LyricsStem {
  * 歌詞モーション (JIZURA) の設定。JIZURA の project のうち、ZUNZUN で扱う分だけ。
  * 数値の既定値は JIZURA の defaultProject().fx と同じ。
  */
+export type LyricsEffectGroup = 'layout' | 'enter' | 'hold' | 'exit' | 'decor' | 'treat' | 'cam' | 'fx' | 'trans';
+
+export interface LyricsLineMotion {
+  /** 行の内容が変わったら、別の歌詞へ設定を適用しない */
+  text: string;
+  layout?: string;
+  enter?: string;
+  hold?: string;
+  exit?: string;
+  treat?: string;
+  cam?: string;
+  decor?: string[];
+  cuts?: number;
+  seed?: number;
+  lock?: boolean;
+  lockedSeed?: number;
+  lockedCuts?: Record<string, unknown>[];
+}
+
 export interface LyricsMotion {
   /** ビジュアライザーの上に歌詞モーションを重ねるか */
   enabled: boolean;
@@ -452,6 +471,10 @@ export interface LyricsMotion {
   decor: number;
   /** 文字の区切りの細かさ (0..1、大きいほど 1 行を細かいカットに分ける) */
   density: number;
+  /** 自動生成に使う演出。未指定はスタイルの既定 */
+  effects?: Partial<Record<LyricsEffectGroup, Record<string, boolean>>>;
+  /** 歌詞の行ごとの指定と、固定したカット */
+  lines?: Record<string, LyricsLineMotion>;
   /** オリジナルのスタイル (L7)。style が CUSTOM_STYLE_KEY のときに使う。作っていなければ null */
   custom: LyricsCustomStyle | null;
   /**
