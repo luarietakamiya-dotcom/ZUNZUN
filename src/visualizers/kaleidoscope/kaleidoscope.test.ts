@@ -32,9 +32,9 @@ function run(p: KaleidoscopePreset, frames: number, o: (i: number) => Partial<Au
 const LOUD = { rms: 0.5, spectralEnergy: 0.5, flux: 0.5, bass: 0.6, mid: 0.4, high: 0.3 };
 
 describe('KaleidoscopePreset', () => {
-  it('定義: 設定は 鏡の枚数・模様の細かさ・回転の速さ・曲調の追従・キラキラ', () => {
+  it('定義: 設定は 鏡の枚数・模様の細かさ・回転の速さ・曲調の追従・ハートの出やすさ・キラキラ', () => {
     expect(manifest.id).toBe('kaleidoscope');
-    expect(manifest.controls!.map((c) => c.key)).toEqual(['segments', 'detail', 'spin', 'follow', 'sparkle']);
+    expect(manifest.controls!.map((c) => c.key)).toEqual(['segments', 'detail', 'spin', 'follow', 'heart', 'sparkle']);
     const p = makePreset();
     p.dispose();
   });
@@ -232,6 +232,94 @@ describe('KaleidoscopePreset', () => {
     expect(grab(0)[1]).toBe(0);
   });
 
+  const BEATS = (i: number): Partial<AudioFrame> => ({ beatIndex: Math.floor(i / 30), beat: Math.exp(-((i % 30) / 30) * 5) });
+
+  it('光る輪郭: ふだんは花びらの形 (ハート 0)。設定「ハートの出やすさ」が 1 ならずっとハート、0 ならハートにならない', () => {
+    const always = makePreset();
+    const never = makePreset();
+    run(always, 60 * 4, BEATS, params({ heart: 1 }));
+    run(never, 60 * 20, BEATS, params({ heart: 0 }));
+    expect(always.inspect().heart).toBeGreaterThan(0.98);
+    expect(never.inspect().heart).toBe(0);
+    always.dispose();
+    never.dispose();
+  });
+
+  it('ときどきハートになる: 既定では、ハートの小節と花びらの小節が混ざり、なめらかに行き来する', () => {
+    const p = makePreset();
+    let heartFrames = 0;
+    let shapeFrames = 0;
+    let maxStep = 0;
+    let prev = 0;
+    const total = 60 * 120;
+    for (let i = 0; i < total; i++) {
+      p.update(frame(i / 60, BEATS(Math.floor(i / 2))), params());
+      const h = p.inspect().heart;
+      if (h > 0.9) heartFrames++;
+      if (h < 0.1) shapeFrames++;
+      if (i > 0) maxStep = Math.max(maxStep, Math.abs(h - prev)); // 最初のフレームは形をすぐ決める
+      prev = h;
+    }
+    expect(heartFrames / total).toBeGreaterThan(0.08); // たまにハートになる
+    expect(heartFrames / total).toBeLessThan(0.6); // ずっとではない
+    expect(shapeFrames / total).toBeGreaterThan(0.3); // 花びらの形の時間が長い
+    expect(maxStep).toBeLessThan(0.03); // 1 フレームの形の変化はごく小さい (約 1 秒かけて行き来する)
+    p.dispose();
+  });
+
+  it('ハートになる小節は曲から決まる (同じ入力なら同じ位置。乱数ではない)', () => {
+    const trace = (): number[] => {
+      const p = makePreset();
+      const out: number[] = [];
+      for (let i = 0; i < 60 * 40; i++) {
+        p.update(frame(i / 60, BEATS(Math.floor(i / 2))), params());
+        if (i % 30 === 0) out.push(p.inspect().heart);
+      }
+      p.dispose();
+      return out;
+    };
+    expect(trace()).toEqual(trace());
+  });
+
+  it('区間の頭の 3 秒はハートになる (出やすさ 0 を除く)', () => {
+    const p = makePreset();
+    const at = (t: number, section: number, start: number): AudioFrame => frame(t, { song: { mood: 0.5, section, sectionStart: start, sectionCount: 4 } });
+    for (let i = 0; i <= 60 * 20; i++) p.update(at(i / 60, 0, 0), params({ heart: 0.01 }));
+    expect(p.inspect().heart).toBeLessThan(0.2);
+    // 20 秒で区間 1 へ (切り替えの暗くなる演出のあと)
+    for (let i = 1; i <= 60 * 3; i++) p.update(at(20 + i / 60, 1, 20), params({ heart: 0.01 }));
+    expect(p.inspect().heart).toBeGreaterThan(0.8);
+    const off = makePreset();
+    for (let i = 0; i <= 60 * 20; i++) off.update(at(i / 60, 0, 0), params({ heart: 0 }));
+    for (let i = 1; i <= 60 * 3; i++) off.update(at(20 + i / 60, 1, 20), params({ heart: 0 }));
+    expect(off.inspect().heart).toBe(0);
+    p.dispose();
+    off.dispose();
+  });
+
+  it('輪郭が音に合わせて波打つ: 中音・高音・曲調が大きいほど大きく、静かだと小さい', () => {
+    const quiet = makePreset();
+    const loud = makePreset();
+    run(quiet, 60 * 6, () => ({}));
+    run(loud, 60 * 6, () => ({ mid: 0.8, high: 0.8, rms: 0.6, spectralEnergy: 0.6, flux: 0.5 }), params({ sensitivity: 1 }));
+    expect(quiet.inspect().wob).toBeLessThan(0.3);
+    expect(loud.inspect().wob).toBeGreaterThan(0.6);
+    expect(loud.inspect().wob).toBeLessThanOrEqual(1);
+    quiet.dispose();
+    loud.dispose();
+  });
+
+  it('花びらの数は区間ごとに変わる (5・6・7)', () => {
+    const ks = [0, 1, 2, 3].map((section) => {
+      const p = makePreset();
+      p.update(frame(0, { song: { mood: 0.5, section, sectionStart: 0, sectionCount: 4 } }), params());
+      const k = p.inspect().shapeK;
+      p.dispose();
+      return k;
+    });
+    expect(ks).toEqual([5, 6, 7, 5]);
+  });
+
   it('拍で回転が一瞬だけ速くなる', () => {
     const base = makePreset();
     const kick = makePreset();
@@ -307,7 +395,7 @@ describe('KaleidoscopePreset', () => {
     expect(() => p.update(bad, params({ intensity: Number.NaN, motion: Number.NaN, detail: Number.NaN, spin: Number.NaN }))).not.toThrow();
     run(p, 30, () => LOUD);
     const s = p.inspect();
-    for (const v of [s.rot, s.zoom, s.warp, s.bass, s.mood, s.tone, s.sparkle, ...s.bands]) expect(Number.isFinite(v)).toBe(true);
+    for (const v of [s.rot, s.zoom, s.warp, s.bass, s.mood, s.tone, s.sparkle, s.heart, s.wob, s.shapeK, ...s.bands]) expect(Number.isFinite(v)).toBe(true);
     p.dispose();
   });
 

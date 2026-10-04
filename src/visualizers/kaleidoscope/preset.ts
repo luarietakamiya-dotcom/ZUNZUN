@@ -22,6 +22,9 @@ import { createKaleidoscopeMaterial, KALEIDO_BANDS } from './shaders';
  * 曲全体の情報 (frame.song): 曲調は「その曲の中での激しさ」(曲全体の分布で 0..1 にしたもの) を使うので、録音の音量が違う曲でも全体を使う。
  *   区間 (歌詞の [サビ] などの見出し、なければ音の変化から自動) が変わると、約 2.4 秒かけて少し暗くしながら、破片の並びと色の割り当てを入れ替える。
  *   追従の速さは設定「曲調の追従」。
+ * 光る輪郭 (2026-10-04 ユーザー「ハートの光も音に合わせて、周りの模様に合わせて変化変形して、たまにハートになる感じ」): ふだんは花びらのような丸い形
+ *   (花びらの数は区間ごと)。中音・高音・曲調で、周りのガラスの模様に合わせて波打ち、低音で縦に伸び縮みする。小節ごとに、設定「ハートの出やすさ」の
+ *   確率で、約 1 秒かけてハートになって戻る (区間の頭の 3 秒もハート)。
  * 設定: 鏡の枚数 (3..12)・模様の細かさ・回転の速さ・キラキラの量 (2026-10-04 ユーザー「キラキラさせるのも追加できるように」。
  *   小さな星のきらめきが、別々のタイミングで短くまたたく。0 で出さない。高音で増える)。
  * 乱数は使わない (時刻の積み重ねと、プロジェクトの seed から決めた初期の位相だけ = 同じプロジェクトなら同じ映像)。
@@ -79,6 +82,10 @@ export interface KaleidoscopeInspection {
   warp: number;
   /** 中心の宝石の強さ 0..1 */
   bass: number;
+  /** 光る輪郭: ハートへの近さ (0 = 花びらのような丸い形、1 = ハート)・波打つ量・花びらの数 */
+  heart: number;
+  wob: number;
+  shapeK: number;
   /** 区間: いま使っている区間の番号と、切り替えの途中の明るさ (1 = 切り替え中でない)。曲全体の情報 (frame.song) を使っているか */
   section: number;
   fade: number;
@@ -117,6 +124,10 @@ export class KaleidoscopePreset implements VisualizerPreset {
   private beatEnv = 0;
   private zoom = 1;
   private mood = 0;
+  /** 光る輪郭の形: 0 = 花びらのような丸い形、1 = ハート (なめらかに行き来する) と、周りの模様に合わせて波打つ量 */
+  private heartAmt = 0;
+  private wob = 0.3;
+  private shapeK = 6;
   /** 破片の大きさ用の、mood よりゆっくり追いかける値 */
   private shape = 0;
   /** 区間の切り替え: いま使っている区間の番号 (破片の並び・色の割り当ての元) */
@@ -182,6 +193,19 @@ export class KaleidoscopePreset implements VisualizerPreset {
       this.mood = follow(this.mood, target, dt, rate, rate * 0.5);
       this.shape = follow(this.shape, this.mood, dt, rate * 0.5, rate * 0.5);
     }
+    // 光る輪郭: ふだんは花びらのような丸い形で、音 (中音・高音) と曲調に合わせて、周りのガラスの模様に合わせて波打つ。
+    // 小節 (4 拍。拍が無いときは 2 秒) ごとに、設定「ハートの出やすさ」の確率で、約 1 秒かけてハートになり、次の小節で戻る。
+    // 区間の頭の 3 秒もハートになる。確率は小節の番号と区間から決まる (乱数ではない = 同じ曲なら同じ位置でハートになる)
+    const heartFreq = unit(params.heart, 0.3);
+    const beatIdx = Number.isFinite(frame.beatIndex) ? frame.beatIndex : -1;
+    const bar = beatIdx >= 0 ? Math.floor(beatIdx / 4) : Math.floor(fin(frame.t, 0) / 2);
+    const hx = Math.sin((bar + this.appliedSection * 17) * 12.9898) * 43758.5453;
+    const sinceSection = frame.song ? fin(frame.t, 0) - fin(frame.song.sectionStart, 0) : Infinity;
+    const wantHeart = heartFreq >= 1 || (heartFreq > 0 && (hx - Math.floor(hx) < heartFreq || (this.appliedSection > 0 && sinceSection < 3)));
+    this.heartAmt = jumped ? (wantHeart ? 1 : 0) : follow(this.heartAmt, wantHeart ? 1 : 0, dt, 1.2, 0.8);
+    this.wob = follow(this.wob, 0.2 + 0.8 * Math.min(1, 0.55 * this.mid + 0.3 * this.mood + 0.25 * this.high), dt, 6, 2);
+    this.shapeK = 5 + (this.appliedSection % 3);
+
     let sum = 0;
     let weighted = 0;
     for (let i = 0; i < 64; i++) {
@@ -229,6 +253,9 @@ export class KaleidoscopePreset implements VisualizerPreset {
       zoom: this.zoom,
       warp: this.material.uniforms.warp!.value as number,
       bass: this.bass,
+      heart: this.heartAmt,
+      wob: this.wob,
+      shapeK: this.shapeK,
       section: this.appliedSection,
       fade: this.fade,
       usingSong: this.songMood,
@@ -298,6 +325,9 @@ export class KaleidoscopePreset implements VisualizerPreset {
     u.shape!.value = this.shape;
     u.tone!.value = this.tone;
     u.sparkle!.value = this.sparkle;
+    u.heartAmt!.value = this.heartAmt;
+    u.shapeK!.value = this.shapeK;
+    u.wob!.value = this.wob;
     u.secSeed!.value = (this.appliedSection * 7.31) % 97;
     u.colRot!.value = (this.appliedSection % 4) * 0.25;
     u.fade!.value = this.fade;

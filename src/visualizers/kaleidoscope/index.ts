@@ -53,6 +53,16 @@ export const manifest: VisualizerManifest = {
     },
     {
       type: 'range',
+      key: 'heart',
+      label: { ja: 'ハートの出やすさ', en: 'Heart frequency' },
+      help: { ja: '光る輪郭が、ハートの形になる頻度 (0 でハートにならない、1 でずっとハート。ふだんは音に合わせて波打つ花びらの形です)', en: 'How often the glowing outlines turn into hearts (0 = never, 1 = always; otherwise they are petal shapes that wobble with the music)' },
+      min: 0,
+      max: 1,
+      step: 0.01,
+      default: 0.3,
+    },
+    {
+      type: 'range',
       key: 'sparkle',
       label: { ja: 'キラキラ', en: 'Sparkle' },
       help: { ja: '小さな星のきらめきの量 (0 で出さない。高い音で増えます)', en: 'Amount of small twinkling stars (0 = off; more on high sounds)' },

@@ -31,6 +31,9 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
       shape: { value: 0 },
       tone: { value: 0.5 },
       sparkle: { value: 0.5 },
+      heartAmt: { value: 0 },
+      shapeK: { value: 6 },
+      wob: { value: 0.3 },
       secSeed: { value: 0 },
       colRot: { value: 0 },
       fade: { value: 1 },
@@ -65,6 +68,9 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
       uniform float secSeed; // 区間ごとの破片の並びの違い (区間の番号から)
       uniform float colRot; // 区間ごとの色の割り当ての回転 (0, 0.25, 0.5, 0.75)
       uniform float fade; // 区間の切り替えの間の明るさ (1 = そのまま。切り替えの途中で少し暗くなる)
+      uniform float heartAmt; // 光る輪郭の形: 0 = 花びらのような丸い形、1 = ハート (なめらかに行き来する。ときどきハートになる)
+      uniform float shapeK; // 花びらの数 (区間ごとに変わる)
+      uniform float wob; // 輪郭が周りの模様に合わせて波打つ量 (中音・曲調・高音で変わる)
       uniform float sparkle; // キラキラの量 (設定。0 = 出さない)
       uniform float bass;
       uniform float high;
@@ -170,17 +176,26 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
         return sqrt(min(dot2(p - vec2(0.0, 1.0)), dot2(p - 0.5 * max(p.x + p.y, 0.0)))) * sign(p.x - p.y);
       }
       /**
-       * ハート 1 つ分の光る輪郭と、輪郭に沿って流れる粒 (x = 曲線の光、y = 粒の光)。
-       * pl = ハートの座標 (大きさで割ってある)、size = ハートの大きさ (画面の高さの半分 = 1)。
-       * 粒は、ハートの中心まわりの角度で等間隔に並べる
+       * 光る輪郭 1 つ分と、輪郭に沿って流れる粒 (x = 曲線の光、y = 粒の光)。輪郭は、花びらのような丸い形 ↔ ハートの間をなめらかに行き来し (heartAmt)、
+       * 低音で縦に伸び縮みし、周りのガラス片の模様 (field = いちばん近い破片の中心までの距離。破片の形に沿って連続的に変わる) と
+       * ゆっくりした波に合わせて波打つ (wob)。ハートのときは波打ちを弱めて、きれいなハートに見せる。
+       * pl = ハートの座標 (大きさで割ってある)、size = 大きさ (画面の高さの半分 = 1)。粒は、中心まわりの角度で等間隔に並べる
        */
-      vec2 heartOrnament(vec2 pl, float size, float nb, float spd, float bw) {
-        float sd = sdHeart(pl) * size;
-        float curve = exp(-pow(sd / 0.006, 2.0)) + 0.22 * exp(-pow(sd / 0.03, 2.0));
+      vec2 heartOrnament(vec2 pl, float size, float nb, float spd, float bw, float field) {
+        float sdH = sdHeart(vec2(pl.x, pl.y / (1.0 + 0.10 * bass)));
         vec2 pc = pl - vec2(0.0, 0.45);
+        float rr = length(pc);
+        float th = atan(pc.y, pc.x);
+        float r0 = 0.46 * (1.0 + 0.15 * wob * cos(shapeK * th + t * 0.5));
+        float sdF = (rr - r0) * 0.9;
+        float sd = mix(sdF, sdH, heartAmt);
+        float w = wob * (1.0 - 0.92 * heartAmt);
+        sd += w * (0.07 * sin(pl.x * 6.0 + t * 0.8 + secSeed) * sin(pl.y * 5.0 - t * 0.6) + 0.16 * (field - 0.35));
+        sd *= size;
+        float curve = exp(-pow(sd / 0.006, 2.0)) + 0.22 * exp(-pow(sd / 0.03, 2.0));
         float sp = 6.2831853 / nb;
-        float u = atan(pc.y, pc.x) + t * spd;
-        float lu = (fract(u / sp + 0.5) - 0.5) * sp * length(pc) * size;
+        float u = th + t * spd;
+        float lu = (fract(u / sp + 0.5) - 0.5) * sp * rr * size;
         float bead = exp(-(lu * lu + sd * sd) / (bw * bw));
         return vec2(curve, bead);
       }
@@ -259,8 +274,8 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
         vec2 fpb = r * vec2(cos(0.5 * s - a), sin(0.5 * s - a)); // もう一方の継ぎ目の側から見た座標
         float sz1 = 0.30 * wf * swell;
         float sz2 = 0.5 * wf * swell;
-        vec2 o1 = heartOrnament(vec2(fp.y, fp.x - 0.5) / sz1, sz1, 22.0, 0.35, 0.02);
-        vec2 o2 = heartOrnament(vec2(fpb.y, -(fpb.x - 1.45)) / sz2, sz2, 30.0, -0.25, 0.017);
+        vec2 o1 = heartOrnament(vec2(fp.y, fp.x - 0.5) / sz1, sz1, 22.0, 0.35, 0.02, f1x);
+        vec2 o2 = heartOrnament(vec2(fpb.y, -(fpb.x - 1.45)) / sz2, sz2, 30.0, -0.25, 0.017, f1x);
         vec2 o3 = ringOrnament(fp, vec2(0.28 + 0.03 * sin(t * 0.23), 0.04), 0.17 * swell, 12.0, 0.5, 0.022);
         float curves = o1.x + 0.8 * o2.x + o3.x;
         float beads = o1.y + 0.9 * o2.y + 1.1 * o3.y;

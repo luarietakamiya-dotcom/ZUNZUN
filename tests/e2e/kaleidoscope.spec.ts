@@ -76,6 +76,9 @@ test('Kaleidoscope: シェーダーのエラーなく映り、同じ入力なら
     const sec1 = await shot(160, 90, LOUD, 6, { follow: 1 }, { mood: 0.5, section: () => 1 });
     // 切り替えの途中を含めて描いても、エラーなく映る (2 秒で区間 0 → 1)
     const switching = await shot(160, 90, LOUD, 5, { follow: 1 }, { mood: 0.5, section: (t) => (t < 2 ? 0 : 1) });
+    // ハート: 出やすさ 1 (ずっとハート) と 0 (花びらの形のまま) で絵が違う
+    const heartOn = await shot(160, 90, LOUD, 6, { heart: 1, sparkle: 0 });
+    const heartOff = await shot(160, 90, LOUD, 6, { heart: 0, sparkle: 0 });
     const tall = await shot(90, 160, LOUD, 2);
     const square = await shot(120, 120, LOUD, 2);
     return {
@@ -90,6 +93,7 @@ test('Kaleidoscope: シェーダーのエラーなく映り、同じ入力なら
       songLivelyCh: channels(songLively),
       sectionDiff: diff(sec0, sec1),
       switching: mean(switching),
+      heartDiff: diff(heartOn, heartOff),
       tall: mean(tall),
       square: mean(square),
     };
@@ -104,6 +108,7 @@ test('Kaleidoscope: シェーダーのエラーなく映り、同じ入力なら
   expect(redShare(r.songLivelyCh)).toBeGreaterThan(redShare(r.songCalmCh) + 0.1);
   expect(r.sectionDiff).toBeGreaterThan(3); // 区間が違えば破片の並び・色の割り当てが違う
   expect(r.switching).toBeGreaterThan(8); // 切り替えを含めて映る
+  expect(r.heartDiff).toBeGreaterThan(0.2); // ハートの出やすさで絵が変わる
   expect(r.sparkleDiff).toBeGreaterThan(0.2); // キラキラの量で絵が変わる
   expect(r.sparkleMore).toBeGreaterThan(0); // 増やすと明るくなる (光が足されるだけ)
   expect(r.tall).toBeGreaterThan(8);

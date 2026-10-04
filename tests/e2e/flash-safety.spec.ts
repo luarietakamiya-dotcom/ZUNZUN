@@ -95,7 +95,7 @@ const CASES: [string, Record<string, unknown>][] = [
   ['kaleidoscope', {}],
   // 区間を 2 秒ごとに切り替え続ける最悪ケース (実際の区間は 14 秒以上空く)。切り替えの暗くなって戻る動きと、曲調の変化が引っかからないこと
   ['kaleidoscope', { follow: 1, __songSwitch: 2 }],
-  ['kaleidoscope', { segments: 12, detail: 1, spin: 1, sparkle: 1 }],
+  ['kaleidoscope', { segments: 12, detail: 1, spin: 1, sparkle: 1, heart: 1 }],
   ['spectrum-wave', {}],
   ['spectrum-wave', { height: 1, ribbons: 1, fill: 1, mirror: 1 }],
   ['edge-equalizer', {}],
