@@ -33,6 +33,8 @@ export interface ProjectSourceState {
   /** プリセットだけの設定の値 (プリセットの id ごと。省略可) */
   allPresetParams?: Record<string, Record<string, number | string>>;
   audio: ProjectAudioSource;
+  /** 音源をまだ選び直していない場合に保持する、読み込んだプロジェクトの参照 */
+  expectedAudio?: ProjectFile['audio'];
   overlays: OverlayLayer[];
   /** 歌詞を使わない場合は null */
   lyrics: LyricsSettings | null;
@@ -72,7 +74,7 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
           sampleRate: state.audio.sampleRate,
           bpm: state.audio.bpm,
         }
-      : null,
+      : state.expectedAudio ? { ...state.expectedAudio } : null,
     visualizer: {
       preset: state.presetId ?? base.visualizer.preset,
       presetVersion: base.visualizer.presetVersion,

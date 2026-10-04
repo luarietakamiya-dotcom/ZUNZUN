@@ -287,6 +287,19 @@ export function renderExportPanel(): HTMLElement {
   prereq.className = 'placeholder-card';
   el.appendChild(prereq);
 
+  // 素材の復元忘れで、キャラクターなどが黙って抜けた動画を作らない。
+  const missingMedia = () => store.media.filter((m) => !store.getMediaFile(m.id) && !store.composition.hidden.includes(`media:${m.id}`));
+  const missingSignature = () => JSON.stringify(missingMedia().map((m) => [m.id, m.ref, m.sha256]));
+  let approvedMissing: string | null = null;
+  const omitRow = document.createElement('label');
+  omitRow.className = 'row-gap param-label';
+  const omitCheck = document.createElement('input');
+  omitCheck.type = 'checkbox';
+  const omitLabel = document.createElement('span');
+  omitLabel.textContent = tr('不足している素材を除いて書き出す', 'Export without the missing media');
+  omitRow.append(omitCheck, omitLabel);
+  el.appendChild(omitRow);
+
   const controls = document.createElement('div');
   controls.className = 'export-controls';
   const startBtn = document.createElement('button');
@@ -321,6 +334,12 @@ export function renderExportPanel(): HTMLElement {
   const render = (status: ExportStatus): void => {
     const running = status.kind === 'running';
     const audioReady = store.audio.isLoaded && store.audio.audioBuffer != null;
+    const mediaMissing = missingMedia();
+    const signature = missingSignature();
+    if (approvedMissing !== signature) approvedMissing = null;
+    omitCheck.checked = approvedMissing === signature;
+    omitCheck.disabled = running;
+    omitRow.style.display = mediaMissing.length > 0 ? '' : 'none';
 
     const support = checkExportSupport();
     if (!support.ok) {
@@ -339,6 +358,7 @@ export function renderExportPanel(): HTMLElement {
       const imgSlot = visualizerRegistry.get(store.presetId ?? '')?.manifest.imageSlot;
       const imgMissing = imgSlot != null && store.presetImage != null && store.presetImageFile == null;
       const notes = [
+        mediaMissing.length > 0 ? tr(`まだ選び直していない素材が ${mediaMissing.length} 個あります: ${mediaMissing.map((m) => m.ref).join('、')}。「背景と素材」タブで選び直すか、不足した素材を除いて書き出す場合は下のチェックを入れてください。`, `${mediaMissing.length} media file(s) have not been picked again: ${mediaMissing.map((m) => m.ref).join(', ')}. Pick them in Background & Media, or check below to export without them.`) : '',
         imgMissing ? tr(`ビジュアライザーの画像「${store.presetImage!.ref}」をまだ選び直していません (「ビジュアライザー」タブ)。画像なしで書き出します。`, `The visualizer image "${store.presetImage!.ref}" has not been picked again (Visualizer tab). Exporting without it.`) : '',
         missing > 0 ? tr(`まだ選び直していない重ねる画像が ${missing} 個あります (「背景と素材」タブ)。それらは書き出しに入りません。`, `${missing} overlay image(s) have not been picked again (Overlay tab) and will be left out.`) : '',
         bgMissing ? tr(`背景「${store.background!.ref}」をまだ選び直していません (「背景と素材」タブ)。背景なしで書き出します。`, `The background "${store.background!.ref}" has not been picked again (Overlay tab). Exporting without it.`) : '',
@@ -347,7 +367,7 @@ export function renderExportPanel(): HTMLElement {
       prereq.textContent = notes.join(' ');
     }
 
-    startBtn.disabled = running || !audioReady || !support.ok;
+    startBtn.disabled = running || !audioReady || !support.ok || (mediaMissing.length > 0 && approvedMissing !== signature);
     cancelBtn.disabled = !running;
     downloadBtn.style.display = status.kind === 'done' ? '' : 'none';
     for (const c of settingControls) c.disabled = running;
@@ -395,7 +415,16 @@ export function renderExportPanel(): HTMLElement {
     }
   };
 
+  omitCheck.addEventListener('change', () => {
+    approvedMissing = omitCheck.checked ? missingSignature() : null;
+    render(exportController.status);
+  });
+
   startBtn.addEventListener('click', () => {
+    if (missingMedia().length > 0 && approvedMissing !== missingSignature()) {
+      render(exportController.status);
+      return;
+    }
     let job: { runner: ExportRunner; fileName: string };
     try {
       job = createRunnerFromStore();
@@ -440,6 +469,13 @@ export function renderExportPanel(): HTMLElement {
   const unsubscribe = exportController.subscribe(() => {
     if (!el.isConnected) {
       unsubscribe();
+      return;
+    }
+    render(exportController.status);
+  });
+  const unsubscribeStore = store.subscribe(() => {
+    if (!el.isConnected) {
+      unsubscribeStore();
       return;
     }
     render(exportController.status);

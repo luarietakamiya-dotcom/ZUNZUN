@@ -330,16 +330,21 @@ class Store {
    * 既定の設定で始める (種類が変わったとき以外は、見た目の調整値は引き継ぐ)。
    */
   async setBackgroundFile(file: File, kind: BackgroundSettings['kind'], ref: string = file.name): Promise<void> {
+    await this.loadBackgroundFile(file, kind, ref, ++this.backgroundGeneration);
+  }
+
+  private async loadBackgroundFile(file: File, kind: BackgroundSettings['kind'], ref: string, generation: number): Promise<void> {
     // sha256 はファイル全体を読んで計算するので、大きすぎるものは断る (動画は数百 MB でも数秒かかり、メモリも一時的に使う)
     if (file.size > MAX_BACKGROUND_BYTES) throw new Error(tr(`ファイルが大きすぎます (${(file.size / 2 ** 30).toFixed(1)}GB)。2GB までにしてください`, `The file is too large (${(file.size / 2 ** 30).toFixed(1)} GB). Please keep it under 2 GB`));
     const sha256 = await sha256Hex(await file.arrayBuffer());
+    // 外す・別の背景を選ぶ・プロジェクトを開く操作が来たら、古い読み込みは反映しない。
+    if (generation !== this.backgroundGeneration) return;
     const cur = this._background;
     if (cur && cur.sha256 === sha256) this._background = { ...cur, ref, kind, slides: null };
     else if (cur && cur.kind === kind) this._background = { ...cur, ref, sha256, slides: null };
     else this._background = defaultBackground(ref, sha256, kind);
     this._backgroundFile = file;
     this._slideFiles = [];
-    this.backgroundGeneration++;
     this.emit();
   }
 
@@ -347,8 +352,10 @@ class Store {
   async setBackgroundFromLibrary(id: string): Promise<void> {
     const item = LIBRARY.find((it) => it.id === id);
     if (!item) throw new Error(tr(`用意された背景「${id}」が見つかりません`, `Built-in background "${id}" not found`));
+    const generation = ++this.backgroundGeneration;
     const file = await fetchLibraryFile(item, this.fetchFn);
-    await this.setBackgroundFile(file, 'image', libraryRef(item));
+    if (generation !== this.backgroundGeneration) return;
+    await this.loadBackgroundFile(file, 'image', libraryRef(item), generation);
   }
 
   /**

@@ -46,6 +46,20 @@ describe('buildProjectFile', () => {
     expect(JSON.stringify(project)).not.toContain('base64');
   });
 
+  it('未復元の音源参照を保存し、読み直しても保持する', () => {
+    const expectedAudio = { ref: 'original.wav', name: 'original.wav', sha256: 'a'.repeat(64), duration: 42, sampleRate: 48000, bpm: 120 };
+    const project = buildProjectFile(state({ expectedAudio }));
+    expect(project.audio).toEqual(expectedAudio);
+    expect(project.audio).not.toBe(expectedAudio);
+    expect(sanitizeProject(JSON.parse(JSON.stringify(project))).audio).toEqual(expectedAudio);
+  });
+
+  it('選び直した音源は以前の参照より優先する', () => {
+    const expectedAudio = { ref: 'old.wav', name: 'old.wav', sha256: 'a'.repeat(64), duration: 42, sampleRate: 48000, bpm: 120 };
+    const project = buildProjectFile(state({ expectedAudio, audio: { isLoaded: true, fileName: 'new.wav', sha256: 'b'.repeat(64), duration: 10, sampleRate: 44100, bpm: 100 } }));
+    expect(project.audio?.ref).toBe('new.wav');
+  });
+
   it('presetId が未選択なら既定プリセットにフォールバックする', () => {
     const project = buildProjectFile(state({ presetId: null }));
     expect(project.visualizer.preset).toBeTruthy();
