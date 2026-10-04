@@ -93,7 +93,7 @@ const CASES: [string, Record<string, unknown>][] = [
   ['led-matrix', {}],
   ['led-matrix', { columns: '24', layout: 'center', height: 1, dot: 1, grid: 1 }],
   ['kaleidoscope', {}],
-  ['kaleidoscope', { segments: 12, detail: 1, spin: 1 }],
+  ['kaleidoscope', { segments: 12, detail: 1, spin: 1, sparkle: 1 }],
   ['spectrum-wave', {}],
   ['spectrum-wave', { height: 1, ribbons: 1, fill: 1, mirror: 1 }],
   ['edge-equalizer', {}],

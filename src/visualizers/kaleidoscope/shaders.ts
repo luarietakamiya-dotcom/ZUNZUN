@@ -29,6 +29,7 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
       detail: { value: 1 },
       mood: { value: 0 },
       tone: { value: 0.5 },
+      sparkle: { value: 0.5 },
       bass: { value: 0 },
       high: { value: 0 },
       bandLevel: { value: new Float32Array(KALEIDO_BANDS) },
@@ -56,6 +57,7 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
       uniform float detail;
       uniform float mood; // 曲調: 0 = 静か・おだやか、1 = 激しい・にぎやか (ゆっくり変わる)
       uniform float tone; // 音の明るさ (0 = 低い音が中心、1 = 高い音が中心。ゆっくり変わる)
+      uniform float sparkle; // キラキラの量 (設定。0 = 出さない)
       uniform float bass;
       uniform float high;
       uniform float bandLevel[NB];
@@ -166,6 +168,28 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
         return vec2(curve, bead);
       }
 
+      /**
+       * キラキラ: 小さな星のきらめき (中心の光の点 + 縦横にのびる光条)。格子の目ごとに星があり (一部だけ)、
+       * それぞれ別のタイミングで短くまたたく。向きもゆっくり回る。大小 2 つの格子を重ねる。
+       * 折りたたんだ扇形の座標で描くので、鏡写しで左右対称に増える
+       */
+      float glint(vec2 fp, float grid, float seed) {
+        vec2 g = fp * grid;
+        vec2 cell = floor(g);
+        vec2 d = fract(g) - 0.5;
+        float h = hash1(cell + seed);
+        d -= (hash2(cell + seed + 3.1) - 0.5) * 0.6;
+        float ang = t * 0.25 + h * 6.2831853;
+        float ca = cos(ang);
+        float sa = sin(ang);
+        d = vec2(ca * d.x - sa * d.y, sa * d.x + ca * d.y);
+        float phase = t * (1.4 + 2.2 * h) + h * 57.0;
+        float tw = pow(max(0.0, sin(phase)), 5.0); // 短く光ってまた暗くなる
+        float core = exp(-dot(d, d) * 130.0);
+        float arms = exp(-abs(d.x) * 7.0 - abs(d.y) * 150.0) + exp(-abs(d.y) * 7.0 - abs(d.x) * 150.0);
+        return (core * 1.4 + 0.9 * arms) * tw * step(0.5, h);
+      }
+
       void main() {
         vec2 p = vec2((vUv.x - 0.5) * 2.0 * aspect, (vUv.y - 0.5) * 2.0) / zoom;
         float r = length(p);
@@ -202,6 +226,9 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
         float beads = o1.y + 0.9 * o2.y + 1.1 * o3.y;
         col += mix(colB, vec3(1.0), 0.65) * curves * (0.42 + 0.5 * mood);
         col += mix(colD, vec3(1.0, 0.92, 0.65), 0.55) * beads * (0.3 + 0.7 * mood) * (0.7 + 0.8 * high);
+        // キラキラ (設定の量。高音で増える。大小 2 つの格子)
+        float gl = glint(fp, 5.0, 1.0) + 0.7 * glint(fp, 9.0, 7.0);
+        col += mix(colC, vec3(1.0, 0.97, 0.9), 0.7) * gl * sparkle * 1.7 * (0.5 + 0.9 * high + 0.4 * mood);
         // 半径ごとの帯の強さ (静かなときも形は見える)
         col *= 0.55 + 0.9 * levelAt(r);
         // 中心の宝石

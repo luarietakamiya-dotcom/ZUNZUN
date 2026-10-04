@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 /**
  * Kaleidoscope (万華鏡。2026-10-04 ユーザー要望。曲調に合わせて色と模様が変わる) の E2E。本物の VisualizerHost + PostFX で描く。
  * - シェーダーのエラー (コンパイル失敗など) が出ない。横長・縦長・正方形のどれでも映る
- * - 同じ入力なら同じ絵 (乱数を使わない)、音で絵が変わる、鏡の枚数の設定が効く
+ * - 同じ入力なら同じ絵 (乱数を使わない)、音で絵が変わる、鏡の枚数・キラキラの設定が効く
  * - 曲調: 静かな曲を流し続けた絵と、激しい曲を流し続けた絵では、色が違う
  */
 
@@ -63,6 +63,8 @@ test('Kaleidoscope: シェーダーのエラーなく映り、同じ入力なら
     const a2 = await shot(160, 90, LOUD, 2);
     const six = await shot(160, 90, LOUD, 2, { segments: 6 });
     const twelve = await shot(160, 90, LOUD, 2, { segments: 12 });
+    const noSparkle = await shot(160, 90, LOUD, 2, { sparkle: 0 });
+    const fullSparkle = await shot(160, 90, LOUD, 2, { sparkle: 1 });
     const calm = await shot(160, 90, QUIET, 40);
     const lively = await shot(160, 90, LOUD, 40);
     const tall = await shot(90, 160, LOUD, 2);
@@ -71,6 +73,8 @@ test('Kaleidoscope: シェーダーのエラーなく映り、同じ入力なら
       meanA: mean(a),
       same: diff(a, a2),
       segDiff: diff(six, twelve),
+      sparkleDiff: diff(noSparkle, fullSparkle),
+      sparkleMore: mean(fullSparkle) - mean(noSparkle),
       calmCh: channels(calm),
       livelyCh: channels(lively),
       tall: mean(tall),
@@ -82,6 +86,8 @@ test('Kaleidoscope: シェーダーのエラーなく映り、同じ入力なら
   expect(r.meanA).toBeLessThan(160); // 白く飛ばない
   expect(r.same).toBeLessThan(0.5); // 同じ入力なら同じ絵
   expect(r.segDiff).toBeGreaterThan(3); // 鏡の枚数で絵が変わる
+  expect(r.sparkleDiff).toBeGreaterThan(0.2); // キラキラの量で絵が変わる
+  expect(r.sparkleMore).toBeGreaterThan(0); // 増やすと明るくなる (光が足されるだけ)
   expect(r.tall).toBeGreaterThan(8);
   expect(r.square).toBeGreaterThan(8);
   // 曲調: 静かな曲 (青〜青緑) は赤が少なく、激しい曲 (マゼンタ・オレンジ) は赤が多い

@@ -28,9 +28,9 @@ function run(p: KaleidoscopePreset, frames: number, o: (i: number) => Partial<Au
 const LOUD = { rms: 0.5, spectralEnergy: 0.5, flux: 0.5, bass: 0.6, mid: 0.4, high: 0.3 };
 
 describe('KaleidoscopePreset', () => {
-  it('定義: 設定は 鏡の枚数・模様の細かさ・回転の速さ', () => {
+  it('定義: 設定は 鏡の枚数・模様の細かさ・回転の速さ・キラキラ', () => {
     expect(manifest.id).toBe('kaleidoscope');
-    expect(manifest.controls!.map((c) => c.key)).toEqual(['segments', 'detail', 'spin']);
+    expect(manifest.controls!.map((c) => c.key)).toEqual(['segments', 'detail', 'spin', 'sparkle']);
     const p = makePreset();
     p.dispose();
   });
@@ -123,6 +123,19 @@ describe('KaleidoscopePreset', () => {
     p.dispose();
   });
 
+  it('キラキラの量: 設定が効き、0〜1 に丸める。壊れた値は既定 (0.5)', () => {
+    const p = makePreset();
+    p.update(frame(0), params({ sparkle: 0 }));
+    expect(p.inspect().sparkle).toBe(0);
+    p.update(frame(0), params({ sparkle: 0.8 }));
+    expect(p.inspect().sparkle).toBeCloseTo(0.8, 6);
+    p.update(frame(0), params({ sparkle: 9 }));
+    expect(p.inspect().sparkle).toBe(1);
+    p.update(frame(0), params({ sparkle: Number.NaN }));
+    expect(p.inspect().sparkle).toBe(0.5);
+    p.dispose();
+  });
+
   it('拍で回転が一瞬だけ速くなる', () => {
     const base = makePreset();
     const kick = makePreset();
@@ -198,7 +211,7 @@ describe('KaleidoscopePreset', () => {
     expect(() => p.update(bad, params({ intensity: Number.NaN, motion: Number.NaN, detail: Number.NaN, spin: Number.NaN }))).not.toThrow();
     run(p, 30, () => LOUD);
     const s = p.inspect();
-    for (const v of [s.rot, s.zoom, s.warp, s.bass, s.mood, s.tone, ...s.bands]) expect(Number.isFinite(v)).toBe(true);
+    for (const v of [s.rot, s.zoom, s.warp, s.bass, s.mood, s.tone, s.sparkle, ...s.bands]) expect(Number.isFinite(v)).toBe(true);
     p.dispose();
   });
 

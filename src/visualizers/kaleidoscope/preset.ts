@@ -19,7 +19,8 @@ import { createKaleidoscopeMaterial, KALEIDO_BANDS } from './shaders';
  *   音の明るさ (tone) で 2 色の混ざり方が偏る。ゆっくりなので、色や模様が急に変わって光ることはない。
  * - beat: 回転が一瞬だけ速くなる (明るさは跳ねない)。
  * - Motion: 回転と変化の速さ。intensity: 全体の明るさ。
- * 設定: 鏡の枚数 (3..12)・模様の細かさ・回転の速さ。
+ * 設定: 鏡の枚数 (3..12)・模様の細かさ・回転の速さ・キラキラの量 (2026-10-04 ユーザー「キラキラさせるのも追加できるように」。
+ *   小さな星のきらめきが、別々のタイミングで短くまたたく。0 で出さない。高音で増える)。
  * 乱数は使わない (時刻の積み重ねと、プロジェクトの seed から決めた初期の位相だけ = 同じプロジェクトなら同じ映像)。
  */
 
@@ -70,6 +71,8 @@ export interface KaleidoscopeInspection {
   warp: number;
   /** 中心の宝石の強さ 0..1 */
   bass: number;
+  /** キラキラの量 0..1 (設定) */
+  sparkle: number;
   /** 曲調 0..1 (0 = 静か・おだやか、1 = 激しい・にぎやか。数秒かけてゆっくり変わる) */
   mood: number;
   /** 音の明るさ 0..1 (0 = 低い音が中心、1 = 高い音が中心。ゆっくり変わる) */
@@ -102,6 +105,7 @@ export class KaleidoscopePreset implements VisualizerPreset {
   private beatEnv = 0;
   private zoom = 1;
   private mood = 0;
+  private sparkle = 0.5;
   private tone = 0.5;
   private palette = PALETTES.default!();
   private segments = 6;
@@ -149,6 +153,7 @@ export class KaleidoscopePreset implements VisualizerPreset {
     }
     if (sum > 0.01) this.tone = follow(this.tone, Math.min(1, (weighted / sum / 63) * 2), dt, 0.2, 0.2);
     this.zoom = 1 + 0.07 * this.bass;
+    this.sparkle = unit(params.sparkle, 0.5);
     this.segments = Math.min(12, Math.max(3, Math.round(fin(params.segments, 6))));
     this.t += dt * (0.4 + 0.8 * motion);
     this.rot += dt * ((0.03 + 0.22 * spin) * (0.5 + motion) * (0.6 + 0.8 * this.mood) + 0.12 * this.beatEnv * (0.3 + spin));
@@ -183,6 +188,7 @@ export class KaleidoscopePreset implements VisualizerPreset {
       zoom: this.zoom,
       warp: this.material.uniforms.warp!.value as number,
       bass: this.bass,
+      sparkle: this.sparkle,
       mood: this.mood,
       tone: this.tone,
       bands: Array.from(this.bandLevel),
@@ -210,6 +216,7 @@ export class KaleidoscopePreset implements VisualizerPreset {
     this.mixColors();
     u.mood!.value = this.mood;
     u.tone!.value = this.tone;
+    u.sparkle!.value = this.sparkle;
     u.t!.value = this.t;
     u.rot!.value = this.rot;
     u.zoom!.value = this.zoom;
