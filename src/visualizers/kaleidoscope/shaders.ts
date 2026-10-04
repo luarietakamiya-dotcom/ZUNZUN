@@ -10,7 +10,7 @@ export const KALEIDO_BANDS = 16;
  * 1. 角度を 1 枚の扇形 (360° / 枚数) に折りたたむ (鏡写し)。鏡の継ぎ目はなめらかにつながる
  * 2. 折りたたんだ座標に、ボロノイ分割で多面体のガラス片を並べる。破片ごとに色 (4 色から)・面の明るさ・透け具合が違い、
  *    ゆっくり漂って回る (万華鏡の中の破片が動く)。縁は暗い線と、そのすぐ内側の光る線。大小 2 層を半透明に重ねて奥行きを出す
- * 3. 光る細い曲線と、その上を流れる金色の粒の列 (写真の、白い曲線と粒の連なり。鏡で折り返されて環や花びら状になる)。縁に虹色のにじみ (高音で強まる)。高音で一部の破片がきらめく
+ * 3. 光る細い曲線と、その上を流れる金色の粒の列 (写真の、白い曲線と粒の連なり。鏡の継ぎ目の上に置いたハートが折り返されて、完全なハートが中心のまわりに並ぶ)。縁に虹色のにじみ (高音で強まる)。高音で一部の破片がきらめく
  * 4. 半径ごとに、スペクトルの帯の強さで明るさを変える (中心が低音、外が高音)。中心に宝石のような光 (低音でふくらむ)
  * 最後に明るさをやわらかく丸める (広い面積が白く飛ばないように)。
  */
@@ -151,10 +151,35 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
         return c;
       }
 
+      float dot2(vec2 v) {
+        return dot(v, v);
+      }
+      /** ハート形までの符号つき距離 (先端が原点、ふくらみが上。幅は約 ±0.5、高さは約 1) */
+      float sdHeart(vec2 p) {
+        p.x = abs(p.x);
+        if (p.y + p.x > 1.0) return sqrt(dot2(p - vec2(0.25, 0.75))) - 0.35355339;
+        return sqrt(min(dot2(p - vec2(0.0, 1.0)), dot2(p - 0.5 * max(p.x + p.y, 0.0)))) * sign(p.x - p.y);
+      }
+      /**
+       * ハート 1 つ分の光る輪郭と、輪郭に沿って流れる粒 (x = 曲線の光、y = 粒の光)。
+       * pl = ハートの座標 (大きさで割ってある)、size = ハートの大きさ (画面の高さの半分 = 1)。
+       * 粒は、ハートの中心まわりの角度で等間隔に並べる
+       */
+      vec2 heartOrnament(vec2 pl, float size, float nb, float spd, float bw) {
+        float sd = sdHeart(pl) * size;
+        float curve = exp(-pow(sd / 0.006, 2.0)) + 0.22 * exp(-pow(sd / 0.03, 2.0));
+        vec2 pc = pl - vec2(0.0, 0.45);
+        float sp = 6.2831853 / nb;
+        float u = atan(pc.y, pc.x) + t * spd;
+        float lu = (fract(u / sp + 0.5) - 0.5) * sp * length(pc) * size;
+        float bead = exp(-(lu * lu + sd * sd) / (bw * bw));
+        return vec2(curve, bead);
+      }
+
       /**
        * 光る曲線と、その上を流れる粒の列 (実物の万華鏡の写真の、細い白い曲線と金色の粒の連なり)。
        * 円 1 つ分: x = 曲線の光 (細い線 + うすいにじみ)、y = 粒の光 (等間隔の小さな粒が円に沿ってゆっくり流れる)。
-       * 折りたたんだ扇形の中に置くので、円弧が鏡で折り返され、中心のまわりの環や花びら状につながる
+       * 折りたたんだ扇形の中に置くので、円弧が鏡で折り返され、中心のまわりの環につながる (ハートは heartOrnament)
        */
       vec2 ringOrnament(vec2 fp, vec2 c, float rad0, float nb, float spd, float bw) {
         vec2 d = fp - c;
@@ -219,8 +244,14 @@ export function createKaleidoscopeMaterial(): THREE.ShaderMaterial {
         // 光る曲線と粒の列 (折りたたんだ扇形の座標 fp に、大小 3 つの円。低音でわずかに伸び縮み。静かな曲は控えめ、激しい曲ほどはっきり)
         vec2 fp = r * vec2(cos(a), sin(a));
         float swell = 1.0 + 0.05 * bass;
-        vec2 o1 = ringOrnament(fp, vec2(0.62, 0.10 + 0.04 * sin(t * 0.2)), 0.34 * swell, 22.0, 0.35, 0.02);
-        vec2 o2 = ringOrnament(fp, vec2(1.0, 0.2 + 0.05 * sin(t * 0.17 + 1.0)), 0.5 * swell, 30.0, -0.25, 0.017);
+        // ハート 2 組: 内側の小さなハート (先端が中心向き) と、外側の大きなハート (先端が外向き)。
+        // 鏡の継ぎ目の上に置くので、折り返されて完全なハートになる。枚数が多い (扇形が細い) ほど小さくする
+        float wf = clamp(tan(0.5 * s) / 0.5774, 0.35, 1.6);
+        vec2 fpb = r * vec2(cos(0.5 * s - a), sin(0.5 * s - a)); // もう一方の継ぎ目の側から見た座標
+        float sz1 = 0.30 * wf * swell;
+        float sz2 = 0.5 * wf * swell;
+        vec2 o1 = heartOrnament(vec2(fp.y, fp.x - 0.5) / sz1, sz1, 22.0, 0.35, 0.02);
+        vec2 o2 = heartOrnament(vec2(fpb.y, -(fpb.x - 1.45)) / sz2, sz2, 30.0, -0.25, 0.017);
         vec2 o3 = ringOrnament(fp, vec2(0.28 + 0.03 * sin(t * 0.23), 0.04), 0.17 * swell, 12.0, 0.5, 0.022);
         float curves = o1.x + 0.8 * o2.x + o3.x;
         float beads = o1.y + 0.9 * o2.y + 1.1 * o3.y;
