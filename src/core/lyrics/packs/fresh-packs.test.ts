@@ -3,6 +3,7 @@ import { defaultLyrics } from '../../types';
 import { buildJizuraProject, installTimingPatch, type JizuraApi } from '../jizura-adapter';
 import { applyMotionPack, registerMotionPacks } from './index';
 import { simplePack, terminalPack, constellationPack } from './fresh-packs';
+import { KINETIC_PACKS, smallFlowPack, bigTypePack, gothicPack } from './kinetic-packs';
 import type { PackJ, PackItem, PackEnv } from './types';
 import type { LayoutEnv } from './design-kit';
 let J: JizuraApi & PackJ;
@@ -12,7 +13,7 @@ beforeAll(async () => {
   J = (globalThis as unknown as { J: JizuraApi & PackJ }).J;
   installTimingPatch(J); registerMotionPacks(J);
 });
-const packs = [simplePack, terminalPack, constellationPack];
+const packs = [simplePack, terminalPack, constellationPack, ...KINETIC_PACKS];
 it('各系統が独立した部品セットを持ち、同じseedで同じ演出を生成する', () => {
   for (const pack of packs) {
     const lyrics = defaultLyrics();
@@ -44,13 +45,60 @@ it('全レイアウトが横長・縦長と長い歌詞で有限の座標とサ�
       const old = J.mainDraw;
       J.mainDraw = (_env, item) => { items.push(item); return { x0: 100, x1: 200, y0: 100, y1: 180 }; };
       try {
-        const env = { W, H, lt: 0.5, pIn: 0.5, pOut: 0, pass: 'main', sc: { fg: '#ffffff', accent: '#aaccff' }, cut: { params, text: '長い歌詞も折り返して画面の中に収める。'.repeat(4) }, line: () => {}, circle: () => {} } as unknown as LayoutEnv;
+        const env = { W, H, lt: 0.5, pIn: 0.5, pOut: 0, pass: 'main', fx: { motion: 0.7, decor: 0.5 }, sc: { fg: '#ffffff', accent: '#aaccff' }, cut: { params, text: '長い歌詞も折り返して画面の中に収める。'.repeat(4) }, line: () => {}, circle: () => {} } as unknown as LayoutEnv;
         def.render(env);
         expect(items.length).toBeGreaterThan(0);
         for (const item of items) for (const key of ['x', 'y', 'size']) expect(Number.isFinite(item[key])).toBe(true);
         for (const item of items) { expect(item.x).toBeGreaterThan(0); expect(item.x).toBeLessThan(W!); expect(item.y).toBeGreaterThan(0); expect(item.y).toBeLessThan(H!); }
       } finally { J.mainDraw = old; }
     }
+  }
+});
+it('小さく流れる文字と大きく動く文字のサイズ差が明確で、ゴシックは無彩色', () => {
+  const sizes: number[] = [], old = J.mainDraw;
+  J.mainDraw = (_env, item) => { sizes.push(Number(item.size)); return null; };
+  try {
+    for (const pack of [smallFlowPack, bigTypePack]) {
+      const def = pack.effects(J).find(e => e.group === 'layout')!.def;
+      (def.render as (env: LayoutEnv) => unknown)({ W: 1920, H: 1080, cut: { text: '歌え', params: { side: 1 } }, sc: { fg: '#ffffff' } } as unknown as LayoutEnv);
+    }
+    expect(sizes[1]!).toBeGreaterThan(sizes[0]! * 3);
+  } finally { J.mainDraw = old; }
+  const schemes = gothicPack.buildStyle(J).schemes as Record<string, string>[];
+  for (const color of Object.values(schemes[0]!)) expect(color.slice(1, 3)).toBe(color.slice(3, 5));
+});
+it('6系統の動きは進行の両端で閉じ、強さ0で移動・回転・拡大を止められる', () => {
+  for (const pack of KINETIC_PACKS) for (const e of pack.effects(J).filter(e => ['enter', 'hold', 'exit'].includes(e.group))) {
+    const apply = e.def.apply as (env: PackEnv, it: PackItem, p: number) => void;
+    for (const motion of [0, 1]) for (const p of [0, 0.25, 0.5, 1]) {
+      const it: PackItem = { size: 100, alpha: 1, charFns: [] };
+      apply({ lt: 0.5, fx: { motion }, sc: { fg: '#ffffff', accent: '#ff00aa' } } as PackEnv, it, p);
+      for (let i = 0; i < 7; i++) for (const fn of it.charFns) {
+        const mod = fn(i, { i }, 7);
+        for (const val of Object.values(mod ?? {})) if (typeof val === 'number') expect(Number.isFinite(val), e.key).toBe(true);
+        if (motion === 0) {
+          expect(mod?.dx ?? 0, e.key).toBeCloseTo(0); expect(mod?.dy ?? 0, e.key).toBeCloseTo(0); expect(mod?.rot ?? 0, e.key).toBeCloseTo(0); expect(mod?.s ?? 1, e.key).toBe(1);
+        }
+        if (e.group === 'enter' && p === 1) expect(mod?.a ?? 1, e.key).toBe(1);
+        if (e.group === 'exit' && p === 1) expect(mod?.a ?? 1, e.key).toBe(0);
+      }
+    }
+  }
+});
+it('夏・冬・ゴシックの飾りは同じseedで同じ形を描き、装飾0で消せる', () => {
+  for (const pack of KINETIC_PACKS.slice(2)) {
+    const def = pack.effects(J).find(e => e.group === 'layout')!.def;
+    const render = def.render as (env: LayoutEnv) => unknown;
+    const make = (decor: number) => {
+      const marks: unknown[][] = [], old = J.mainDraw;
+      J.mainDraw = () => null;
+      try {
+        render({ W: 1920, H: 1080, lt: 0.4, pIn: 1, pOut: 0, pass: 'main', fx: { motion: 0.7, decor }, sc: { fg: '#ffffff', accent: '#aabbff' }, cut: { seed: 8, text: '歌え', params: { side: 1 } }, line: (...args: unknown[]) => marks.push(['line', ...args]), circle: (...args: unknown[]) => marks.push(['circle', ...args]) } as unknown as LayoutEnv);
+      } finally { J.mainDraw = old; }
+      return marks;
+    };
+    const marks = make(1); expect(marks.length).toBeGreaterThan(0); expect(make(1)).toEqual(marks);
+    for (const mark of make(0)) expect(mark[mark[0] === 'line' ? 4 : 7], pack.id).toBe(0);
   }
 });
 it('入力・削除が文字数に従い、フェードが先頭と末尾で正しく閉じる', () => {
