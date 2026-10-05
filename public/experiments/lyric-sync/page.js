@@ -16,7 +16,7 @@ $('prepare').onclick = async () => {
     if (current !== generation) return;
     if (device === 'webgpu' && !adapter) throw new Error('この環境ではWebGPU adapterを利用できません。WASMは別に測定してください。');
     report = { version: 1, library: '@huggingface/transformers@4.3.0', model: 'onnx-community/whisper-tiny', device, dtype: 'q8', webgpuAdapter: !!adapter, userAgent: navigator.userAgent, runs: [], mainMemoryBefore: memory() };
-    worker = new Worker('./worker.js?v=bundled-4.3.0', { type: 'module' });
+    worker = new Worker('./worker.js?v=validation-1', { type: 'module' });
     worker.onerror = event => { if (current !== generation) return; const message = event.message || 'Workerの読み込みに失敗'; stop(); show(message); };
     worker.onmessage = ({ data }) => {
       if (current !== generation) return;

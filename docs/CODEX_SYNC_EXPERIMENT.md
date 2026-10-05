@@ -55,3 +55,11 @@ CI run `37283365714`、commit `ad6a747188fcb8345ed25d601a7d1cb33eac9fa7` の歌�
 MusicSyncの実素材の形式・offset・前処理の担当者確認、実曲3〜5曲・既知歌詞・基準時刻が必要。所在探索とソースの静的読解は完了したが、歌唱の一致率はまだ測れていない。Whisper tiny単独のASR時刻を既知歌詞の正解として自動適用する方針は採用しない。読みの正規化と既知本文の照合/強制アラインメントを検証してからB2を判断する。D-005のA2（残る4テーマ）は姫のA1見た目レビュー後。
 
 公式資料: https://huggingface.co/docs/transformers.js/guides/webgpu 、 https://huggingface.co/docs/transformers.js/guides/dtypes 。配布形態は導入した4.3.0のpackage/distも確認。
+
+## 2026-10-05 21:42 JST 引き継ぎ後のB1判定修正
+
+旧判定はstartのnull/NaN、逆転、ゼロ長、順序逆転を見逃し得た。`validation.js`へ切り出し、出力構造・有限値・0〜音源長・正の区間長・開始/終了の単調性を検査する。理由付きissuesを結果に保存し、時刻が妥当でも`unverified-asr-not-lyric-alignment`を保持。反復する本文自体の棄却や読み正規化・既知歌詞alignmentは未実装。
+
+入力全sampleが正確に0ならモデルを呼ばず`silent-input-reject`にする。NaN/Infinity・空入力も解析前に棄却。小さい非ゼロ音は無音扱いしない。合成無音ボタンは「無音を検査」へ変更。この経路は`modelInvoked:false`、`inferenceMs:null`を記録するため、以前の無音ASR速度測定と比較しない。保存済みの過去の無音誤認識JSONは変更せず、9件の不正時刻を再検査する回帰入力として使う。
+
+検証: Nodeの判定/Workerテスト6件成功（モデルをロードせず無音と不正入力を棄却する実Workerハンドラを含む）、既存73ファイル/613テスト、lint、公開用build成功。CIにNodeテストを追加。今回のモデル再取得・実歌唱の認識・速度測定・ブラウザUI/MP4検証は未実施。通常VSの製品コード/依存/Project JSONは変更なし、B2未実装。
