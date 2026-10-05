@@ -1,6 +1,6 @@
 import { createMotionEditor } from './lyrics-motion-editor';
 import { tr } from '../../core/i18n';
-import { customFromStyle, jizuraStyles, loadJizura, type JizuraApi } from '../../core/lyrics/jizura-adapter';
+import { customFromStyle, jizuraStyles, loadJizura, LyricMotion, type JizuraApi } from '../../core/lyrics/jizura-adapter';
 import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { blankAlpha } from '../../core/lyrics/blanks';
 import { store } from '../../core/store';
@@ -64,6 +64,7 @@ export function renderLyricMotionPanel(): HTMLElement {
     const base = currentLyrics();
     store.setLyrics({ ...base, motion: { ...base.motion, ...patch } });
     refreshMotionControls();
+    if (sampleActive) { clearTimeout(sampleRebuild); sampleRebuild = setTimeout(() => void buildSample(), 180); }
   };
   motionEnabled.addEventListener('change', () => updateMotion({ enabled: motionEnabled.checked }));
   styleSelect.addEventListener('change', () => updateMotion({ style: styleSelect.value }));
@@ -84,6 +85,35 @@ export function renderLyricMotionPanel(): HTMLElement {
   motionCanvas.height = 360;
   const motionCtx = motionCanvas.getContext('2d');
   const applyNotice = createMotionApplyNotice();
+  let sampleActive = false, samplePlaying = true, sampleTime = 1, sampleClock = performance.now(), sampleGeneration = 0;
+  let sample: LyricMotion | null = null;
+  let sampleRebuild: ReturnType<typeof setTimeout> | undefined;
+  let sampleStatus = '';
+  const sampleSeek = el('input'); sampleSeek.type = 'range'; sampleSeek.min = '0'; sampleSeek.max = '16'; sampleSeek.step = '0.01'; sampleSeek.value = '1';
+  sampleSeek.setAttribute('aria-label', tr('サンプルの再生位置', 'Sample position'));
+  sampleSeek.style.flex = '1';
+  const sampleControls = el('div', { className: 'row-gap lyrics-row-wrap' }); sampleControls.hidden = true; sampleControls.style.display = 'none';
+  const samplePause = button(tr('見本を停止', 'Pause sample'), () => { samplePlaying = !samplePlaying; samplePause.textContent = samplePlaying ? tr('見本を停止', 'Pause sample') : tr('見本を再生', 'Play sample'); sampleClock = performance.now(); });
+  sampleSeek.addEventListener('input', () => { sampleTime = Number(sampleSeek.value); sampleClock = performance.now(); });
+  sampleControls.append(samplePause, sampleSeek);
+  const sampleButton = button(tr('サンプル歌詞で動きを見る', 'Preview with sample lyrics'), () => {
+    sampleActive = !sampleActive; sampleControls.hidden = !sampleActive; sampleControls.style.display = sampleActive ? 'flex' : 'none';
+    sampleButton.textContent = sampleActive ? tr('曲の歌詞に戻す', 'Back to song lyrics') : tr('サンプル歌詞で動きを見る', 'Preview with sample lyrics');
+    if (sampleActive) void buildSample(); else { sampleGeneration++; sample = null; clearTimeout(sampleRebuild); }
+  });
+  async function buildSample(): Promise<void> {
+    const generation = ++sampleGeneration;
+    sampleStatus = tr('見本を準備しています…', 'Preparing sample…');
+    const settings = defaultLyrics();
+    settings.text = '光を追いかけて\n夜空に言葉を描く\n消えないこの想い\n君へ届け';
+    settings.timing.lineTimes = { '0': 0.4, '1': 4.4, '2': 8.4, '3': 12.4 };
+    settings.motion = { ...currentLyrics().motion, lines: {}, effects: {}, sections: { enabled: false, levels: {} } };
+    try {
+      const next = await LyricMotion.create(settings, { duration: 16, beats: Array.from({ length: 32 }, (_, i) => i * 0.5), energy: new Float32Array(960).fill(0.5), energyRate: 60 }, { projectSeed: 41, width: 640, height: 360, fps: 30 });
+      if (generation !== sampleGeneration || !sampleActive || !root.isConnected) return;
+      sample = next; sampleTime = 1; sampleClock = performance.now(); sampleStatus = tr('サンプル歌詞・見本のリズムで再生中', 'Playing sample lyrics with a sample rhythm');
+    } catch (err) { if (generation === sampleGeneration) sampleStatus = `${tr('見本を作れませんでした', 'Could not build sample')}: ${String(err)}`; }
+  }
 
   // オリジナルのスタイル (L7): 今のスタイルを元に作り、色・書体・質感を変える
   let jz: JizuraApi | null = null;
@@ -170,6 +200,8 @@ export function renderLyricMotionPanel(): HTMLElement {
     styleEditor.element,
     el('div', { className: 'param-grid lyrics-motion-grid' }, sliderRows),
     applyNotice.element,
+    sampleButton,
+    sampleControls,
     motionCanvas,
   ]);
   root.append(noLyrics, motionCard, individualEditor.element, sectionCard);
@@ -239,8 +271,8 @@ export function renderLyricMotionPanel(): HTMLElement {
   /** 歌詞の動きだけの見本 (黒地)。映像と重ねた見た目は Visualizer タブで見る */
   function drawMotionPreview(t: number): void {
     if (!motionCtx) return;
-    const motion = previewMotionNow();
-    const status = !store.audio.isLoaded
+    const motion = sampleActive ? sample : previewMotionNow();
+    const status = sampleActive ? sampleStatus : !store.audio.isLoaded
       ? tr('曲を読み込むと見本が出ます', 'Load a song to see a preview')
       : previewMotionProvider.lastError
         ? `${tr('作れませんでした', 'Could not build')}: ${previewMotionProvider.lastError}`
@@ -257,7 +289,7 @@ export function renderLyricMotionPanel(): HTMLElement {
     // JIZURA は描く前に canvas を消すので、黒地は別の canvas に重ねずに「描いたあとに下へ敷く」
     if (motion) {
       // 歌詞の空白 (何も出さない時間) は描かない。端は黒を重ねてなめらかに消す
-      const a = blankAlpha(store.lyrics?.timing.blanks, t);
+      const a = sampleActive ? 1 : blankAlpha(store.lyrics?.timing.blanks, t);
       if (a > 0.001) {
         motion.render(motionCtx, t, { fast: true });
         motionCtx.globalCompositeOperation = 'destination-over';
@@ -274,9 +306,14 @@ export function renderLyricMotionPanel(): HTMLElement {
   refreshMotionControls();
   // shell.ts はタブ切り替えで中身を差し替えるだけなので、外れたら止める
   const tick = (): void => {
-    if (!root.isConnected && root.dataset.mounted === '1') return;
+    if (!root.isConnected && root.dataset.mounted === '1') { sampleGeneration++; clearTimeout(sampleRebuild); return; }
     if (root.isConnected) root.dataset.mounted = '1';
-    drawMotionPreview(store.audio.isLoaded ? store.audio.heardTime : 0);
+    if (sampleActive && sample) {
+      const now = performance.now();
+      if (samplePlaying) sampleTime = (sampleTime + Math.min(0.1, (now - sampleClock) / 1000)) % 16;
+      sampleClock = now; sampleSeek.value = String(sampleTime);
+    }
+    drawMotionPreview(sampleActive ? sampleTime : store.audio.isLoaded ? store.audio.heardTime : 0);
     applyNotice.update();
     individualEditor.refresh();
     requestAnimationFrame(tick);

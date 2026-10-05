@@ -4,6 +4,7 @@ import { buildJizuraProject, installTimingPatch, type JizuraApi } from '../jizur
 import { applyMotionPack, registerMotionPacks } from './index';
 import { simplePack, terminalPack, constellationPack } from './fresh-packs';
 import { KINETIC_PACKS, smallFlowPack, bigTypePack, gothicPack } from './kinetic-packs';
+import { artDirectedLayouts, directedCamera } from './art-directed-layouts';
 import type { PackJ, PackItem, PackEnv } from './types';
 import type { LayoutEnv } from './design-kit';
 let J: JizuraApi & PackJ;
@@ -14,6 +15,17 @@ beforeAll(async () => {
   installTimingPatch(J); registerMotionPacks(J);
 });
 const packs = [simplePack, terminalPack, constellationPack, ...KINETIC_PACKS];
+it('6テーマに3つずつ異なる構図があり、強さ0ではカメラも固定される', () => {
+  for (const theme of ['Hyper', 'Summer', 'Winter', 'Gothic', 'Terminal', 'Constellation'] as const) {
+    const layouts = artDirectedLayouts(J, theme);
+    expect(new Set(layouts.map(e => e.key)).size).toBe(3);
+    const get = directedCamera(theme).def.get as (env: PackEnv) => { s: number; x: number; y: number; rot: number };
+    const env = { W: 1920, H: 1080, lt: 1, cut: { dur: 4 }, fx: { motion: 0 } } as PackEnv;
+    const atRest = get(env);
+    expect(atRest.s).toBe(1); expect(atRest.x).toBeCloseTo(0); expect(atRest.y).toBe(0); expect(atRest.rot).toBe(0);
+    for (const t of [0, 0.1, 1, 3.9]) for (const v of Object.values(get({ ...env, lt: t, fx: { motion: 1 } }))) expect(Number.isFinite(v)).toBe(true);
+  }
+});
 it('各系統が独立した部品セットを持ち、同じseedで同じ演出を生成する', () => {
   for (const pack of packs) {
     const lyrics = defaultLyrics();

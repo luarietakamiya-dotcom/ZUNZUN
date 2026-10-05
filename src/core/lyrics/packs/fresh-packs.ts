@@ -1,6 +1,7 @@
 import type { MotionPack, PackEffect, PackEnv, PackItem, PackJ } from './types';
 import { clean, fontsOf, union, type LayoutEnv, type Rng } from './design-kit';
 import { easeInOut, staggered } from './util';
+import { artDirectedLayouts, directedCamera, directedEnter } from './art-directed-layouts';
 
 /** 読むための字幕・端末・星図。背景は覆わず、文字の組み方から系統を変える。 */
 const finiteProgress = (p: number) => Math.min(1, Math.max(0, p));
@@ -13,7 +14,7 @@ const fadeOut: PackEffect = { group: 'exit', key: 'vsCleanOut', def: {
 
 function pack(id: string, name: string, desc: string, color: string, effects: (J: PackJ) => PackEffect[]): MotionPack {
   const set = `vs${id}`;
-  const own = (J: PackJ) => [...effects(J), ...[quietCamera, still, fadeOut].map(e => ({ ...e, key: `${e.key}${id}` }))].map(e => ({ ...e, def: { ...(e.group === 'layout' ? { fits: (n: number) => n >= 1, w: 1, portrait: 1 } : {}), ...e.def, set, tags: ['calm', 'editorial'] } }));
+  const own = (J: PackJ) => [...effects(J), ...(id === 'Terminal' || id === 'Constellation' ? [...artDirectedLayouts(J, id), directedCamera(id), directedEnter(id)] : []), ...[quietCamera, still, fadeOut].map(e => ({ ...e, key: `${e.key}${id}` }))].map(e => ({ ...e, def: { ...(e.group === 'layout' ? { fits: (n: number) => n >= 1, w: 1, portrait: 1 } : {}), ...e.def, set, tags: ['calm', 'editorial'] } }));
   return {
     id: `visualsync-${id}`, set, styleKey: `vs-${id.toLowerCase()}`,
     effects: own,
@@ -37,7 +38,7 @@ function pack(id: string, name: string, desc: string, color: string, effects: (J
         enabled[group] = values;
       }
       project.enabled = enabled;
-      project.fx = { ...(project.fx as Record<string, unknown>), glitch: 0, chroma: 0, flash: false, decor: 0, hud: 'off', koma: 0, onTwos: false };
+      project.fx = { ...(project.fx as Record<string, unknown>), glitch: 0, chroma: 0, flash: false, ...(id === 'Simple' ? { decor: 0 } : {}), hud: 'off', koma: 0, onTwos: false };
     },
   };
 }

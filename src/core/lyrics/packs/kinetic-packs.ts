@@ -1,10 +1,10 @@
 import type { MotionPack, PackEffect, PackEnv, PackItem, PackJ } from './types';
 import { clean, type LayoutEnv, type Rng } from './design-kit';
 import { beatOf, easeInOut, easeOut, easeOutBack, staggered } from './util';
+import { artDirectedLayouts, directedCamera, directedEnter } from './art-directed-layouts';
 
 const clamp = (p: number) => Math.min(1, Math.max(0, p));
 const strength = (env: PackEnv) => clamp(env.fx.motion ?? 0.7);
-const visible = (env: PackEnv) => easeOut(clamp(env.pIn)) * (1 - easeInOut(clamp(env.pOut)));
 const short = (dur: number) => Math.min(0.45, dur * 0.3);
 type Apply = (env: PackEnv, it: PackItem, p: number) => void;
 const effect = (group: 'enter' | 'hold' | 'exit', key: string, name: string, apply: Apply, seconds = 0.45): PackEffect => ({
@@ -14,7 +14,7 @@ const effect = (group: 'enter' | 'hold' | 'exit', key: string, name: string, app
 /** 独立した部品セット。文字のテーマが混ざらず、個別編集ではほかの部品も指定できる。 */
 function themed(id: string, name: string, desc: string, colors: [string, string, string], font: string, effects: (J: PackJ) => PackEffect[]): MotionPack {
   const set = `vs${id}`;
-  const own = (J: PackJ) => [...effects(J), { group: 'cam' as const, key: `vsFixed${id}`, def: { name: 'カメラ固定', get: () => ({ s: 1, x: 0, y: 0 }) } }]
+  const own = (J: PackJ) => [...effects(J), ...(!effects(J).some(e => e.group === 'cam') ? [{ group: 'cam' as const, key: `vsFixed${id}`, def: { name: 'カメラ固定', get: () => ({ s: 1, x: 0, y: 0 }) } }] : [])]
     .map(e => ({ ...e, def: { ...(e.group === 'layout' ? { fits: (n: number) => n >= 1, w: 1, portrait: 1 } : {}), ...e.def, set, tags: [id] } }));
   return {
     id: `visualsync-${id}`, set, styleKey: `vs-${id.toLowerCase()}`, effects: own,
@@ -91,23 +91,9 @@ export const bigTypePack = themed('BigType', '大きくシンプル', '大きな
   glideOut('vsBigAway', '大きな文字・横に抜ける'),
 ]);
 
-function impactShapes(env: LayoutEnv, size: number) {
-  if (env.pass !== 'main') return;
-  const b = beatOf(env), pulse = Math.exp(-b.since / Math.max(0.06, b.len * 0.18));
-  const a = visible(env) * strength(env) * clamp(env.fx.decor ?? 0.5);
-  const color = b.index % 2 ? env.sc.accent : env.sc.accent2 ?? env.sc.accent;
-  const u = Math.min(env.W, env.H);
-  for (let i = 0; i < 12; i++) {
-    const angle = i * Math.PI / 6 + b.index * 0.17;
-    const r = u * (0.29 + pulse * 0.03), end = r + size * (0.12 + pulse * 0.2);
-    env.line([[env.W / 2 + Math.cos(angle) * r, env.H / 2 + Math.sin(angle) * r], [env.W / 2 + Math.cos(angle) * end, env.H / 2 + Math.sin(angle) * end]], color, Math.max(1, size * 0.018), a * (0.4 + pulse * 0.35));
-  }
-  env.circle(env.W / 2, env.H / 2, u * (0.33 + pulse * 0.055), null, color, Math.max(1, size * 0.025), a * 0.28);
-}
-
 export const hyperPack = themed('Hyper', 'ハイパー・ビート', '短尺MV向け。強いズーム、回転、拍ごとの色と放射線で畳みかける', ['#FFFFFF', '#FF48C4', '#70F4FF'], 'gothic_black', J => [
-  layout(J, 'vsHyperHero', 'ハイパー・特大文字と放射線', 'gothic_black', 0.25, impactShapes),
-  layout(J, 'vsHyperOffset', 'ハイパー・左右切り返し', 'gothic_black', 0.25, impactShapes, true),
+  ...artDirectedLayouts(J, 'Hyper').map((e, i) => ({ ...e, key: ['vsHyperHero', 'vsHyperOffset', e.key][i]! })),
+  directedCamera('Hyper'), directedEnter('Hyper'),
   effect('enter', 'vsHyperPunch', 'ハイパー・叩き込むズーム', (env, it, p) => {
     const q = clamp(p), k = strength(env);
     it.charFns.push(() => ({ s: 1 + (1 - easeOutBack(q, 1.5)) * 0.8 * k, rot: (1 - easeOut(q)) * -12 * k, a: easeOut(q) }));
@@ -123,65 +109,26 @@ export const hyperPack = themed('Hyper', 'ハイパー・ビート', '短尺MV�
   effect('exit', 'vsHyperBurst', 'ハイパー・外へ弾き飛ばす', (env, it, p) => { const q = clamp(p), k = strength(env); it.charFns.push((i, _g, n) => ({ dx: (i - (n - 1) / 2) * it.size * 0.3 * q * k, dy: (i % 2 ? 1 : -1) * it.size * q * k, rot: (i % 2 ? 1 : -1) * q * 22 * k, s: 1 + q * 0.2 * k, a: 1 - q })); }),
 ]);
 
-function ocean(J: PackJ, env: LayoutEnv, size: number) {
-  if (env.pass !== 'main') return;
-  const a = visible(env) * clamp(env.fx.decor ?? 0.5), k = strength(env), seed = env.cut.seed ?? 1;
-  for (let row = 0; row < 3; row++) {
-    const pts: [number, number][] = [];
-    for (let i = 0; i <= 40; i++) pts.push([env.W * (0.1 + i * 0.02), env.H * (0.7 + row * 0.055) + Math.sin(i * 0.28 - env.lt * 1.5 * k + row) * size * 0.18]);
-    env.line(pts, row === 1 ? env.sc.accent2 ?? env.sc.accent : env.sc.accent, Math.max(1, size * 0.025), a * (0.35 - row * 0.07));
-  }
-  for (let i = 0; i < 14; i++) {
-    const progress = (J.r(seed, i, 61) + env.lt * 0.1 * k) % 1;
-    const x = env.W * (0.1 + J.r(seed, i, 62) * 0.8) + Math.sin(env.lt * k + i) * size * 0.12;
-    env.circle(x, env.H * (0.84 - progress * 0.65), size * (0.025 + J.r(seed, i, 63) * 0.065), null, env.sc.accent, Math.max(0.7, size * 0.015), a * Math.sin(progress * Math.PI) * 0.4);
-  }
-}
-
 export const summerPack = themed('Summer', '夏・波としぶき', '海色の文字が波打ち、しぶきのように弾ける。波紋と泡が流れる', ['#F2FDFF', '#58D9FF', '#9FFFD7'], 'gothic_bold', J => [
-  layout(J, 'vsSummerSea', '夏・波と泡の文字', 'gothic_bold', 0.15, (env, size) => ocean(J, env, size)),
+  ...artDirectedLayouts(J, 'Summer').map((e, i) => ({ ...e, key: i === 0 ? 'vsSummerSea' : e.key })),
+  directedCamera('Summer'), directedEnter('Summer'),
   effect('enter', 'vsSummerSplash', '夏・しぶきが集まる', (env, it, p) => { it.charFns.push((i, _g, n) => { const q = easeOut(staggered(clamp(p), i, n, 0.4)), k = strength(env); return { dy: (1 - q) * it.size * (i % 2 ? -1.1 : 0.9) * k, dx: Math.sin(i * 2.3) * it.size * (1 - q) * k, s: 1 - (1 - q) * 0.35 * k, a: q }; }); }, 0.7),
   slideIn('vsSummerFlow', '夏・海風で流れ込む'),
   effect('hold', 'vsSummerWave', '夏・文字が波打つ', (env, it, amt) => { const k = amt * strength(env); it.charFns.push(i => ({ dy: Math.sin(env.lt * 2.3 - i * 0.6) * it.size * 0.13 * k, rot: Math.cos(env.lt * 2.3 - i * 0.6) * 3 * k })); }),
   effect('exit', 'vsSummerScatter', '夏・泡になって弾ける', (env, it, p) => { const q = easeInOut(clamp(p)), k = strength(env); it.charFns.push(i => ({ dx: Math.sin(i * 2.7) * it.size * q * k, dy: -it.size * q * (0.6 + i % 3 * 0.2) * k, s: 1 - q * 0.5 * k, a: 1 - q })); }),
 ]);
 
-function snow(J: PackJ, env: LayoutEnv, size: number) {
-  if (env.pass !== 'main') return;
-  const seed = env.cut.seed ?? 1, a = visible(env) * clamp(env.fx.decor ?? 0.5), k = strength(env);
-  for (let i = 0; i < 44; i++) {
-    const depth = 0.4 + J.r(seed, i, 71) * 0.6;
-    const y = ((J.r(seed, i, 72) + env.lt * 0.065 * depth * k) % 1) * env.H;
-    const x = env.W * (0.06 + J.r(seed, i, 73) * 0.88) + Math.sin(env.lt * 0.7 * k + i) * env.W * 0.015;
-    const r = Math.max(0.8, Math.min(env.W, env.H) * 0.003 * depth);
-    env.circle(x, y, r, env.sc.fg, null, 1, a * depth * 0.65);
-    if (i % 11 === 0) {
-      const arm = Math.max(r * 3, size * 0.04);
-      for (let j = 0; j < 3; j++) { const angle = j * Math.PI / 3; env.line([[x - Math.cos(angle) * arm, y - Math.sin(angle) * arm], [x + Math.cos(angle) * arm, y + Math.sin(angle) * arm]], env.sc.accent, 1, a * 0.4); }
-    }
-  }
-}
-
 export const winterPack = themed('Winter', '冬・雪のことば', '静かに降る雪と結晶。文字が雪のように舞い降り、ほどける', ['#F7FCFF', '#C5E5FF', '#FFFFFF'], 'mincho', J => [
-  layout(J, 'vsWinterSnow', '冬・降雪と明朝文字', 'mincho', 0.15, (env, size) => snow(J, env, size)),
+  ...artDirectedLayouts(J, 'Winter').map((e, i) => ({ ...e, key: i === 0 ? 'vsWinterSnow' : e.key })),
+  directedCamera('Winter'), directedEnter('Winter'),
   effect('enter', 'vsWinterLand', '冬・雪のように舞い降りる', (env, it, p) => { it.charFns.push((i, _g, n) => { const q = easeInOut(staggered(clamp(p), i, n, 0.3)), k = strength(env); return { dy: -it.size * (1 - q) * 0.8 * k, dx: Math.sin(i * 1.9 + q * Math.PI) * it.size * (1 - q) * 0.25 * k, rot: (1 - q) * (i % 2 ? 7 : -7) * k, a: q }; }); }, 1.1),
   drift('vsWinterFloat', '冬・ゆっくり漂う', 0.07),
   effect('exit', 'vsWinterMelt', '冬・雪がほどける', (env, it, p) => { it.charFns.push((i, _g, n) => { const q = easeInOut(staggered(clamp(p), i, n, 0.25)), k = strength(env); return { dy: it.size * q * 0.6 * k, dx: Math.sin(i * 1.9) * q * it.size * 0.3 * k, a: 1 - q }; }); }),
 ]);
 
-function crosses(env: LayoutEnv) {
-  if (env.pass !== 'main') return;
-  const a = visible(env) * clamp(env.fx.decor ?? 0.5), u = Math.min(env.W, env.H);
-  for (const y of [env.H * 0.15, env.H * 0.85]) {
-    const arm = u * 0.045, cx = env.W / 2;
-    env.line([[cx, y - arm], [cx, y + arm]], '#FFFFFF', Math.max(1, u * 0.0015), a * 0.7);
-    env.line([[cx - arm * 0.52, y - arm * 0.3], [cx + arm * 0.52, y - arm * 0.3]], '#FFFFFF', Math.max(1, u * 0.0015), a * 0.7);
-    for (const dir of [-1, 1]) env.line([[cx + dir * arm * 1.2, y], [cx + dir * u * 0.23, y]], '#FFFFFF', Math.max(0.8, u * 0.0008), a * 0.35);
-  }
-}
-
 export const gothicPack = themed('Gothic', 'ゴシック・白黒の祈り', '黒白の明朝文字と細い十字架。静かで鋭い余韻', ['#FFFFFF', '#FFFFFF', '#FFFFFF'], 'mincho_bold', J => [
-  layout(J, 'vsGothicCross', 'ゴシック・十字架と明朝文字', 'mincho_bold', 0.18, env => crosses(env)),
+  ...artDirectedLayouts(J, 'Gothic').map((e, i) => ({ ...e, key: i === 0 ? 'vsGothicCross' : e.key })),
+  directedCamera('Gothic'), directedEnter('Gothic'),
   effect('enter', 'vsGothicReveal', 'ゴシック・静かに浮かぶ', (env, it, p) => { const q = easeInOut(clamp(p)); it.charFns.push(() => ({ dy: (1 - q) * it.size * 0.12 * strength(env), a: q })); }, 0.9),
   drift('vsGothicBreath', 'ゴシック・微かな呼吸', 0.018),
   effect('exit', 'vsGothicVanish', 'ゴシック・余韻を残して消す', (env, it, p) => { const q = easeInOut(clamp(p)); it.charFns.push(() => ({ dy: -q * it.size * 0.12 * strength(env), a: 1 - q })); }),
