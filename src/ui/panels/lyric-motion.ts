@@ -95,7 +95,10 @@ export function renderLyricMotionPanel(): HTMLElement {
   const sampleControls = el('div', { className: 'row-gap lyrics-row-wrap' }); sampleControls.hidden = true; sampleControls.style.display = 'none';
   const samplePause = button(tr('見本を停止', 'Pause sample'), () => { samplePlaying = !samplePlaying; samplePause.textContent = samplePlaying ? tr('見本を停止', 'Pause sample') : tr('見本を再生', 'Play sample'); sampleClock = performance.now(); });
   sampleSeek.addEventListener('input', () => { sampleTime = Number(sampleSeek.value); sampleClock = performance.now(); });
-  sampleControls.append(samplePause, sampleSeek);
+  const sampleAspect = el('select'); sampleAspect.setAttribute('aria-label', tr('サンプルの画面比率', 'Sample aspect ratio'));
+  for (const ratio of ['16:9', '9:16']) { const option = el('option'); option.value = ratio; option.textContent = ratio; sampleAspect.append(option); }
+  sampleAspect.addEventListener('change', () => { if (sampleActive) void buildSample(); });
+  sampleControls.append(samplePause, sampleAspect, sampleSeek);
   const sampleButton = button(tr('サンプル歌詞で動きを見る', 'Preview with sample lyrics'), () => {
     sampleActive = !sampleActive; sampleControls.hidden = !sampleActive; sampleControls.style.display = sampleActive ? 'flex' : 'none';
     sampleButton.textContent = sampleActive ? tr('曲の歌詞に戻す', 'Back to song lyrics') : tr('サンプル歌詞で動きを見る', 'Preview with sample lyrics');
@@ -105,12 +108,12 @@ export function renderLyricMotionPanel(): HTMLElement {
     const generation = ++sampleGeneration;
     sampleStatus = tr('見本を準備しています…', 'Preparing sample…');
     const settings = defaultLyrics();
-    settings.text = '光を追いかけて\n夜空に言葉を描く\n消えないこの想い\n君へ届け';
+    settings.text = '光\n夜空に描いた言葉を君の明日まで届けたい\n消えないこの想い\n君へ届け';
     settings.timing.lineTimes = { '0': 0.4, '1': 4.4, '2': 8.4, '3': 12.4 };
     settings.timing.lineEnds = { '0': 4.3, '1': 8.3, '2': 12.3, '3': 15.9 };
     settings.motion = { ...currentLyrics().motion, lines: {}, effects: {}, sections: { enabled: false, levels: {} } };
     try {
-      const next = await LyricMotion.create(settings, { duration: 16, beats: Array.from({ length: 32 }, (_, i) => i * 0.5), energy: new Float32Array(960).fill(0.5), energyRate: 60 }, { projectSeed: 41, width: 640, height: 360, fps: 30 });
+      const next = await LyricMotion.create(settings, { duration: 16, beats: Array.from({ length: 32 }, (_, i) => i * 0.5), energy: new Float32Array(960).fill(0.5), energyRate: 60 }, { projectSeed: 41, width: sampleAspect.value === '9:16' ? 360 : 640, height: sampleAspect.value === '9:16' ? 640 : 360, fps: 30 });
       if (generation !== sampleGeneration || !sampleActive || !root.isConnected) return;
       sample = next; sampleTime = 1; sampleClock = performance.now(); sampleStatus = tr('サンプル歌詞・見本のリズムで再生中', 'Playing sample lyrics with a sample rhythm');
     } catch (err) { if (generation === sampleGeneration) sampleStatus = `${tr('見本を作れませんでした', 'Could not build sample')}: ${String(err)}`; }
@@ -273,7 +276,7 @@ export function renderLyricMotionPanel(): HTMLElement {
   function drawMotionPreview(t: number): void {
     if (!motionCtx) return;
     const motion = sampleActive ? sample : previewMotionNow();
-    const status = sampleActive ? sampleStatus : !store.audio.isLoaded
+    const status = sampleActive ? (!samplePlaying && sample ? tr('サンプルを停止中・位置を動かして比較できます', 'Sample paused: seek to compare') : sampleStatus) : !store.audio.isLoaded
       ? tr('曲を読み込むと見本が出ます', 'Load a song to see a preview')
       : previewMotionProvider.lastError
         ? `${tr('作れませんでした', 'Could not build')}: ${previewMotionProvider.lastError}`

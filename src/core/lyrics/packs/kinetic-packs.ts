@@ -91,7 +91,7 @@ export const bigTypePack = themed('BigType', '大きくシンプル', '大きな
   glideOut('vsBigAway', '大きな文字・横に抜ける'),
 ]);
 
-export const hyperPack = themed('Hyper', 'ハイパー・ビート', '短尺MV向け。強いズーム、回転、拍ごとの色と放射線で畳みかける', ['#FFFFFF', '#FF48C4', '#70F4FF'], 'gothic_black', J => [
+export const hyperPack = themed('Hyper', 'ハイパー・ビート', '大きな文字は固定し、拍ごとに光の角度と紫・ピンクの長い影が切り替わる', ['#FFFFFF', '#FF48C4', '#70F4FF'], 'dela', J => [
   ...artDirectedLayouts(J, 'Hyper').map((e, i) => ({ ...e, key: ['vsHyperHero', 'vsHyperOffset', e.key][i]! })),
   directedCamera('Hyper'), directedEnter('Hyper'),
   effect('enter', 'vsHyperPunch', 'ハイパー・叩き込むズーム', (env, it, p) => {
@@ -126,7 +126,7 @@ export const winterPack = themed('Winter', '冬・雪のことば', '静かに�
   effect('exit', 'vsWinterMelt', '冬・雪がほどける', (env, it, p) => { it.charFns.push((i, _g, n) => { const q = easeInOut(staggered(clamp(p), i, n, 0.25)), k = strength(env); return { dy: it.size * q * 0.6 * k, dx: Math.sin(i * 1.9) * q * it.size * 0.3 * k, a: 1 - q }; }); }),
 ]);
 
-export const gothicPack = themed('Gothic', 'ゴシック・白黒の祈り', '黒白の明朝文字と細い十字架。静かで鋭い余韻', ['#FFFFFF', '#FFFFFF', '#FFFFFF'], 'mincho_bold', J => [
+export const gothicPack = themed('Gothic', 'ゴシック・白黒の祈り', '太い白黒の明朝を光が読み進め、字間が静かに締まる', ['#FFFFFF', '#FFFFFF', '#FFFFFF'], 'tokumin', J => [
   ...artDirectedLayouts(J, 'Gothic').map((e, i) => ({ ...e, key: i === 0 ? 'vsGothicCross' : e.key })),
   directedCamera('Gothic'), directedEnter('Gothic'),
   effect('enter', 'vsGothicReveal', 'ゴシック・静かに浮かぶ', (env, it, p) => { const q = easeInOut(clamp(p)); it.charFns.push(() => ({ dy: (1 - q) * it.size * 0.12 * strength(env), a: q })); }, 0.9),

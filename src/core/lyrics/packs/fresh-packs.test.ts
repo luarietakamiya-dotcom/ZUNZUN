@@ -57,7 +57,7 @@ it('全レイアウトが横長・縦長と長い歌詞で有限の座標とサ�
       const old = J.mainDraw;
       J.mainDraw = (_env, item) => { items.push(item); return { x0: 100, x1: 200, y0: 100, y1: 180 }; };
       try {
-        const env = { W, H, lt: 0.5, pIn: 0.5, pOut: 0, pass: 'main', fx: { motion: 0.7, decor: 0.5 }, sc: { fg: '#ffffff', accent: '#aaccff' }, cut: { params, text: '長い歌詞も折り返して画面の中に収める。'.repeat(4) }, line: () => {}, circle: () => {} } as unknown as LayoutEnv;
+        const env = { W, H, lt: 0.5, pIn: 0.5, pOut: 0, pass: 'main', fx: { motion: 0.7, decor: 0.5 }, sc: { fg: '#ffffff', accent: '#aaccff' }, t: 0.5, ctx: {}, draw: (item: Record<string, unknown>) => item.color === '#FFFFFF' ? J.mainDraw({}, item) : null, cut: { start: 0, dur: 4, params, text: '長い歌詞も折り返して画面の中に収める。'.repeat(4) }, line: () => {}, circle: () => {} } as unknown as LayoutEnv;
         def.render(env);
         expect(items.length).toBeGreaterThan(0);
         for (const item of items) for (const key of ['x', 'y', 'size']) expect(Number.isFinite(item[key])).toBe(true);
@@ -98,7 +98,7 @@ it('6系統の動きは進行の両端で閉じ、強さ0で移動・回転・�
   }
 });
 it('夏・冬・ゴシックの飾りは同じseedで同じ形を描き、装飾0で消せる', () => {
-  for (const pack of KINETIC_PACKS.slice(2)) {
+  for (const pack of KINETIC_PACKS.filter(p => ['vs-summer', 'vs-winter'].includes(p.styleKey))) {
     const def = pack.effects(J).find(e => e.group === 'layout')!.def;
     const render = def.render as (env: LayoutEnv) => unknown;
     const make = (decor: number) => {

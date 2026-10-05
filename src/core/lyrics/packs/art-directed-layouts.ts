@@ -1,6 +1,7 @@
 import type { PackBox, PackEffect, PackJ } from './types';
 import { clean, piecesOf, union, type LayoutEnv, type Rng } from './design-kit';
 import { beatOf, easeInOut, easeOut, staggered } from './util';
+import { typeArtLayouts } from './layouts/type-art';
 
 type Theme = 'Hyper' | 'Summer' | 'Winter' | 'Gothic' | 'Terminal' | 'Constellation';
 const cap = (p: number) => Math.max(0, Math.min(1, p));
@@ -10,6 +11,7 @@ const ornament = (env: LayoutEnv) => reveal(env) * cap(env.fx.decor ?? 0.5);
 
 /** JIZURAの反復・大小対比・縦横組版を参考に、テーマごとに構図と時間の流れを設計。 */
 export function artDirectedLayouts(J: PackJ, theme: Theme): PackEffect[] {
+  if (theme === 'Hyper' || theme === 'Gothic') return typeArtLayouts(J, theme);
   const names: Record<Theme, string[]> = {
     Hyper: ['衝撃ポスター・大小の切り返し', '反復タイポ・傾いた残像', '分解グリッド・文字の連打'],
     Summer: ['波のリボン・文字のうねり', '潮の流れ・斜めに走る言葉', 'しぶきの円弧・海風の余白'],
@@ -20,7 +22,7 @@ export function artDirectedLayouts(J: PackJ, theme: Theme): PackEffect[] {
   };
   return names[theme].map((name, variant) => ({ group: 'layout', key: `vsArt${theme}${variant}`, def: {
     name, fits: (n: number) => n >= 1, w: 2, portrait: 1,
-    plan: (rng: Rng) => ({ font: theme === 'Gothic' ? 'mincho_bold' : theme === 'Winter' ? 'mincho_light' : theme === 'Terminal' ? 'mono' : theme === 'Hyper' ? 'gothic_black' : 'gothic_bold', side: rng.pick([-1, 1]), tilt: rng.range(-6, 6), phase: rng.range(0, Math.PI * 2) }),
+    plan: (rng: Rng) => ({ font: theme === 'Winter' ? 'mincho_light' : theme === 'Terminal' ? 'mono' : 'gothic_bold', side: rng.pick([-1, 1]), tilt: rng.range(-6, 6), phase: rng.range(0, Math.PI * 2) }),
     render: (env: LayoutEnv) => renderScene(J, env, theme, variant),
   } }));
 }
@@ -158,8 +160,8 @@ function renderScene(J: PackJ, env: LayoutEnv, theme: Theme, variant: number): P
 export function directedCamera(theme: Theme): PackEffect {
   return { group: 'cam', key: `vsCamera${theme}`, def: { name: `${theme === 'Hyper' ? '強く寄って止まる' : 'ゆっくり寄る'}・構図のカメラ`,
     get(env: LayoutEnv) {
+      if (theme === 'Hyper' || theme === 'Gothic') return { s: 1, x: 0, y: 0, rot: 0 };
       const k = motion(env), progress = cap(env.lt / Math.max(0.01, env.cut.dur));
-      if (theme === 'Hyper') { const b = beatOf(env); const hit = Math.exp(-b.since * 12); return { s: 1 + hit * 0.055 * k, x: (b.index % 2 ? 1 : -1) * env.W * hit * 0.008 * k, y: 0, rot: 0 }; }
       return { s: 1 + easeInOut(progress) * 0.025 * k, x: 0, y: 0, rot: 0 };
     },
   } };

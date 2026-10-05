@@ -12,6 +12,7 @@ import { levelFx, mergeSectionPlans, sectionLevels, type MotionFx } from './sect
 import { buildLyricsView } from './view';
 import type { MotionLevel } from '../types';
 import { tr } from '../i18n';
+import { directTypeArtPlan } from './packs/type-art-plan';
 
 /**
  * ZUNZUN と、同梱した JIZURA の歌詞モーションエンジン (vendor/jizura/jizura-engine.js、window.J) をつなぐ。
@@ -655,6 +656,7 @@ export class LyricMotion {
       const planFx = (plan.fx ?? {}) as Record<string, unknown>;
       fxSpans = spans.map((sp) => ({ start: sp.start, end: sp.end, fx: { ...planFx, ...levelFx(base, sp.level) } }));
     } else plan = makePlan();
+    directTypeArtPlan(plan, lyrics.motion);
     await prepareFonts(J, plan, lyricsForEngine(lyrics.text, lyrics.source) + HUD_CHARS);
     // 本番の Renderer は書体の準備が終わってから作る (内部のキャッシュに仮の書体の文字を残さない)
     const renderer = withSeededRandom(deriveSeed(seed, 'renderer'), () => {
