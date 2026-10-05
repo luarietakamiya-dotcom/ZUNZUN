@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>文字だけのアート スタディ</title>
+<style>
+  :root { --bg:#0b0b10; --fg:#ece8df; --mute:#8d8a9a; --line:#25252f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.7 "Hiragino Sans","Yu Gothic","Noto Sans CJK JP","WenQuanYi Zen Hei",sans-serif; }
+  header { padding:28px 20px 8px; max-width:1500px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 6px; letter-spacing:.08em; font-weight:600; }
+  header p { margin:0; color:var(--mute); max-width:70ch; }
+  main { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:18px; padding:18px 20px 40px; max-width:1500px; margin:0 auto; }
+  figure { margin:0; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:#000; }
+  canvas { display:block; width:100%; height:auto; aspect-ratio:16/9; }
+  figcaption { padding:10px 14px 14px; border-top:1px solid var(--line); }
+  figcaption b { display:block; font-size:15px; letter-spacing:.06em; }
+  figcaption em { display:block; font-style:normal; color:var(--mute); font-size:13px; margin-top:2px; }
+  .bar { position:sticky; top:0; z-index:2; display:flex; gap:10px; align-items:center; padding:10px 20px; background:rgba(11,11,16,.9); border-bottom:1px solid var(--line); }
+  button { background:#1b1b26; color:var(--fg); border:1px solid #3a3a4a; border-radius:5px; padding:6px 14px; font:inherit; cursor:pointer; }
+  @media (prefers-reduced-motion: reduce) { .note { display:block; } }
+</style>
+</head>
+<body>
+<div class="bar"><button id="pp">一時停止</button><span style="color:var(--mute)">6 つのスタディ。文字の動きだけで見せる試作（設計用。製品のコードではない）</span></div>
+<header>
+  <h1>文字だけのアート — スタディ</h1>
+  <p>装飾を足して見せるのではなく、文字そのものの性質（重さ・時間・並び・光・影）が動きを決める。画面は余白なしで全面を使う（余白を大きく取るのはシンプル系だけ）。色は 3 色以内、背景は暗く、明滅はしない。</p>
+</header>
+<main id="m"></main>
+<script>
+'use strict';
+const W = 800, H = 450;
+const SANS = '"Hiragino Sans","Yu Gothic","Noto Sans CJK JP","WenQuanYi Zen Hei","IPAGothic",sans-serif';
+const SERIF = '"Hiragino Mincho ProN","Yu Mincho","Noto Serif CJK JP",serif, "WenQuanYi Zen Hei","IPAGothic"';
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const eOut = t => 1 - Math.pow(1 - clamp(t), 3);
+const eIn = t => clamp(t) * clamp(t);
+const eIO = t => { t = clamp(t); return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+const eExpo = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * clamp(t));
+const eBack = (t, s = 1.7) => { t = clamp(t) - 1; return 1 + t * t * ((s + 1) * t + s); };
+const hash = (i, k = 0) => { const s = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return s - Math.floor(s); };
+const isKanji = c => /[㐀-鿿]/.test(c);
+const isSmallKana = c => /[ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ、。ー]/.test(c);
+
+/** 等幅で並べた文字の中心 x を返す */
+function slots(ctx, chars, size, track, cx) {
+  const ws = chars.map(c => ctx.measureText(c).width + size * track);
+  const total = ws.reduce((a, b) => a + b, 0) - size * track;
+  let x = cx - total / 2; const out = [];
+  ws.forEach((w, i) => { out.push(x + (w - size * track) / 2); x += w; });
+  return out;
+}
+function glyph(ctx, ch, x, y, o = {}) {
+  ctx.save(); ctx.translate(x, y); if (o.rot) ctx.rotate(o.rot); if (o.sx || o.sy) ctx.scale(o.sx ?? 1, o.sy ?? 1);
+  ctx.globalAlpha = clamp(o.a ?? 1);
+  if (o.glow) { ctx.shadowColor = o.glow; ctx.shadowBlur = o.blur ?? 18; }
+  if (o.stroke) { ctx.strokeStyle = o.color; ctx.lineWidth = o.stroke; ctx.strokeText(ch, 0, 0); }
+  else { ctx.fillStyle = o.color; ctx.fillText(ch, 0, 0); }
+  ctx.restore();
+}
+
+/** 全画面: 文字を行に分け、画面いっぱい（余白なし）に敷く。size は行・列から決まる */
+function fit(n, rows) {
+  const cols = Math.ceil(n / rows), size = Math.min(W / cols, H / rows) * 1.02;
+  const out = []; let k = 0;
+  for (let r = 0; r < rows; r++) {
+    const c = Math.min(cols, n - k), cw = W / c;
+    for (let j = 0; j < c; j++, k++) out.push({ x: (j + .5) * cw, y: (r + .5) * (H / rows) + size * 0.34, r, j, c, cw, row: r });
+  }
+  return { size, cells: out, cols, rows };
+}
+
+/* ───────── 1. 水に落ちる言葉（質量）— 全画面 ───────── */
+function s1(ctx, t) {
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#04060e'); g.addColorStop(1, '#0d2147');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const text = [...'夜空に言葉を描く'], L = fit(text.length, 2), size = L.size, TOUT = 3.5;
+  ctx.font = `${size}px ${SANS}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  // 行ごとの水面（上の行は上の水面、下の行は下の水面に立つ）
+  const yw = r => (r + 1) * (H / 2) - H * 0.035;
+  [0, 1].forEach(r => { const wl = ctx.createLinearGradient(0, 0, W, 0); wl.addColorStop(0, 'rgba(160,210,255,0)'); wl.addColorStop(.5, 'rgba(160,210,255,.6)'); wl.addColorStop(1, 'rgba(160,210,255,0)'); ctx.fillStyle = wl; ctx.fillRect(0, yw(r), W, 1.5); });
+  text.forEach((ch, i) => {
+    const c = L.cells[i], m = isKanji(ch) ? 1 : isSmallKana(ch) ? 0.25 : 0.5;
+    const rest = yw(c.r) - size * 0.1, t0 = 0.2 + c.r * 0.55 + c.j * 0.15, fall = 0.8 - 0.42 * m, p = (t - t0) / fall, land = t0 + fall;
+    if (p < 0) return;
+    let y, a = 1, x = c.x;
+    if (p < 1) { y = -size + (rest + size) * p * p; x += Math.sin(t * 4 + i * 2) * 14 * (1 - m); a = clamp(p * 4); }
+    else { const tau = t - land; y = rest - Math.abs(Math.sin(tau * 9 + .4)) * Math.exp(-tau * (3 + 4 * m)) * 36 * m; }
+    const so = t - (TOUT + i * 0.05); let sink = 0; if (so > 0) { sink = so * so * 160 * (1.2 - m * .5); a *= clamp(1 - so * 1.1); }
+    if (p >= 1) for (let k = 0; k < 3; k++) {
+      const tau = t - land - k * 0.2; if (tau < 0) continue;
+      const r = tau * (220 + 220 * m), al = clamp(1 - tau / 1.9) * (0.3 + 0.4 * m) * clamp(a + .2);
+      ctx.strokeStyle = `rgba(170,215,255,${al})`; ctx.lineWidth = 1 + 2.4 * m * (1 - tau / 1.9);
+      ctx.beginPath(); ctx.ellipse(x, yw(c.r), r, r * 0.16, 0, 0, 7); ctx.stroke();
+    }
+    glyph(ctx, ch, x, y + sink, { color: '#eef2fa', a });
+    const wob = Math.sin(t * 3 + i) * 3;
+    glyph(ctx, ch, x + wob, 2 * yw(c.r) - (y + sink), { color: '#9cc4ff', a: a * 0.22, sy: -1 });
+  });
+}
+
+/* ───────── 2. 凍った軌跡（時間を空間に残す）— 全画面 ───────── */
+function s2(ctx, t) {
+  ctx.fillStyle = '#04060b'; ctx.fillRect(0, 0, W, H);
+  const text = [...'光を追いかけて'], L = fit(text.length, 2), size = L.size, TOUT = 3.4;
+  ctx.font = `${size}px ${SERIF}`; ctx.textAlign = 'center';
+  text.forEach((ch, i) => {
+    const c = L.cells[i], t0 = 0.15 + i * 0.1, dur = 0.7, dir = (c.r ? -1 : 1) * (i % 2 ? 1 : -1);
+    const pos = u => { const e = eExpo(u); return { x: c.x + dir * (1 - e) * W * 0.8, y: c.y + (1 - e) * (i % 2 ? -1 : 1) * H * 0.25, rot: (1 - e) * dir * .5 }; };
+    const p = (t - t0) / dur; if (p < 0) return;
+    const fade = 1 - sstep(TOUT, TOUT + .9, t - i * .05);
+    for (const f of [.15, .35, .55, .75]) {
+      if (p < f) continue; const q = pos(f), age = clamp((p - f) * 1.3);
+      glyph(ctx, ch, q.x, q.y, { color: '#9fd0ff', stroke: 1.4, rot: q.rot, a: (0.2 + 0.3 * (1 - f)) * clamp(age * 3) * fade });
+    }
+    const q = pos(Math.min(1, p));
+    if (p < 1) for (let k = 6; k >= 1; k--) { const qq = pos(clamp(p - k * 0.03)); glyph(ctx, ch, qq.x, qq.y, { color: '#cfe8ff', a: 0.2 / k * clamp(p * 4), rot: qq.rot }); }
+    const tl = t - (t0 + dur);
+    if (tl > 0 && tl < .5) glyph(ctx, ch, q.x, q.y, { color: '#e8f4ff', stroke: 1.5, sx: 1 + tl * .4, sy: 1 + tl * .4, a: (1 - tl * 2) * .5 * fade });
+    glyph(ctx, ch, q.x, q.y, { color: '#f2f8ff', a: clamp(p * 5) * fade, rot: q.rot });
+  });
+}
+
+/* ───────── 3. 言葉が整列する（並べ替え）— 全画面 ───────── */
+const S3 = (() => {
+  const text = [...'終わらない夜の向こうへ'], n = text.length;
+  const order = text.map((_, i) => i).sort((a, b) => hash(a, 3) - hash(b, 3));
+  let cur = order.slice(); const steps = [];
+  for (let s = 0; s < n + 1; s++) {
+    const before = cur.slice(), after = cur.slice();
+    for (let j = s % 2; j + 1 < n; j += 2) if (after[j] > after[j + 1]) { const tmp = after[j]; after[j] = after[j + 1]; after[j + 1] = tmp; }
+    steps.push({ before, after }); cur = after;
+  }
+  return { text, n, steps, L: fit(n, 3) };
+})();
+function s3(ctx, t) {
+  ctx.fillStyle = '#05090a'; ctx.fillRect(0, 0, W, H);
+  const { text, n, steps, L } = S3, size = L.size * 0.96;
+  ctx.font = `${size}px ${SANS}`; ctx.textAlign = 'center';
+  const T0 = 0.4, DT = 0.2, TEND = T0 + steps.length * DT;
+  const s = clamp((t - T0) / DT, 0, steps.length - 1e-6), si = Math.floor(s), e = eIO(s - si), st = steps[si];
+  const where = a => { const m = {}; a.forEach((g, sl) => { m[g] = sl; }); return m; };
+  const wb = where(st.before), wa = where(st.after), fin = t > TEND, fade = 1 - sstep(3.6, 4.2, t);
+  const cell = k => L.cells[k];
+  for (let k = 0; k < n; k++) { const c = cell(k); ctx.fillStyle = `rgba(120,255,200,${0.09 * fade})`; ctx.fillRect(c.x - c.cw / 2 + 1, c.y - size * .34 - size * .5, 1, size); }
+  text.forEach((ch, g) => {
+    const A = cell(wb[g]), B = cell(wa[g]), ee = t >= T0 ? e : 0;
+    const x = A.x + (B.x - A.x) * ee, y = A.y + (B.y - A.y) * ee - Math.sign(wa[g] - wb[g]) * Math.sin(Math.PI * ee) * size * 0.3;
+    const done = (t >= T0 ? (e > 0.98 ? wa[g] : wb[g]) : wb[g]) === g, lit = fin || done;
+    glyph(ctx, ch, x, y, { color: lit ? '#eafff8' : '#58d9a8', a: (lit ? 1 : 0.5) * fade });
+  });
+}
+
+/* ───────── 4. 星座が文字を結ぶ — 全画面 ───────── */
+function s4(ctx, t) {
+  const g = ctx.createRadialGradient(W / 2, H / 2, 20, W / 2, H / 2, W * .75); g.addColorStop(0, '#0b1230'); g.addColorStop(1, '#02030a');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const text = [...'名前を呼んで'], L = fit(text.length, 2), size = L.size, fade = 1 - sstep(3.5, 4.1, t);
+  ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(Math.sin(t * .35) * 0.03); ctx.scale(1.06, 1.06); ctx.translate(-W / 2, -H / 2);
+  for (let i = 0; i < 220; i++) { const x = hash(i, 1) * W, yy = hash(i, 2) * H, tw = .35 + .65 * (.5 + .5 * Math.sin(t * (1 + hash(i, 4) * 2) + i)); ctx.fillStyle = `rgba(200,220,255,${0.7 * tw * (0.3 + hash(i, 5) * .7)})`; const r = 1 + hash(i, 6) * 1.6; ctx.fillRect(x, yy, r, r); }
+  ctx.font = `${size}px ${SERIF}`; ctx.textAlign = 'center';
+  const n = text.length, T0 = 0.4, DT = 0.5;
+  const pts = L.cells.map((c, i) => [c.x + Math.sin(i * 2.7) * size * .1, c.y - size * 0.34 + Math.cos(i * 1.9) * size * .25]);
+  for (let i = 0; i < n - 1; i++) {
+    const e = clamp((t - (T0 + i * DT)) / DT); if (e <= 0) continue; const [ax, ay] = pts[i], [bx, by] = pts[i + 1];
+    ctx.strokeStyle = `rgba(170,215,255,${0.95 * fade})`; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + (bx - ax) * eOut(e), ay + (by - ay) * eOut(e)); ctx.stroke();
+  }
+  text.forEach((ch, i) => {
+    const lit = i === 0 ? eOut((t - T0 + .2) / .6) : eOut((t - (T0 + (i - 1) * DT + DT * .85)) / 0.6);
+    const [px, py] = pts[i], c = L.cells[i];
+    const r = size * (.75 + .3 * lit), gg = ctx.createRadialGradient(px, py, 0, px, py, r);
+    gg.addColorStop(0, `rgba(190,220,255,${0.5 * lit * fade})`); gg.addColorStop(1, 'rgba(190,220,255,0)'); ctx.fillStyle = gg; ctx.fillRect(px - r, py - r, r * 2, r * 2);
+    ctx.fillStyle = `rgba(235,245,255,${0.95 * lit * fade})`; ctx.beginPath(); ctx.arc(px, py, 4 * lit, 0, 7); ctx.fill();
+    if (lit > .05) { ctx.strokeStyle = `rgba(230,240,255,${0.6 * lit * fade})`; ctx.lineWidth = 1.2; const Lh = size * .6 * lit; ctx.beginPath(); ctx.moveTo(px - Lh, py); ctx.lineTo(px + Lh, py); ctx.moveTo(px, py - Lh); ctx.lineTo(px, py + Lh); ctx.stroke(); }
+    glyph(ctx, ch, c.x, c.y + Math.sin(t * .9 + i) * 3 * lit, { color: '#f3f7ff', a: (0.12 + 0.88 * lit) * fade, glow: 'rgba(160,200,255,.9)', blur: 18 * lit });
+  });
+  ctx.restore();
+}
+
+/* ───────── 5. 回る光と長い影 — 全画面 ───────── */
+function s5(ctx, t) {
+  const bg = ctx.createRadialGradient(W / 2, H * .5, 10, W / 2, H * .5, W * .65); bg.addColorStop(0, '#1a1022'); bg.addColorStop(1, '#050408');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  const text = [...'もう一度だけ'], L = fit(text.length, 2), size = L.size * 0.98, BEAT = 0.5;
+  ctx.font = `900 ${size}px ${SANS}`; ctx.textAlign = 'center';
+  const fade = 1 - sstep(3.6, 4.1, t), enter = eOut(t / 0.35), bi = Math.floor(t / BEAT), since = t - bi * BEAT;
+  const A = [0.62, 1.57, 2.52], prev = A[(bi + 2) % 3], cur = A[bi % 3], angle = prev + (cur - prev) * eBack(since / 0.2, 1.4);
+  const pulse = Math.exp(-since * 9), Ls = size * (0.7 + 0.15 * pulse) * enter, dx = Math.cos(angle), dy = Math.sin(angle), N = 110;
+  text.forEach((ch, i) => {
+    const c = L.cells[i], gi = clamp((t - i * 0.07) / 0.3), sc = 1 + 0.04 * pulse;
+    for (let k = N; k >= 1; k--) {
+      const f = k / N, a = (1 - f * f) * 0.75 * fade * eOut(gi);
+      glyph(ctx, ch, c.x + dx * Ls * f, c.y + dy * Ls * f, { color: f < .55 ? '#ff48c4' : '#8a2f96', a, sx: sc, sy: sc });
+    }
+    glyph(ctx, ch, c.x, c.y + (1 - eOut(gi)) * -80, { color: '#ffffff', a: eOut(gi) * fade, sx: sc, sy: sc });
+  });
+}
+
+/* ───────── 6. 光が読む — 全画面 ───────── */
+function s6(ctx, t) {
+  ctx.fillStyle = '#030303'; ctx.fillRect(0, 0, W, H);
+  const text = [...'君がいた'], L = fit(text.length, 2), size = L.size * 0.98;
+  ctx.font = `${size}px ${SERIF}`; ctx.textAlign = 'center';
+  const T0 = 0.4, TPASS = 2.4, lightX = -W * 0.1 + eIO((t - T0) / TPASS) * W * 1.2, fade = 1 - sstep(3.5, 4.2, t);
+  const bw = W * 0.28, g = ctx.createLinearGradient(lightX - bw, 0, lightX + bw, 0);
+  g.addColorStop(0, 'rgba(255,250,240,0)'); g.addColorStop(.5, `rgba(255,250,240,${0.2 * fade * sstep(0, .5, t)})`); g.addColorStop(1, 'rgba(255,250,240,0)');
+  ctx.fillStyle = g; ctx.fillRect(lightX - bw, 0, bw * 2, H);
+  ctx.fillStyle = `rgba(255,250,240,${0.55 * fade * sstep(0, .5, t)})`; ctx.fillRect(lightX - 1, 0, 2, H);
+  text.forEach((ch, i) => {
+    const c = L.cells[i], cx = W / 2 + (c.x - W / 2) * 0.86 /* 光が過ぎると字間が詰まる */;
+    const d = lightX - c.x, lit = sstep(-80, 160, d), x = c.x + (cx - c.x) * eOut(lit), a = (0.07 + 0.93 * lit) * fade;
+    glyph(ctx, ch, x, c.y, { color: '#f6f1e8', a, glow: 'rgba(255,245,225,.8)', blur: 30 * Math.max(0, 1 - Math.abs(d) / 260) });
+  });
+}
+
+const STUDIES = [
+  { n: '1　水に落ちる言葉', r: '法則: 字面の濃さが重さになる。漢字は速く落ちて大きな波紋、かなは揺れながら静かに。', f: s1 },
+  { n: '2　凍った軌跡', r: '法則: 動いた時間が空間に残る。通り過ぎた姿が薄い輪郭として凍りつく。', f: s2 },
+  { n: '3　言葉が整列する', r: '法則: 並べ替えの過程が演出。正しい位置に着いた字だけが灯る。', f: s3 },
+  { n: '4　星座が文字を結ぶ', r: '法則: 読む順に線が伸び、結ばれた字が星になる。', f: s4 },
+  { n: '5　回る光と長い影', r: '法則: 拍ごとに光源の向きが替わり、影が字に彫りを与える。字そのものは動かない。', f: s5 },
+  { n: '6　光が読む', r: '法則: 光が通った字だけが現れ、字間が詰まる。装飾は光ひとつだけ。', f: s6 },
+];
+const LOOP = 4.6, ctxs = [];
+const main = document.getElementById('m');
+STUDIES.forEach((s, i) => {
+  const fig = document.createElement('figure');
+  fig.innerHTML = `<canvas width="${W}" height="${H}"></canvas><figcaption><b>${s.n}</b><em>${s.r}</em></figcaption>`;
+  main.appendChild(fig); ctxs.push(fig.querySelector('canvas').getContext('2d'));
+});
+window.renderAt = (i, t) => { const c = ctxs[i]; c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.textBaseline = 'alphabetic'; STUDIES[i].f(c, t); };
+let paused = false, t0 = performance.now(), off = 0;
+document.getElementById('pp').onclick = e => { paused = !paused; e.target.textContent = paused ? '再生' : '一時停止'; if (!paused) t0 = performance.now(); else off += (performance.now() - t0) / 1000; };
+(function loop() { if (!paused) { const t = (off + (performance.now() - t0) / 1000) % LOOP; ctxs.forEach((_, i) => window.renderAt(i, t)); } requestAnimationFrame(loop); })();
+</script>
+</body>
+</html>

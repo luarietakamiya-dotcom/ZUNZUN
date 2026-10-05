@@ -1,5 +1,7 @@
 # 歌詞モーション デザイン指示書（Claude → Codex）
 
+> **2026-10-05 追記: 姫の新方針（ダイナミックは余白なしで画面全体、文字だけのアート）により、画面の使い方と作品の中身は `docs/TYPE_ART_DIRECTION.md` が優先。** 本書の「余白 25 % 以上」などの規則は、**シンプル系にだけ**当てはまる。ダイナミック（Hyper / Summer / Winter / Gothic / Terminal / Constellation）には適用しない。
+
 作成: Claude（設計・指示担当） / 2026-10-05 / 総指揮: 姫
 対象: シンプル系以外のスタイル（Hyper / Summer / Winter / Gothic / Terminal / Constellation）。実装は Codex。
 状態: **指示済み・未着手**。採否と優先順位は姫が決める。進行は `docs/AI_COLLABORATION.md` に記録する。
