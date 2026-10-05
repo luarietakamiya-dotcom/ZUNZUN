@@ -107,6 +107,7 @@ export function renderLyricMotionPanel(): HTMLElement {
     const settings = defaultLyrics();
     settings.text = '光を追いかけて\n夜空に言葉を描く\n消えないこの想い\n君へ届け';
     settings.timing.lineTimes = { '0': 0.4, '1': 4.4, '2': 8.4, '3': 12.4 };
+    settings.timing.lineEnds = { '0': 4.3, '1': 8.3, '2': 12.3, '3': 15.9 };
     settings.motion = { ...currentLyrics().motion, lines: {}, effects: {}, sections: { enabled: false, levels: {} } };
     try {
       const next = await LyricMotion.create(settings, { duration: 16, beats: Array.from({ length: 32 }, (_, i) => i * 0.5), energy: new Float32Array(960).fill(0.5), energyRate: 60 }, { projectSeed: 41, width: 640, height: 360, fps: 30 });
