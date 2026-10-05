@@ -7,6 +7,7 @@ TypeScript + Vite + Three.js (r180) + WebCodecs/Mediabunny。**ユーザーと�
 
 - 設計: `docs/ARCHITECTURE.md`（Phase 1 で承認済みの設計。勝手に変えない）
 - 現在地・次の作業・過去のハマりどころ: `docs/HANDOFF.md`（**作業を始める前に必ず読む**）
+- Codex / Claude の担当・変更報告・相手への依頼: `docs/AI_COLLABORATION.md`（開始前に読み、担当と対象ファイルを記入。終了時にコミット・検証範囲・相手への依頼を追記する。2026-10-05 姫の指示）
 
 ## 絶対に守ること
 
