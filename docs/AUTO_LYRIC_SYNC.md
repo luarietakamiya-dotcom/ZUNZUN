@@ -69,3 +69,28 @@ Claudeへ依頼: エンジン候補/日本語歌唱の照合方式をレビュ�
 - https://github.com/openai/whisper （多言語ASR、モデル）
 - https://github.com/SYSTRAN/faster-whisper （ローカル推論と実行環境）
 - https://github.com/jianfch/stable-ts （既知本文のalignment、archive状態）
+
+## 2026-10-05 B0: MusicSyncソースの読み取り結果
+
+姫の「やって！」でコード読み取りを了承。保存済み資料の対象名からalpha.16.5 Performance Fast PathのソースZIPを取得。SHA-256は `697b5a803a16b5133251fbfe0dd2b49b5d2eafb4e69ab05eb781b4456324218a`。MusicSyncへの変更なし、静的読解のみ。impact.67 Portableはソースを含まないため、以下の結果を最新版へ外挿しない。過去の性能監査を今回の測定値として引用しない。
+
+| 確認事項 | ソースで確認した事実 | 根拠（alpha.16.5） |
+|---|---|---|
+| 読み込む形式 | UIの音声選択はWAV/FLAC/AIFF/AIF/OGG。soundfileでFloat32、samples×channelsへ読む。monoは左右複製、3ch以上は先頭2ch。実行環境の対応codecは未確認 | `app.py:530,543`、`native_core/io.py:10–16` |
+| sample rate | 最初の素材、または複数STEM中の最大rateへ統一。polyphase resample。既定48kHzが全素材のrateとは限らない。track.source_sample_rateは統一後rateであり、元ファイルのrate保持ではない | `native_core/stem_session.py:536–587`、`native_core/io.py:19–23` |
+| 開始位置 | track.offset_secondsをround(offset×session.sample_rate)でsample化し、前をゼロで埋めて配置。UIでは0以上。読込時の自動無音除去・元曲との自動位置照合はこの経路にない | `native_core/stem_session.py:603–615`、`app.py:759,770` |
+| 保存 | .msyncsessionは設定・パス・offsetを含むJSON。音声本体は別ファイル参照で、これだけをVSへ渡しても音源は取得できない | `native_core/stem_session.py:1775–1829,1910–1930` |
+| 処理済み出力 | UIの全曲書き出しはprocessed_mixをPCM_24 WAVへ保存し、session/mix/final_guardをJSONレポートへ出す。自動のボーカル分離やボーカルstem専用書き出しは確認できない | `app.py:2214–2234`、`native_core/io.py:26–30` |
+| 区間の補助 | detect_song_sections/SectionDescriptorからstart/end_sampleとsample_rate、秒の変換、confidenceを取れる。これは曲構造の推定であり歌詞行の時刻ではない | `native_core/stem_session.py:1165`、`native_core/section_commander.py:23–45` |
+| 実装環境 | NumPy/SciPy/soundfile等のPython DSP。Tk UI。確認したnative_core/app/依存にASR・既知歌詞alignment・HTTP APIは見当たらない | `requirements.txt`、`native_core/`、`app.py` の検索と入出力経路の読解 |
+
+### VSに渡す場合の共通形式案（まだ接続していない）
+`originalAudioSha256`、`inputAudioSha256`、元曲duration、素材種別（original_mix/vocal_stem/processed_mix）、実素材sampleRate/channels、offsetの根拠、切り出し開始秒、除去した先頭無音秒、source versionを明示する。
+
+原STEMファイルを切り出して認識した場合は、元曲時刻 = 認識時刻 + ファイル内切り出し開始 + 除去した先頭無音 + 元曲に対するSTEM開始offset。先にMusicSyncのセッション時刻へ配置済みの音声をrender_mix(start_sample=...)で切り出した場合は、元曲時刻 = 認識時刻 + start_sample/sample_rate（セッション0が元曲0と一致することが別途必要）。この経路にSTEM offsetをもう一度足さない。丸めはsample単位で記録する。
+
+歌声入力としては、既に存在する未加工ボーカルstemを優先して比較する案。Air Polishやreverb等を通したmixの認識改善は未測定なので、処理済みなら高精度と決めない。Python関数をそのままブラウザへimportはできない。VSを別アプリの起動必須にしない方針を維持し、共通データ形式とブラウザ内の処理を先に検証する。
+
+**B0で未受領:** 実際に使う元曲/STEMの形式・rate、元曲とのoffset(ms)と先頭無音/切り出しの担当者確認、前処理の具体的な入出力。上表はソース調査結果で、素材提供者からの確認書ではない。
+
+**B1結果:** 隔離ページのWASMで準備3,640.8ms、3秒無音認識3,932ms。無音誤認識と範囲外timestamp9件を棄却。実曲/手タップ正解がないため±100ms達成率は未測定。詳細と生JSONは `docs/CODEX_SYNC_EXPERIMENT.md`。B2は未実装。

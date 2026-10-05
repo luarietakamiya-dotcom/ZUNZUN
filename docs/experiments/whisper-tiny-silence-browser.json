@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "library": "@huggingface/transformers@4.3.0",
+  "model": "onnx-community/whisper-tiny",
+  "device": "wasm",
+  "dtype": "q8",
+  "webgpuAdapter": false,
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+  "runs": [
+    {
+      "type": "result",
+      "label": "synthetic-silence-3s",
+      "duration": 3,
+      "inferenceMs": 3932,
+      "output": {
+        "text": "お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、",
+        "chunks": [
+          {
+            "timestamp": [
+              0,
+              4
+            ],
+            "text": "お気に入りしさせると、お気に入りしさせると、"
+          },
+          {
+            "timestamp": [
+              4,
+              6
+            ],
+            "text": "お気に入りしさせると、"
+          },
+          {
+            "timestamp": [
+              6,
+              8
+            ],
+            "text": "お気に入りしさせると、"
+          },
+          {
+            "timestamp": [
+              8,
+              10
+            ],
+            "text": "お気に入りしさせると、"
+          },
+          {
+            "timestamp": [
+              10,
+              12
+            ],
+            "text": "お気に入りしさせると、"
+          },
+          {
+            "timestamp": [
+              12,
+              14
+            ],
+            "text": "お気に入りしさせると、"
+          },
+          {
+            "timestamp": [
+              14,
+              16
+            ],
+            "text": "お気に入りしさせると、"
+          },
+          {
+            "timestamp": [
+              16,
+              18
+            ],
+            "text": "お気に入りしさせると、"
+          },
+          {
+            "timestamp": [
+              18,
+              20
+            ],
+            "text": "お気に入りしさせると、"
+          }
+        ]
+      },
+      "invalidRangeCount": 9,
+      "status": "silence-hallucination-reject",
+      "workerHeapUsed": null
+    }
+  ],
+  "mainMemoryBefore": {
+    "heapUsed": 3433419,
+    "heapLimit": 4395630592,
+    "scope": "main-thread-only-not-total-memory"
+  },
+  "type": "ready",
+  "loadMs": 3640.7999999998137,
+  "reportedModelBytes": 43613734,
+  "workerHeapUsed": null,
+  "note": "heap excludes GPU/WASM memory; load may include browser cache",
+  "mainMemoryAfter": {
+    "heapUsed": 3773447,
+    "heapLimit": 4395630592,
+    "scope": "main-thread-only-not-total-memory"
+  }
+}

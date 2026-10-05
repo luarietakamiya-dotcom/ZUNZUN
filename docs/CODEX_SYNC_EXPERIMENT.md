@@ -3,9 +3,9 @@
 姫の「やって！」でモデル取得・MusicSyncの読み取りを了承。B2（製品へのAI依存・自動適用）は未実装。通常のVSは実験ページをimportしない。
 
 ## B0: MusicSync
-アクセス可能な10リポジトリの名前にMusicSyncはない。所有者を絞ったGitHub既定ブランチのコード検索「MusicSync」にも結果なし。ローカル名検索にも該当なし。関連名の候補 `3-Sync` のREADMEはアーティストの楽曲/壁紙サイトの説明で、音源解析エンジンではなかった。`3-Sync-Another` のREADMEは404。全ブランチ・未接続の保存場所は調べられていない。MusicSyncのURLまたは作業場所が必要。
+GitHub/ローカルの名前検索では所在を特定できなかったが、保存済みのMusicSync監査資料から `Music_Sync_v2.0.0-alpha.16.5_Performance_Fast_Path.zip` を発見して静的に読んだ。ZIP SHA-256: `697b5a803a16b5133251fbfe0dd2b49b5d2eafb4e69ab05eb781b4456324218a`。より新しいimpact.67 Freeze Guard Windows Portableも見つかったが、Pythonソースを含まない配布物だったため、以下をその最新版の検証結果とは扱わない。MusicSyncの起動・変更・commit/pushはしていない。以前の監査のテスト数・性能値も今回の測定値ではない。
 
-素材形式、サンプルレート、stem/元曲のoffset、先頭無音、再利用APIの入出力は未受領・未確認。他リポジトリへ変更していない。
+確認した入出力、開始位置の扱い、再利用案は `docs/AUTO_LYRIC_SYNC.md` のB0追記に記録。Float32 stereo音声、プロジェクトsample rate、stemのoffset_seconds、PCM_24 WAV出力とJSONレポートがある。歌詞ASR/forced alignment/ブラウザAPIは確認したソースに見当たらない。実際にVSへ渡す素材、元曲とのoffset・切り出し・先頭無音の担当者確認は未受領。コードの既定値0秒を実素材の一致証明にしない。
 
 ## B1: Node CPUによる実行確認（ブラウザ速度とは別）
 
@@ -25,7 +25,15 @@
 
 ライブラリはjsDelivr、モデルはHugging Faceから実験開始時のみ取得。実曲ファイルの選択だけではネットワークへ音源を送らない。外部コード/モデルの初回取得と負荷は実験ページで明記。
 
-最初のCloud Chrome測定で **WebGPU adapterなし**。WASMはweb用配布物のbare module import解決で止まったため、同じバージョンの依存同梱配布物 `dist/transformers.js` へ修正して再測定する。失敗を性能値として扱わない。
+最初はweb用配布物のbare module import解決で停止した。同じ4.3.0の依存同梱 `dist/transformers.js` へ修正し、Worker/ページのcache用の版を更新した後、Cloud Chrome 154で **WASM準備・認識に成功**。WebGPU adapterは取得できなかったためGPU速度は未測定。
+
+- モデル等: **43,613,734 bytes**（runtime・ライブラリは別）。
+- 準備: **3,640.8 ms**。ブラウザcacheを含む可能性があり、厳密な初回ロード時間ではない。
+- 3秒の合成無音、日本語ASR、q8: **3,932 ms**。
+- **架空の日本語が反復し、音源外timestampを9区間返した**。表示上のstatusは `silence-hallucination-reject`。結果をVSへ適用しない。
+- main thread JS heap: 準備前3,433,419 bytes、後3,773,447 bytes。Worker heapは取得不可。GPU/WASMを含む総量やピーク値、スマホの値ではない。
+- 生のUI表示JSONを読み取り保存: `docs/experiments/whisper-tiny-silence-browser.json`。JSON保存ボタンのdownloadイベント待ちはCloud Browserでタイムアウトしたため、ファイルダウンロード成功とは記さない。
+- 「認識中」表示から「中止して解放」を操作し、「中止しました」の表示・準備ボタン再有効化を確認。実際のメモリ回収量は未測定。
 
 ブラウザのheap値は取得できてもGPU/WASMメモリを含む総使用量ではない。表示はその限定を明記。実曲3〜5曲・正しい歌詞・手で合わせた行頭時刻は未提供。歌唱の行頭一致率、±100 ms達成、かな正規化、強制アラインメントの精度は未測定。認識テキストを元歌詞へ上書きする機能はない。
 
@@ -44,6 +52,6 @@ CI run `37283365714`、commit `ad6a747188fcb8345ed25d601a7d1cb33eac9fa7` の歌�
 
 ## 次に必要な情報と判断
 
-MusicSyncの所在、実曲・既知歌詞・基準時刻を受け取ってB0/B1を続ける。ブラウザ測定と歌唱の一致率を評価するまで「完璧な自動同期」とは扱わない。D-005のA2（残る4テーマ）は姫のA1見た目レビュー後。
+MusicSyncの実素材の形式・offset・前処理の担当者確認、実曲3〜5曲・既知歌詞・基準時刻が必要。所在探索とソースの静的読解は完了したが、歌唱の一致率はまだ測れていない。Whisper tiny単独のASR時刻を既知歌詞の正解として自動適用する方針は採用しない。読みの正規化と既知本文の照合/強制アラインメントを検証してからB2を判断する。D-005のA2（残る4テーマ）は姫のA1見た目レビュー後。
 
 公式資料: https://huggingface.co/docs/transformers.js/guides/webgpu 、 https://huggingface.co/docs/transformers.js/guides/dtypes 。配布形態は導入した4.3.0のpackage/distも確認。

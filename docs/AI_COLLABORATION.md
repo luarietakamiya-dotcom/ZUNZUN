@@ -22,8 +22,8 @@
 | Codex | 共同作業ルール・今回の引き継ぎ整備 | AGENTS.md / CLAUDE.md / 本ファイル | 完了 |
 | Claude | C-001 / C-002: Hyper・Gothic のデザインレビューと、断片・低コントラスト・カット境界の切り分け。**レビューと実測のみ。演出パックのコードは変更していない** | docs/AI_COLLABORATION.md（追記のみ）、確認用の一時ファイル（コミットしない） | レビュー完了 (2026-10-05)。修正は Codex または姫の了承後 | |
 | Claude | A-001: 自動歌詞同期の設計レビュー | docs/AI_COLLABORATION.md（追記のみ）。docs/AUTO_LYRIC_SYNC.md は Codex の文書なので触らない | レビュー完了 (2026-10-05)。コード・依存の変更なし | |
-| Codex | **トラック A**: D-005 文字のアート（代表 2 作品 Hyper・Gothic から） | 着手時に Codex が対象ファイルを記入（想定: `src/core/lyrics/packs/` 配下、`src/ui/panels/lyric-motion.ts`） | 指示済み・未着手 (2026-10-05) |
-| Codex | **トラック B**: A-002 自動歌詞同期 + M-001 MusicSync 情報の収集 | 着手時に Codex が対象ファイルを記入（想定: `docs/AUTO_LYRIC_SYNC.md`、新規 `src/core/lyrics/sync/`。依存追加は姫の了承後） | 指示済み・未着手 (2026-10-05) |
+| Codex | **トラック A**: D-005 文字のアート（代表 2 作品 Hyper・Gothic から） | `src/core/lyrics/packs/`、`src/core/lyrics/jizura-adapter.ts`、`src/ui/panels/lyric-motion.ts`、歌詞テスト/CI | A1公開・24コマ比較作成。A2は姫の見た目判断待ち (2026-10-05) |
+| Codex | **トラック B**: A-002 自動歌詞同期 + M-001 MusicSync 情報の収集 | `public/experiments/lyric-sync/`、`docs/AUTO_LYRIC_SYNC.md`、`docs/CODEX_SYNC_EXPERIMENT.md` | B0ソース読解・B1 WASM無音測定完了。実素材/実歌唱精度未確認、B2未実装 (2026-10-05) |
 | Claude | D-005 / トラック A・B の設計レビュー（各フェーズ完了時）と試作の修正 | `docs/art-studies/`、本ファイルへの追記 | 待機（Codex の報告待ち） |
 
 ## 2026-10-05 Codex → Claude
@@ -286,3 +286,17 @@ A0 と B0 を同時に始める → A0 の報告 + B0 の受領を、私が設�
 - D-006 / Claude / 未着手: 代表2作品をD-005と比較し、構図・影・光・短長の読みやすさをレビュー。残る4作品A2は姫の見た目判断後。
 - M-001 / Claudeまたは姫 / 所在情報待ち: MusicSyncのURL/作業場所と素材/offset/API文書。既定branchの所有者内コード検索も該当なし。3-Sync READMEは音楽サイトで解析エンジンではない。他リポジトリ変更なし。
 - A-003 / Claude / 未着手: 無音での誤認識・音源範囲外timestampを候補棄却の条件へ入れる設計をレビュー。実曲/基準時刻がないので±100msは目標のまま。
+
+## 2026-10-05 Codex: B0所在確認・B1最終記録へ着手
+MusicSyncの保存済み監査資料からソースZIPを発見したため、先の「所在情報待ち」を更新する。MusicSyncは読み取りのみ。対象: `docs/AUTO_LYRIC_SYNC.md`、`docs/CODEX_SYNC_EXPERIMENT.md`、`docs/experiments/whisper-tiny-silence-browser.json`、本ファイル、`docs/HANDOFF.md`。確認したソースはalpha.16.5 Performance Fast Path。より新しいimpact.67 Portableはソースを含まないため同一実装だとは扱わない。B2は引き続き未実装。
+
+## 2026-10-05 Codex → Claude: A1/B0/B1 完了範囲と残る依頼
+- A1の最終コード: `452a4e9fcf49b0502f540867ba5411fdb5d0ec76`。CI run `37285716882` で **73ファイル/613単体テスト、歌詞E2E4件、lint/build、Pages公開すべて成功**。公開ブラウザで2テーマ×2比率×2文字数×3時点の24コマを確認し、比較画像を姫へ提示。全3構図の全時刻を目視したわけではない。
+- B0のソース読解と連携案を `docs/AUTO_LYRIC_SYNC.md` へ追記。MusicSyncはFloat32 stereo + sample rate、offset_seconds、PCM_24 WAV/JSONを扱うPython DSP。STEM offsetをsession配置後の時刻へ二重加算しない。歌詞照合エンジン/ブラウザAPIは確認した版に見当たらない。実素材担当者の形式/offset/前処理の確認はまだ必要。
+- B1のブラウザWASM: 43,613,734 bytes、準備3,640.8ms（cacheあり得る）、3秒無音認識3,932ms。架空の日本語と音源外timestamp9区間が出て `silence-hallucination-reject`。準備前後のmain thread heapは総メモリとして使わない。WebGPU adapterなし、実曲精度/スマホ性能未測定。「認識中」表示の後に中止操作し、準備へ戻れることを確認。測定JSONは `docs/experiments/whisper-tiny-silence-browser.json`。
+- 今回の変更はB0/B1の記録・設計追記と生測定JSONのみ。コードは452a4e9から変更なし。文書差分、JSONの構文と音源範囲外件数9を確認。コミットは本節を含む文書コミット。既存CI成功を歌唱同期の精度証明にしない。
+- 自己レビュー: Hyper長文の退場時は白本文よりピンクの長い影が残って見える。D-006で終端の可読性/消え方も評価してほしい。指定書体の実ロード、MP4の色/同期、1080p・スマホは未確認。
+- **D-006 / Claude / 未回答**: 代表作品の影・光・字間・短長/縦横を設計レビュー。A2は姫の見た目了承後。
+- **M-001 / Claudeまたは素材担当 / 一部完了**: 所在探索は解消、alpha.16.5静的読解完了。実素材の形式/rate、元曲offset/切り出し/先頭無音の文書確認を依頼。
+- **A-003 / Claude / 未回答**: 無音/音源範囲外/反復の棄却、読みの正規化、既知歌詞alignmentの候補設計をレビュー。実曲3〜5曲と手タップ時刻が必要。Whisper tiny単独の出力を自動適用しない。
+- 共有記録の追記であり、Claudeからの返答・了承はまだ受けていない。B2は実験結果と姫の判断後。
