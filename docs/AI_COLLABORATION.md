@@ -369,3 +369,16 @@ MusicSyncの保存済み監査資料からソースZIPを発見したため、�
 - E1 は並行して着手可（変更なし）。E0 の結果が出たら、Claude が E2 以降の判断を追記する。
 - 検証済み: なし（指示の追記のみ）。未確認: 音声の受領・内容・位置のずれ。
 
+
+## 2026-10-05 23:21 JST Codex: E0 ミックス/Lead Vocal比較着手
+- 姫の4条件を受け、採用2曲の形式・曲対応・offsetを記録し同条件比較する。RAB!Tは237.52秒の`RAB!T (Lead Vocal).wav`を採用、旧217.80秒版は対象外。Black Roseは187.60秒の`Black Rose (Lead Vocal).wav`。
+- 対象は本ファイルとdocs/CODEX_SYNC_EXPERIMENT.mdのみ。ランナー/音源/歌詞/生認識はrepo外。small_timestamped q8、CPU、語時刻、日本語、30秒窓/5秒stride、256token、日本語分割fallbackを統一。RAB!T調整用・Black Rose評価用と事前宣言。今回閾値調整なし、E1/B2実装なし。
+- offsetは複数の声の強い窓で波形相関を測定。長さ一致をoffset=0の根拠にしない。手で合わせたlineTimesはまだ実ファイル未受領、行頭誤差/±100msの測定は基準入手状況を明記する。
+
+### E0 完了報告（Codex → Claude）
+- 採用素材: RAB!T mixと新Lead Vocalはともに237.52秒、Black Roseの両方は187.60秒。全4本PCM16/48kHz/stereo。旧217.80秒のRAB!T vocalは姫の指示で対象外。ファイル対応はdocs/CODEX_SYNC_EXPERIMENT.mdの表を参照。
+- offsetを長さから仮定せず、声の強い8秒窓を5区間で波形相関測定。両曲とも5窓のピーク0秒（相関RAB!T 0.570–0.921 / Black Rose 0.594–0.760）。波形offset推定であり歌詞行頭の正解ではない。
+- 全曲の4入力を同モデル・q8 CPU・日本語・語時刻・30秒/5秒・256token・日本語分割fallbackで再実行。一意な本文一致と両端候補: RAB!T 38→39/67行（新規5・消失4）、Black Rose 9→11/34行（新規3・消失1）。これは同期成功率ではない。全候補review、確定0。
+- 最初のRAB!T mix解析はPCMが77.824秒だったため棄却。237.52秒へ再変換しsample数確認後の再解析だけを採用。全4入力のPCM長、元音源/歌詞hash、同設定、JSON構造を検証。diff --check成功。製品変更なしのため既存テスト再実行なし。
+- 基準lineTimes実ファイル未受領（関連プロジェクト検索でも特定できず）。中央値/±100/±300ms/Wilson/90%達成は測れなかった。repoには音源・全文・生認識を入れず、集約記録2ファイルのみ。姫向けに詳細JSONを保存。
+- A-003 / Claude / E0結果への返答待ち: 分離だけでは解決せず、本文一致が失われる行もある。E1の読み/順序照合とE2以降の実験判断を依頼。B2は未着手。コミットは本節を含むdocs単独commit（git log参照）。
