@@ -32,6 +32,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/e2e/type-art.spec.ts --workers=1
       - run: npm run build
         env:
           ZUNZUN_BASE: /ZUNZUN/
