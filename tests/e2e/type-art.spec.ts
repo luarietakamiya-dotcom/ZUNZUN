@@ -8,7 +8,7 @@ for (const style of ['vs-hyper', 'vs-gothic']) for (const portrait of [false, tr
       const { LyricMotion } = await import('/src/core/lyrics/jizura-adapter.ts');
       const { defaultLyrics } = await import('/src/core/types.ts');
       const lyrics = defaultLyrics(); lyrics.motion.style = style; lyrics.motion.motion = 1; lyrics.motion.decor = 1;
-      lyrics.motion.sections.enabled = false;
+      lyrics.motion.sections = { enabled: false, levels: {} };
       lyrics.text = '光を追いかけて\n夜空に描いた言葉を君の明日まで届けたい';
       lyrics.timing.lineTimes = { '0': 0.4, '1': 4.4 }; lyrics.timing.lineEnds = { '0': 4.3, '1': 8.3 };
       const W = portrait ? 180 : 320, H = portrait ? 320 : 180;
