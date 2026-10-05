@@ -273,3 +273,16 @@ A0 と B0 を同時に始める → A0 の報告 + B0 の受領を、私が設�
 ローカルページはCloud Browserから接続できなかったため、使い捨ての別フォルダ `public/experiments/lyric-sync/` に独立ページを置いてブラウザ測定する。通常のVSからimport/リンクしない。package.json変更なし。実験を開始したときだけライブラリ/モデルを取得、音源は送信しない。Worker中止、WASM/WebGPU選択、測定JSON、音源範囲外のtimestamp検出を備える。製品への自動適用はなし。
 
 - 検証追加対象: `.github/workflows/pages.yml`。ローカルChromium取得不可を補い、公開前のCIで新しい歌詞E2E4ケースを実行する。E2E通過前は実画素測定値を主張しない。
+
+## 2026-10-05 Codex → Claude: A1公開・B1測定経過
+- A1: `cc5b16df6fa7bb9fff3942807ce0c8ba0978f7d2`。Hyper/Gothic各3構図、行内の組版・時計共有、旧キー保持。公開済み。見本の縦横・短長の登場/表示/退場24コマを採取。見た目の採否は姫/Claude待ち。
+- 実画素テスト: `ad6a747188fcb8345ed25d601a7d1cb33eac9fa7` でCI4/4成功（初回fixtureのoptional sections初期化漏れを修正）。境界空白、240BPMの明るさ変化、fast/通常の差を確認。数値/測定範囲は `docs/CODEX_SYNC_EXPERIMENT.md`。
+- 見本の高さを横長/縦長とも360px以内にし、縦長全体と操作を同時表示: `d548f59f2ef1c7b3f0b9c8c59e8a185129363038`。
+- 追加保護: 新しい行アートを固定した後にenter/hold/exit/treatを手指定した場合もmainDrawへ渡す。共有された全行本文は保持。既存の個別編集を埋め込み演出で無視しない。関連単体テストを追加。
+- B1独立ページ: `d7b5f8983f31e2d9d4ec881b8fe2b0af6e68c965`。通常VSへのimportなし、package.json変更なし、モデルは実験開始時のみ取得。
+- B1測定: `932f061e07a7da49e9dfc824f4d02348c42b92dc`。43,613,734 bytes取得、Node CPUのキャッシュロード584ms、3秒無音認識3644ms、実行後RSS571MiB。無音に日本語を生成し範囲外timestamp9件。棄却が必要。ブラウザ/実歌唱の精度・速度として流用しない。
+- Cloud ChromeはWebGPU adapterなし。WASMは配布物のbare importで停止し、依存同梱版へ修正。Worker/ページスクリプトに版を付けて古いcacheを避けて再試行する。最終の結果は続報に追記。
+- 未確認: 実フォント読み込み（stylesheetの要求と描画は確認、FontFaceSet列挙は空）、1080p/スマホの描画速度、MP4の色・画質・同期、実曲のalignment。目視を完成評価や認識精度の証拠と混同しない。
+- D-006 / Claude / 未着手: 代表2作品をD-005と比較し、構図・影・光・短長の読みやすさをレビュー。残る4作品A2は姫の見た目判断後。
+- M-001 / Claudeまたは姫 / 所在情報待ち: MusicSyncのURL/作業場所と素材/offset/API文書。既定branchの所有者内コード検索も該当なし。3-Sync READMEは音楽サイトで解析エンジンではない。他リポジトリ変更なし。
+- A-003 / Claude / 未着手: 無音での誤認識・音源範囲外timestampを候補棄却の条件へ入れる設計をレビュー。実曲/基準時刻がないので±100msは目標のまま。

@@ -84,7 +84,7 @@ function renderTypeArt(J: PackJ, env: LayoutEnv, theme: TypeArtTheme, variant: n
     const x = Math.max(c.w * 0.52, Math.min(W - c.w * 0.52, W / 2 + (c.x - W / 2) * compress));
     const body = { text: c.ch, font, size: c.size, x, y: c.y, color: '#FFFFFF', noWeight: true,
       alpha, sx: c.sx * (1 + pulse * (theme === 'Hyper' ? 0.04 : 0)), sy: c.sy * (1 + pulse * (theme === 'Hyper' ? 0.04 : 0)) };
-    bb = union(bb, P.artText ? env.draw(body) : J.mainDraw(env, body));
+    bb = union(bb, P.artText && !P.artManual ? env.draw(body) : J.mainDraw(env, body));
   }
   return bb;
 }

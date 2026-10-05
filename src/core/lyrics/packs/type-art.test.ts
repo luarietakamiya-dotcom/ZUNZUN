@@ -87,3 +87,19 @@ it('動き0は幾何を固定し、装飾0は影と光柱を消す。同時刻�
     expect(plain.items.length).toBe(2); expect(plain.marks.length).toBe(0);
   }
 });
+
+it('新しい行アートを固定した後も、登場/表示中/退場の手指定を描画経路へ渡す', () => {
+  const lyrics = defaultLyrics(); lyrics.motion.style = 'vs-hyper';
+  lyrics.motion.lines = { '0': { text: '歌え', lock: true, enter: 'cut' } };
+  const cut = { line: 0, lineText: '歌え', text: '歌え', start: 1, end: 3, layout: 'vsHyperHero', params: { artText: '歌え', artStart: 1, artEnd: 3 } };
+  directTypeArtPlan({ cuts: [cut] }, lyrics.motion);
+  expect(cut.params).toHaveProperty('artManual', true);
+  expect(cut.params.artText).toBe('歌え');
+  const old = J.mainDraw, drawn: string[] = [];
+  J.mainDraw = (env, item) => { expect((env as LayoutEnv).cut).toBe(cut); drawn.push(String(item.text)); return null; };
+  try {
+    const env = { W: 640, H: 360, t: 2, lt: 1, pass: 'main', fx: { motion: 1, decor: 0 }, cut, draw: () => { throw new Error('手編集はmainDrawへ'); } } as unknown as LayoutEnv;
+    (typeArtLayouts(J, 'Hyper')[0]!.def.render as (env: LayoutEnv) => unknown)(env);
+    expect(drawn).toEqual(['歌', 'え']);
+  } finally { J.mainDraw = old; }
+});

@@ -10,7 +10,10 @@ export function directTypeArtPlan<T extends { cuts: unknown[] }>(plan: T, motion
     const c = raw as Cut;
     if (c.line < 0 || !KEYS.has(c.layout)) continue;
     const override = motion.lines?.[String(c.line)];
-    if (override && override.text === c.lineText && Object.keys(override).some(k => k !== 'text')) continue;
+    if (override && override.text === c.lineText && Object.keys(override).some(k => k !== 'text')) {
+      if (c.params.artText && ['enter', 'hold', 'exit', 'treat'].some(k => k in override)) c.params = { ...c.params, artManual: true };
+      continue;
+    }
     const group = groups.get(c.line) ?? []; group.push(c); groups.set(c.line, group);
   }
   for (const cuts of groups.values()) {
