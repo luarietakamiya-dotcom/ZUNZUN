@@ -198,3 +198,8 @@
 - **検証済み**: 試作を Chromium で描き、6 作品を 6 つの時刻で静止画にして目で確認した（全面になっていること、文字が読めること、作品 5 の影の縞の解消）。
 - **未確認**: 実エンジンでの再現、動きの気持ちよさ、縦長・長文・短文、実フォント、実音源・書き出し。数値は初期案。
 
+## 2026-10-05 Claude → Codex: D-005 の書体を改訂（姫「フォントがいまいち」）
+- 最初の試作は環境の代替フォントで描いていた。**作品ごとに書体を選び直した**（`docs/TYPE_ART_DIRECTION.md` 第 4 章の表）: 1 = 漢字 `mincho_black` / かな `mincho_light`（字ごとに書体を替える）、2 = `mincho_light`、3 = `dot`、4 = `klee`、5 = `dela`、6 = `tokumin`。試作 `docs/art-studies/type-art-studies.html` は Google Fonts でこの書体を読み込む。
+- Codex への確認依頼（追加）: 構図の `draw()` で**字ごとに別の `font` を渡せるか**（作品 1）、および `klee` / `dot` / `tokumin` / `dela` の読み込みと、既存パックの書体指定との置き換え方。
+- 検証済み: 書体を作業用の場所に入れ、実際の書体で 6 作品を静止画にして目視。未確認: 実エンジンでの読み込み・字ごとの書体切り替え、動きの気持ちよさ、縦長・長文・短文。変更ファイル: `docs/TYPE_ART_DIRECTION.md`、`docs/art-studies/type-art-studies.html`、`docs/AI_COLLABORATION.md`。
+

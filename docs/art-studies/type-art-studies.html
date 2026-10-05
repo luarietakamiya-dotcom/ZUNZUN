@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>文字だけのアート スタディ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@900&family=Noto+Serif+JP:wght@300&family=DotGothic16&family=Klee+One:wght@600&family=Dela+Gothic+One&family=Kaisei+Tokumin:wght@800&display=swap">
 <style>
   :root { --bg:#0b0b10; --fg:#ece8df; --mute:#8d8a9a; --line:#25252f; }
   * { box-sizing:border-box; }
@@ -78,7 +80,7 @@ function s1(ctx, t) {
   const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#04060e'); g.addColorStop(1, '#0d2147');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   const text = [...'夜空に言葉を描く'], L = fit(text.length, 2), size = L.size, TOUT = 3.5;
-  ctx.font = `${size}px ${SANS}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  const FK = `900 ${size}px "Zen Old Mincho",serif`, FL = `300 ${size}px "Noto Serif JP",serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   // 行ごとの水面（上の行は上の水面、下の行は下の水面に立つ）
   const yw = r => (r + 1) * (H / 2) - H * 0.035;
   [0, 1].forEach(r => { const wl = ctx.createLinearGradient(0, 0, W, 0); wl.addColorStop(0, 'rgba(160,210,255,0)'); wl.addColorStop(.5, 'rgba(160,210,255,.6)'); wl.addColorStop(1, 'rgba(160,210,255,0)'); ctx.fillStyle = wl; ctx.fillRect(0, yw(r), W, 1.5); });
@@ -96,6 +98,7 @@ function s1(ctx, t) {
       ctx.strokeStyle = `rgba(170,215,255,${al})`; ctx.lineWidth = 1 + 2.4 * m * (1 - tau / 1.9);
       ctx.beginPath(); ctx.ellipse(x, yw(c.r), r, r * 0.16, 0, 0, 7); ctx.stroke();
     }
+    ctx.font = isKanji(ch) ? FK : FL;
     glyph(ctx, ch, x, y + sink, { color: '#eef2fa', a });
     const wob = Math.sin(t * 3 + i) * 3;
     glyph(ctx, ch, x + wob, 2 * yw(c.r) - (y + sink), { color: '#9cc4ff', a: a * 0.22, sy: -1 });
@@ -106,7 +109,7 @@ function s1(ctx, t) {
 function s2(ctx, t) {
   ctx.fillStyle = '#04060b'; ctx.fillRect(0, 0, W, H);
   const text = [...'光を追いかけて'], L = fit(text.length, 2), size = L.size, TOUT = 3.4;
-  ctx.font = `${size}px ${SERIF}`; ctx.textAlign = 'center';
+  ctx.font = `300 ${size}px "Noto Serif JP",serif`; ctx.textAlign = 'center';
   text.forEach((ch, i) => {
     const c = L.cells[i], t0 = 0.15 + i * 0.1, dur = 0.7, dir = (c.r ? -1 : 1) * (i % 2 ? 1 : -1);
     const pos = u => { const e = eExpo(u); return { x: c.x + dir * (1 - e) * W * 0.8, y: c.y + (1 - e) * (i % 2 ? -1 : 1) * H * 0.25, rot: (1 - e) * dir * .5 }; };
@@ -139,7 +142,7 @@ const S3 = (() => {
 function s3(ctx, t) {
   ctx.fillStyle = '#05090a'; ctx.fillRect(0, 0, W, H);
   const { text, n, steps, L } = S3, size = L.size * 0.96;
-  ctx.font = `${size}px ${SANS}`; ctx.textAlign = 'center';
+  ctx.font = `${size}px "DotGothic16",sans-serif`; ctx.textAlign = 'center';
   const T0 = 0.4, DT = 0.2, TEND = T0 + steps.length * DT;
   const s = clamp((t - T0) / DT, 0, steps.length - 1e-6), si = Math.floor(s), e = eIO(s - si), st = steps[si];
   const where = a => { const m = {}; a.forEach((g, sl) => { m[g] = sl; }); return m; };
@@ -161,7 +164,7 @@ function s4(ctx, t) {
   const text = [...'名前を呼んで'], L = fit(text.length, 2), size = L.size, fade = 1 - sstep(3.5, 4.1, t);
   ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(Math.sin(t * .35) * 0.03); ctx.scale(1.06, 1.06); ctx.translate(-W / 2, -H / 2);
   for (let i = 0; i < 220; i++) { const x = hash(i, 1) * W, yy = hash(i, 2) * H, tw = .35 + .65 * (.5 + .5 * Math.sin(t * (1 + hash(i, 4) * 2) + i)); ctx.fillStyle = `rgba(200,220,255,${0.7 * tw * (0.3 + hash(i, 5) * .7)})`; const r = 1 + hash(i, 6) * 1.6; ctx.fillRect(x, yy, r, r); }
-  ctx.font = `${size}px ${SERIF}`; ctx.textAlign = 'center';
+  ctx.font = `600 ${size}px "Klee One",serif`; ctx.textAlign = 'center';
   const n = text.length, T0 = 0.4, DT = 0.5;
   const pts = L.cells.map((c, i) => [c.x + Math.sin(i * 2.7) * size * .1, c.y - size * 0.34 + Math.cos(i * 1.9) * size * .25]);
   for (let i = 0; i < n - 1; i++) {
@@ -185,7 +188,7 @@ function s5(ctx, t) {
   const bg = ctx.createRadialGradient(W / 2, H * .5, 10, W / 2, H * .5, W * .65); bg.addColorStop(0, '#1a1022'); bg.addColorStop(1, '#050408');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   const text = [...'もう一度だけ'], L = fit(text.length, 2), size = L.size * 0.98, BEAT = 0.5;
-  ctx.font = `900 ${size}px ${SANS}`; ctx.textAlign = 'center';
+  ctx.font = `400 ${size}px "Dela Gothic One",sans-serif`; ctx.textAlign = 'center';
   const fade = 1 - sstep(3.6, 4.1, t), enter = eOut(t / 0.35), bi = Math.floor(t / BEAT), since = t - bi * BEAT;
   const A = [0.62, 1.57, 2.52], prev = A[(bi + 2) % 3], cur = A[bi % 3], angle = prev + (cur - prev) * eBack(since / 0.2, 1.4);
   const pulse = Math.exp(-since * 9), Ls = size * (0.7 + 0.15 * pulse) * enter, dx = Math.cos(angle), dy = Math.sin(angle), N = 110;
@@ -203,7 +206,7 @@ function s5(ctx, t) {
 function s6(ctx, t) {
   ctx.fillStyle = '#030303'; ctx.fillRect(0, 0, W, H);
   const text = [...'君がいた'], L = fit(text.length, 2), size = L.size * 0.98;
-  ctx.font = `${size}px ${SERIF}`; ctx.textAlign = 'center';
+  ctx.font = `800 ${size}px "Kaisei Tokumin",serif`; ctx.textAlign = 'center';
   const T0 = 0.4, TPASS = 2.4, lightX = -W * 0.1 + eIO((t - T0) / TPASS) * W * 1.2, fade = 1 - sstep(3.5, 4.2, t);
   const bw = W * 0.28, g = ctx.createLinearGradient(lightX - bw, 0, lightX + bw, 0);
   g.addColorStop(0, 'rgba(255,250,240,0)'); g.addColorStop(.5, `rgba(255,250,240,${0.2 * fade * sstep(0, .5, t)})`); g.addColorStop(1, 'rgba(255,250,240,0)');
@@ -217,24 +220,27 @@ function s6(ctx, t) {
 }
 
 const STUDIES = [
-  { n: '1　水に落ちる言葉', r: '法則: 字面の濃さが重さになる。漢字は速く落ちて大きな波紋、かなは揺れながら静かに。', f: s1 },
-  { n: '2　凍った軌跡', r: '法則: 動いた時間が空間に残る。通り過ぎた姿が薄い輪郭として凍りつく。', f: s2 },
-  { n: '3　言葉が整列する', r: '法則: 並べ替えの過程が演出。正しい位置に着いた字だけが灯る。', f: s3 },
-  { n: '4　星座が文字を結ぶ', r: '法則: 読む順に線が伸び、結ばれた字が星になる。', f: s4 },
-  { n: '5　回る光と長い影', r: '法則: 拍ごとに光源の向きが替わり、影が字に彫りを与える。字そのものは動かない。', f: s5 },
-  { n: '6　光が読む', r: '法則: 光が通った字だけが現れ、字間が詰まる。装飾は光ひとつだけ。', f: s6 },
+  { n: '1　水に落ちる言葉', ft: '漢字 = Zen Old Mincho Black（重い墨）／かな = Noto Serif JP Light（軽い）', r: '法則: 字面の濃さが重さになる。漢字は速く落ちて大きな波紋、かなは揺れながら静かに。', f: s1 },
+  { n: '2　凍った軌跡', ft: 'Noto Serif JP Light（細い明朝）', r: '法則: 動いた時間が空間に残る。通り過ぎた姿が薄い輪郭として凍りつく。', f: s2 },
+  { n: '3　言葉が整列する', ft: 'DotGothic16（ドット）', r: '法則: 並べ替えの過程が演出。正しい位置に着いた字だけが灯る。', f: s3 },
+  { n: '4　星座が文字を結ぶ', ft: 'Klee One（手書きの星図）', r: '法則: 読む順に線が伸び、結ばれた字が星になる。', f: s4 },
+  { n: '5　回る光と長い影', ft: 'Dela Gothic One（極太）', r: '法則: 拍ごとに光源の向きが替わり、影が字に彫りを与える。字そのものは動かない。', f: s5 },
+  { n: '6　光が読む', ft: 'Kaisei Tokumin（劇的な太細の明朝）', r: '法則: 光が通った字だけが現れ、字間が詰まる。装飾は光ひとつだけ。', f: s6 },
 ];
 const LOOP = 4.6, ctxs = [];
 const main = document.getElementById('m');
 STUDIES.forEach((s, i) => {
   const fig = document.createElement('figure');
-  fig.innerHTML = `<canvas width="${W}" height="${H}"></canvas><figcaption><b>${s.n}</b><em>${s.r}</em></figcaption>`;
+  fig.innerHTML = `<canvas width="${W}" height="${H}"></canvas><figcaption><b>${s.n}</b><em>${s.r}</em><em>書体: ${s.ft}</em></figcaption>`;
   main.appendChild(fig); ctxs.push(fig.querySelector('canvas').getContext('2d'));
 });
 window.renderAt = (i, t) => { const c = ctxs[i]; c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.textBaseline = 'alphabetic'; STUDIES[i].f(c, t); };
 let paused = false, t0 = performance.now(), off = 0;
 document.getElementById('pp').onclick = e => { paused = !paused; e.target.textContent = paused ? '再生' : '一時停止'; if (!paused) t0 = performance.now(); else off += (performance.now() - t0) / 1000; };
-(function loop() { if (!paused) { const t = (off + (performance.now() - t0) / 1000) % LOOP; ctxs.forEach((_, i) => window.renderAt(i, t)); } requestAnimationFrame(loop); })();
+const FONT_TEXT = '夜空に言葉を描く光を追いかけて終わらない夜の向こうへ名前を呼んでもう一度だけ君がいた';
+const FONT_SPECS = ['900 40px "Zen Old Mincho"','300 40px "Noto Serif JP"','40px "DotGothic16"','600 40px "Klee One"','40px "Dela Gothic One"','800 40px "Kaisei Tokumin"'];
+let fontsReady = false; Promise.all(FONT_SPECS.map(f => document.fonts.load(f, FONT_TEXT).catch(() => {}))).then(() => { fontsReady = true; });
+(function loop() { if (!paused && fontsReady) { const t = (off + (performance.now() - t0) / 1000) % LOOP; ctxs.forEach((_, i) => window.renderAt(i, t)); } requestAnimationFrame(loop); })();
 </script>
 </body>
 </html>
