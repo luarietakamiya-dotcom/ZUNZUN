@@ -1,0 +1,92 @@
+{
+  "kind": "node-baseline-only",
+  "model": "onnx-community/whisper-tiny",
+  "device": "cpu",
+  "dtype": "q8",
+  "startedAt": "2026-10-05T08:12:54.392Z",
+  "loadMs": 583.99405,
+  "output": {
+    "text": "お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、お気に入りしさせると、",
+    "chunks": [
+      {
+        "timestamp": [
+          0,
+          4
+        ],
+        "text": "お気に入りしさせると、お気に入りしさせると、"
+      },
+      {
+        "timestamp": [
+          4,
+          6
+        ],
+        "text": "お気に入りしさせると、"
+      },
+      {
+        "timestamp": [
+          6,
+          8
+        ],
+        "text": "お気に入りしさせると、"
+      },
+      {
+        "timestamp": [
+          8,
+          10
+        ],
+        "text": "お気に入りしさせると、"
+      },
+      {
+        "timestamp": [
+          10,
+          12
+        ],
+        "text": "お気に入りしさせると、"
+      },
+      {
+        "timestamp": [
+          12,
+          14
+        ],
+        "text": "お気に入りしさせると、"
+      },
+      {
+        "timestamp": [
+          14,
+          16
+        ],
+        "text": "お気に入りしさせると、"
+      },
+      {
+        "timestamp": [
+          16,
+          18
+        ],
+        "text": "お気に入りしさせると、"
+      },
+      {
+        "timestamp": [
+          18,
+          20
+        ],
+        "text": "お気に入りしさせると、"
+      }
+    ]
+  },
+  "inferenceMs": 3644.1082349999997,
+  "memory": {
+    "rss": 598986752,
+    "heapTotal": 119230464,
+    "heapUsed": 61615312,
+    "external": 68335702,
+    "arrayBuffers": 61844760
+  },
+  "input": {
+    "sampleRate": 16000,
+    "samples": 48000,
+    "duration": 3,
+    "source": "synthetic-all-zero-float32"
+  },
+  "libraryVersion": "4.3.0",
+  "interpretation": "Reject: nonempty recognition on silence and timestamps beyond 3s. Node CPU baseline, not browser/WASM/WebGPU or song alignment accuracy."
+}

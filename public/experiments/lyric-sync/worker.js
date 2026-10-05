@@ -4,7 +4,7 @@ self.onmessage = async ({ data }) => {
   try {
     if (data.type === 'prepare') {
       const start = performance.now();
-      const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.web.js');
+      const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.js');
       env.backends.onnx.wasm.numThreads = 1;
       const files = new Map();
       transcriber = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-tiny', {
