@@ -285,7 +285,7 @@ export function renderLyricMotionPanel(): HTMLElement {
           : '';
     if (motionStatus.textContent !== status) motionStatus.textContent = status;
     if (motion) {
-      motionCanvas.style.maxWidth = `${Math.min(640, Math.round(640 * motion.plan.W / motion.plan.H))}px`;
+      motionCanvas.style.maxWidth = `${Math.min(640, Math.round(360 * motion.plan.W / motion.plan.H))}px`;
       const h = Math.round((motionCanvas.width * motion.plan.H) / motion.plan.W);
       if (motionCanvas.height !== h) motionCanvas.height = h;
     }
