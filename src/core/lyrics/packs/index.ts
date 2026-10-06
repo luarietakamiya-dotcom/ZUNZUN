@@ -1,6 +1,7 @@
 import { CUSTOM_STYLE_KEY, type LyricsMotion } from '../../types';
 import { simplePack, terminalPack, constellationPack } from './fresh-packs';
 import { KINETIC_PACKS } from './kinetic-packs';
+import { GPT_PACKS } from './gpt';
 import { calmPack } from './calm';
 import { cinemaPack } from './cinema';
 import { designPack } from './design';
@@ -13,7 +14,7 @@ import type { MotionPack, PackContext, PackJ } from './types';
  * オリジナルの歌詞モーション (演出パック) の一覧と、JIZURA への登録・プロジェクトへの反映。
  * パックを足すときは、ここの PACKS に 1 行足す。
  */
-export const PACKS: readonly MotionPack[] = [calmPack, intensePack, rockPack, popPack, designPack, cinemaPack, simplePack, terminalPack, constellationPack, ...KINETIC_PACKS];
+export const PACKS: readonly MotionPack[] = [calmPack, intensePack, rockPack, popPack, designPack, cinemaPack, simplePack, terminalPack, constellationPack, ...KINETIC_PACKS, ...GPT_PACKS];
 
 /** パックの演出とスタイルを JIZURA に登録する (何度呼んでも 1 回だけ) */
 export function registerMotionPacks(J: PackJ & { __zunzunPacks?: boolean }): void {
