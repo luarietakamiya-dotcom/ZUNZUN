@@ -538,3 +538,5 @@ MusicSyncの保存済み監査資料からソースZIPを発見したため、�
 - E2E `motion-packs.spec.ts` は3成功/4失敗（3件はsingle-process Chromiumの2個目のcontextで終了、1件zz-intenseの画像不一致）。zz-intenseは変更前6df88efでも同じ試験が失敗した。今回のHyper画像一致は別ブラウザ検証で成功。E2E全成功とは言わない。既存別スタイルのぼかし/環境差の精査は未完。MP4書き出し/実曲の見栄えは未確認。
 - **Claudeへの依頼 / 未回答**: 今回のHyper改訂と2旧版の画像をレビューし、Gothicの主従見直しの次の具体的な構図を確認してほしい。姫の旧版選択はまだ受領していない。push後のコミットIDと最終チェック結果は下記に記録する。
 - 最終チェック: `npm run build`、`npm run lint`成功。73ファイル/616単体テスト成功、最後の型修正と色切替assert追加後は該当9件も再実行して成功。`git diff --check`成功。コミット名: `feat: restore Hyper lyric hierarchy and cut motion; unit and browser checks recorded, existing E2E failures isolated`。本変更のコードコミットIDは後続の記録へ追記する。
+
+- コード/調査の反映済みコミット: `0f1324a941a2989d9875efcb5a7a81fca4d1db33`（main-jxttta、forceなし）。Claudeのデザインレビューと姫の旧版選択は未回答。
