@@ -24,6 +24,8 @@
 | Claude | A-001: 自動歌詞同期の設計レビュー | docs/AI_COLLABORATION.md（追記のみ）。docs/AUTO_LYRIC_SYNC.md は Codex の文書なので触らない | レビュー完了 (2026-10-05)。コード・依存の変更なし | |
 | Codex | **トラック A**: D-005 文字のアート（代表 2 作品 Hyper・Gothic から） | `src/core/lyrics/packs/`、`src/core/lyrics/jizura-adapter.ts`、`src/ui/panels/lyric-motion.ts`、歌詞テスト/CI | A1公開・24コマ比較作成。A2は姫の見た目判断待ち (2026-10-05) |
 | Codex | **トラック B**: A-002 自動歌詞同期 + M-001 MusicSync 情報の収集 | `public/experiments/lyric-sync/`、`docs/AUTO_LYRIC_SYNC.md`、`docs/CODEX_SYNC_EXPERIMENT.md` | B0ソース読解・B1 WASM無音測定完了。実素材/実歌唱精度未確認、B2未実装 (2026-10-05) |
+| Claude | **競作 C**: リリックモーションの Claude 版（スタイル名・キーの語尾 `.c`）。姫の指示（2026-10-06）で、**Claude がコードを書く** | 新規 `src/core/lyrics/packs/claude/`（パック・テスト）、`src/core/lyrics/packs/index.ts` に **1 行だけ**（`...CLAUDE_PACKS`）。既存パック・Codex の `.g` 版・JIZURA 本体は触らない | 着手 (2026-10-06) |
+| Codex | **競作 G**: リリックモーションの GPT 版（語尾 `.g`）。Codex が着手時に対象ファイルを記入（推奨: `src/core/lyrics/packs/gpt/`、`packs/index.ts` に 1 行） | 着手時に Codex が記入 | 姫の指示 (2026-10-06)・未着手 |
 | Claude | D-005 / トラック A・B の設計レビュー（各フェーズ完了時）と試作の修正 | `docs/art-studies/`、本ファイルへの追記 | 待機（Codex の報告待ち） |
 
 ## 2026-10-05 Codex → Claude
@@ -540,3 +542,11 @@ MusicSyncの保存済み監査資料からソースZIPを発見したため、�
 - 最終チェック: `npm run build`、`npm run lint`成功。73ファイル/616単体テスト成功、最後の型修正と色切替assert追加後は該当9件も再実行して成功。`git diff --check`成功。コミット名: `feat: restore Hyper lyric hierarchy and cut motion; unit and browser checks recorded, existing E2E failures isolated`。本変更のコードコミットIDは後続の記録へ追記する。
 
 - コード/調査の反映済みコミット: `0f1324a941a2989d9875efcb5a7a81fca4d1db33`（main-jxttta、forceなし）。Claudeのデザインレビューと姫の旧版選択は未回答。
+
+## 2026-10-06 競作の取り決め（姫: 「リリックモーションは二人に作ってもらい、いい方を採用する。Claude 版は語尾に `.c`、GPT 版は語尾に `.g`」）
+- **Claude 版 `.c`・GPT 版 `.g` を、それぞれ作る。姫が見て、いい方を採用する。** Claude は今回に限りコードを書く（姫の指示。役割分担の例外）。
+- 名前の付け方: スタイル名（画面に出る名前）と、スタイルのキー・パック id の語尾に `.c`（Claude）／`.g`（GPT）。例: `ハイパー・ビート.c (VisualSync)`、`vs-hyper.c`。演出のキーは衝突しない接頭辞（Claude 版は `vsc…`、GPT 版は `vsg…` を推奨）。
+- 衝突を避ける: Claude 版は `src/core/lyrics/packs/claude/` だけ。GPT 版は `packs/gpt/` を推奨。**共有するのは `packs/index.ts` の 1 行ずつのみ**（push 前に必ず `git pull`）。既存のパック（Simple / Terminal / Constellation / Kinetic 系）と JIZURA 本体は変更しない。Hyper の現行（Codex が戻した版）は、そのまま残す。
+- 設計の土台: `docs/LYRIC_MOTION_RESEARCH.md`（主従・巨大な薄い字・小さな文字の土台・見立て・密度の緩急・肌・語単位の動詞）。**どちらの版も「文字を大きくして埋める」を避ける。**
+- 公平のため: どちらの版も、同じ見本（`src/ui/panels/lyric-motion.ts` の見本）と、同じ条件（横長・縦長、短文・長文、動き 0・装飾 0）で姫が見比べられるようにする。検証済み・未確認を正直に書く。
+
