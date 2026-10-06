@@ -127,3 +127,40 @@ it('入力・削除が文字数に従い、フェードが先頭と末尾で正�
   expect(apply('vsConsoleErase', 1).charFns[0]!(0, { i: 0 }, 5)).toMatchObject({ hide: true });
   expect(apply('vsCleanOutTerminal', 1).alpha).toBe(0);
 });
+
+it('Hyperは大小対比・反復・斜め構図を分け、装飾0でも本文を残す', () => {
+  const layouts = artDirectedLayouts(J, 'Hyper'), old = J.mainDraw;
+  const scenes: Record<string, unknown>[][] = [];
+  try {
+    for (const layout of layouts) {
+      const items: Record<string, unknown>[] = [];
+      J.mainDraw = (_env, item) => { items.push(item); return null; };
+      const env = { W: 1920, H: 1080, lt: 1, pIn: 1, pOut: 0, pass: 'main', fx: { motion: 0, decor: 0 },
+        sc: { fg: '#FFFFFF', accent: '#FF48C4', accent2: '#70F4FF' },
+        cut: { start: 0, dur: 4, text: '夜を越え歌え', words: ['夜を', '越え', '歌え'], params: { side: 1 } },
+        draw: () => { throw new Error('装飾0で輪郭を描かない'); }, line: () => { throw new Error('装飾0で線を描かない'); } } as unknown as LayoutEnv;
+      (layout.def.render as (env: LayoutEnv) => unknown)(env);
+      expect(items.length).toBeGreaterThan(0); scenes.push(items);
+    }
+    expect(Number(scenes[0]![1]!.size)).toBeGreaterThan(Number(scenes[0]![0]!.size) * 1.5);
+    expect(scenes[1]!).toHaveLength(1);
+    expect(scenes[2]!.map(i => i.x)).not.toEqual(scenes[0]!.map(i => i.x));
+  } finally { J.mainDraw = old; }
+});
+
+it('Hyperの色の切替は速い拍でも毎秒3回以内で、動き0では色を変えない', () => {
+  const pack = KINETIC_PACKS.find(p => p.styleKey === 'vs-hyper')!;
+  const apply = pack.effects(J).find(e => e.key === 'vsHyperBeat')!.def.apply as (env: PackEnv, it: PackItem, p: number) => void;
+  const colors: unknown[] = [];
+  for (let index = 0; index < 10; index++) {
+    const item: PackItem = { size: 100, charFns: [] };
+    const env = { lt: index * 0.1, beat: { index, since: 0, len: 0.1 }, fx: { motion: 1 }, sc: { fg: '#fff', accent: '#f0f', accent2: '#0ff' } } as PackEnv;
+    apply(env, item, 1); colors.push(item.charFns[0]!(0, { i: 0 }, 1)?.color);
+  }
+  expect(new Set(colors).size).toBe(3);
+  expect(new Set(colors.slice(0, 4)).size).toBe(1);
+  expect(colors.filter((c, i) => i === 0 || c !== colors[i - 1]).length).toBeLessThanOrEqual(3);
+  const still: PackItem = { size: 100, charFns: [] };
+  apply({ lt: 0, fx: { motion: 0 }, sc: { fg: '#fff', accent: '#f0f' } } as PackEnv, still, 1);
+  expect(still.charFns[0]!(0, { i: 0 }, 1)?.color).toBeUndefined();
+});

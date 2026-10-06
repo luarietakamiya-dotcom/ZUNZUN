@@ -2,6 +2,7 @@ import type { PackBox, PackEffect, PackJ } from './types';
 import { clean, piecesOf, union, type LayoutEnv, type Rng } from './design-kit';
 import { beatOf, easeInOut, easeOut, staggered } from './util';
 import { typeArtLayouts } from './layouts/type-art';
+import { hyperBeatLayouts } from './layouts/hyper-beat';
 
 type Theme = 'Hyper' | 'Summer' | 'Winter' | 'Gothic' | 'Terminal' | 'Constellation';
 const cap = (p: number) => Math.max(0, Math.min(1, p));
@@ -11,7 +12,8 @@ const ornament = (env: LayoutEnv) => reveal(env) * cap(env.fx.decor ?? 0.5);
 
 /** JIZURAの反復・大小対比・縦横組版を参考に、テーマごとに構図と時間の流れを設計。 */
 export function artDirectedLayouts(J: PackJ, theme: Theme): PackEffect[] {
-  if (theme === 'Hyper' || theme === 'Gothic') return typeArtLayouts(J, theme);
+  if (theme === 'Hyper') return hyperBeatLayouts(J);
+  if (theme === 'Gothic') return typeArtLayouts(J, theme);
   const names: Record<Theme, string[]> = {
     Hyper: ['衝撃ポスター・大小の切り返し', '反復タイポ・傾いた残像', '分解グリッド・文字の連打'],
     Summer: ['波のリボン・文字のうねり', '潮の流れ・斜めに走る言葉', 'しぶきの円弧・海風の余白'],
@@ -160,7 +162,8 @@ function renderScene(J: PackJ, env: LayoutEnv, theme: Theme, variant: number): P
 export function directedCamera(theme: Theme): PackEffect {
   return { group: 'cam', key: `vsCamera${theme}`, def: { name: `${theme === 'Hyper' ? '強く寄って止まる' : 'ゆっくり寄る'}・構図のカメラ`,
     get(env: LayoutEnv) {
-      if (theme === 'Hyper' || theme === 'Gothic') return { s: 1, x: 0, y: 0, rot: 0 };
+      if (theme === 'Gothic') return { s: 1, x: 0, y: 0, rot: 0 };
+      if (theme === 'Hyper') { const b = beatOf(env); const hit = Math.exp(-b.since * 12); return { s: 1 + hit * 0.035 * motion(env), x: (b.index % 2 ? 1 : -1) * env.W * hit * 0.004 * motion(env), y: 0, rot: 0 }; }
       const k = motion(env), progress = cap(env.lt / Math.max(0.01, env.cut.dur));
       return { s: 1 + easeInOut(progress) * 0.025 * k, x: 0, y: 0, rot: 0 };
     },

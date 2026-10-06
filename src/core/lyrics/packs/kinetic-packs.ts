@@ -1,6 +1,6 @@
 import type { MotionPack, PackEffect, PackEnv, PackItem, PackJ } from './types';
 import { clean, type LayoutEnv, type Rng } from './design-kit';
-import { beatOf, easeInOut, easeOut, easeOutBack, staggered } from './util';
+import { beatOf, easeInOut, easeOut, easeOutBack, flashAllowed, MAX_FLASH_HZ, staggered } from './util';
 import { artDirectedLayouts, directedCamera, directedEnter } from './art-directed-layouts';
 
 const clamp = (p: number) => Math.min(1, Math.max(0, p));
@@ -91,7 +91,7 @@ export const bigTypePack = themed('BigType', '大きくシンプル', '大きな
   glideOut('vsBigAway', '大きな文字・横に抜ける'),
 ]);
 
-export const hyperPack = themed('Hyper', 'ハイパー・ビート', '大きな文字は固定し、拍ごとに光の角度と紫・ピンクの長い影が切り替わる', ['#FFFFFF', '#FF48C4', '#70F4FF'], 'dela', J => [
+export const hyperPack = themed('Hyper', 'ハイパー・ビート', '大小の対比・輪郭の反復・斜めの構図を、拍に合わせて切り返す', ['#FFFFFF', '#FF48C4', '#70F4FF'], 'dela', J => [
   ...artDirectedLayouts(J, 'Hyper').map((e, i) => ({ ...e, key: ['vsHyperHero', 'vsHyperOffset', e.key][i]! })),
   directedCamera('Hyper'), directedEnter('Hyper'),
   effect('enter', 'vsHyperPunch', 'ハイパー・叩き込むズーム', (env, it, p) => {
@@ -102,9 +102,10 @@ export const hyperPack = themed('Hyper', 'ハイパー・ビート', '大きな�
     it.charFns.push((i, _g, n) => { const q = easeOut(staggered(clamp(p), i, n, 0.45)), k = strength(env); return { dy: (i % 2 ? -1 : 1) * (1 - q) * it.size * 1.5 * k, rot: (1 - q) * (i % 2 ? 18 : -18) * k, a: q }; });
   }, 0.32),
   effect('hold', 'vsHyperBeat', 'ハイパー・拍で拡大と切り返し', (env, it, amt) => {
-    const b = beatOf(env), pulse = Math.exp(-b.since / Math.max(0.06, b.len * 0.2)), k = amt * strength(env);
+    const b = beatOf(env), pulse = flashAllowed(b.index, b.len) ? Math.exp(-b.since / Math.max(0.06, b.len * 0.2)) : 0, k = amt * strength(env);
+    const phase = Math.floor(b.index / Math.max(1, Math.ceil(1 / (MAX_FLASH_HZ * b.len) - 1e-9)));
     it.charFns.push(i => ({ s: 1 + pulse * 0.15 * k, rot: (b.index % 2 ? 1 : -1) * pulse * 4 * k, dy: -pulse * it.size * 0.06 * k,
-      color: k > 0 ? ((i + b.index) % 3 === 0 ? env.sc.accent : (i + b.index) % 3 === 1 ? env.sc.accent2 ?? env.sc.fg : env.sc.fg) : undefined }));
+      color: k > 0 ? ((i + phase) % 3 === 0 ? env.sc.accent : (i + phase) % 3 === 1 ? env.sc.accent2 ?? env.sc.fg : env.sc.fg) : undefined }));
   }),
   effect('exit', 'vsHyperBurst', 'ハイパー・外へ弾き飛ばす', (env, it, p) => { const q = clamp(p), k = strength(env); it.charFns.push((i, _g, n) => ({ dx: (i - (n - 1) / 2) * it.size * 0.3 * q * k, dy: (i % 2 ? 1 : -1) * it.size * q * k, rot: (i % 2 ? 1 : -1) * q * 22 * k, s: 1 + q * 0.2 * k, a: 1 - q })); }),
 ]);

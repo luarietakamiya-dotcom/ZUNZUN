@@ -4,7 +4,15 @@ type Cut = { line: number; text: string; lineText?: string; start: number; end: 
 const KEYS = new Set(['vsHyperHero', 'vsHyperOffset', 'vsArtHyper2', 'vsGothicCross', 'vsArtGothic1', 'vsArtGothic2']);
 /** 行内で構図と時計を共有する。手指定・ロック済みの行は変更しない。 */
 export function directTypeArtPlan<T extends { cuts: unknown[] }>(plan: T, motion: LyricsMotion): T {
-  if (!['vs-hyper', 'vs-gothic'].includes(motion.style)) return plan;
+  if (motion.style === 'vs-hyper') {
+    // 新規Hyperはカットの構図/動きを共有しない。保存済みの固定アートだけ手指定を保つ。
+    for (const raw of plan.cuts) {
+      const c = raw as Cut, override = motion.lines?.[String(c.line)];
+      if (c.params.artText && override && override.text === c.lineText && ['enter', 'hold', 'exit', 'treat'].some(k => k in override)) c.params = { ...c.params, artManual: true };
+    }
+    return plan;
+  }
+  if (motion.style !== 'vs-gothic') return plan;
   const groups = new Map<number, Cut[]>();
   for (const raw of plan.cuts) {
     const c = raw as Cut;

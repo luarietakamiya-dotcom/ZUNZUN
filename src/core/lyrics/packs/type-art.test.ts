@@ -14,7 +14,7 @@ beforeAll(async () => {
   installTimingPatch(J); registerMotionPacks(J);
 });
 it('実エンジンの分割を保ち、同じ行の組版・時計・文字の出現時刻を共有する', () => {
-  for (const style of ['vs-hyper', 'vs-gothic']) {
+  for (const style of ['vs-gothic']) {
     const lyrics = defaultLyrics(); lyrics.motion.style = style;
     lyrics.text = '光を追いかけて\n夜空に描いた言葉を君の明日まで届けたい';
     lyrics.timing.lineTimes = { '0': 0.4, '1': 4.4 }; lyrics.timing.lineEnds = { '0': 4.3, '1': 8.3 };
@@ -37,8 +37,8 @@ it('実エンジンの分割を保ち、同じ行の組版・時計・文字の�
   }
 });
 it('手編集・固定した行と他のスタイルを変更しない。本文変更後の古い指定は除外する', () => {
-  const lyrics = defaultLyrics(); lyrics.motion.style = 'vs-hyper';
-  const original = { line: 0, lineText: '歌え', text: '歌え', start: 1, end: 3, layout: 'vsHyperHero', params: {} };
+  const lyrics = defaultLyrics(); lyrics.motion.style = 'vs-gothic';
+  const original = { line: 0, lineText: '歌え', text: '歌え', start: 1, end: 3, layout: 'vsGothicCross', params: {} };
   for (const override of [{ text: '歌え', lock: true }, { text: '歌え', enter: 'cut' }]) {
     lyrics.motion.lines = { '0': override }; const plan = { cuts: [structuredClone(original)] };
     directTypeArtPlan(plan, lyrics.motion); expect(plan.cuts[0]).toEqual(original);
@@ -102,4 +102,12 @@ it('新しい行アートを固定した後も、登場/表示中/退場の手�
     (typeArtLayouts(J, 'Hyper')[0]!.def.render as (env: LayoutEnv) => unknown)(env);
     expect(drawn).toEqual(['歌', 'え']);
   } finally { J.mainDraw = old; }
+});
+
+ it('Hyperはカットの切替と部分本文を維持し、行全体の巨大格子に戻さない', () => {
+  const lyrics = defaultLyrics(); lyrics.motion.style = 'vs-hyper';
+  const cuts = [{ line: 0, text: '光を', lineText: '光を追う', start: 1, end: 2, layout: 'vsHyperHero', params: {}, trans: 'wipe', morph: { enabled: true } },
+    { line: 0, text: '追う', lineText: '光を追う', start: 2, end: 3, layout: 'vsHyperOffset', params: {}, trans: 'slide', morph: null }];
+  const before = structuredClone(cuts);
+  expect(directTypeArtPlan({ cuts }, lyrics.motion).cuts).toEqual(before);
 });
