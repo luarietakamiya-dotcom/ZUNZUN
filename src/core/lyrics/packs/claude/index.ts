@@ -1,6 +1,10 @@
 import type { MotionPack } from '../types';
 import { hyperClaudePack } from './hyper';
+import { summerClaudePack } from './summer';
+import { winterClaudePack } from './winter';
 import { gothicClaudePack } from './gothic';
+import { terminalClaudePack } from './terminal';
+import { constellationClaudePack } from './constellation';
 
 /** Claude 版リリックモーション（語尾 `.c`）の一覧。競作: docs/AI_COLLABORATION.md「競作の取り決め」 */
-export const CLAUDE_PACKS: readonly MotionPack[] = [hyperClaudePack, gothicClaudePack];
+export const CLAUDE_PACKS: readonly MotionPack[] = [hyperClaudePack, summerClaudePack, winterClaudePack, gothicClaudePack, terminalClaudePack, constellationClaudePack];

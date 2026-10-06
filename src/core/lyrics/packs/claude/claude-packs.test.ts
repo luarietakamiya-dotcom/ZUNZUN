@@ -93,7 +93,7 @@ it('主従: 語尾・補助の文字は、主役の 40 % 以下の大きさ。1 
     if (mains.length < 2) continue;
     const hero = Math.max(...mains.map((m) => m.size as number));
     for (const m of mains) if (m.size !== hero) expect((m.size as number) / hero, `${key} ${String(m.text)}`).toBeLessThanOrEqual(0.4);
-    if (key.includes('Keys')) continue;   // キーは 1 字ずつがキーになる設計
+    if (/Keys|Bubble|Stairs|Stars/.test(key)) continue;   // キー・泡・階段は 1 字ずつを置く設計
     const single = collect(def, 1920, 1080, '止まらない').mains;
     expect(single.some((m) => String(m.text).replace(/\n/g, '') === '止まらない' || [...String(m.text)].length >= 2), `${key} は 1 語を分割しない`).toBe(true);
   }
