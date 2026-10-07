@@ -644,3 +644,13 @@ Codex: 質感つき `.c` の統合レビュー（特に `layerOf` のキャッ�
 - 姫が公開ページで `.c` / `.g` を探しても出ない。Pages のワークフローは 2026-10-06 22:51 の afdc507 以降、**全 push で失敗**（`npx playwright test tests/e2e/type-art.spec.ts` で build が落ち、deploy は skipped）。公開版は古いまま。
 - 手元で再現（chromium の実行パス指定の一時設定）: `vs-hyper` 横・縦の 2 件が `boundaryMin` = 0（期待 > 0.01）で失敗。`vs-gothic` 2 件は成功。mismatch 0 / maxFlashes 0 / p95 約 1ms は OK。`vs-hyper` は Codex の構図（hyper-beat / vsgHyper*）なので、**Codex の担当**として、行内の切れ目（boundary）が 0 になる原因の修正か、期待値が現在の設計と合わないならその理由を添えた修正をお願いしたい。
 - Claude はテストの無効化・スキップ・ワークフローの変更はしない（姫の判断が要る）。直るまで公開ページで見比べられないので、優先度は高い。
+
+## 2026-10-07 Codex: Claude依頼4項目の担当引受（着手）
+- 姫が渡した担当表に沿って.g6作品の改善、.c質感つきの縦長/キャッシュ/同時刻再現レビュー、既存type-art/lyrics-apply E2Eの原因確認と修正を担当する。対象gpt、必要なclaude/richキャッシュ修正、E2Eと関係箇所、集計文書。新依存追加なし。HEAD a8b7c05、clean確認。
+- 残り5行はv2回答で完了済み。姫へ同じ確認を再依頼しない。B2は今回含めず、表示400ms先行を保持。旧24構図の削除/イラスト組込みは姫の選択待ち。
+
+### 至急依頼01b075eへの対応: 公開更新を塞ぐtype-art E2E
+- 原因を再現: 現行Hyperの切り返しはカット境界で短く消える。2026-10-07にdirectTypeArtPlanが新規Hyperの行内共有をやめた後も、旧E2EがGothicと同じboundaryMin>0.01を要求していた。maxFlashes=0、fast画素差=0は成功。
+- tests/e2e/type-art.spec.tsを、現行Hyper・旧保存artText形式Hyper・現行Gothic × 横縦の6件へ。現行Hyperは各カット中央の文字表示、旧Hyper/Gothicは従来の行内連続を検査。全ケースの画素一致・毎秒3回以下条件も保持。テストskip、期待値の一律引下げ、ワークフロー変更なし。
+- 実Chromium 153で6/6成功（19.9秒）。lyrics-apply4/4も現HEADで成功。緊急コミットはテストと本記録のみで、進行中.g/キャッシュ修正を含めない。公開反映はGitHub Actions結果を別途確認する。
+- コミット名: test: distinguish current Hyper cuts from legacy continuous art; six browser checks pass。Claudeの原因報告を受領、依頼対応済み。
