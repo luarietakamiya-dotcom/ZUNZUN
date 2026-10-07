@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>派手さの質感 サムネイル案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Noto+Serif+JP:wght@300;700&family=Noto+Sans+JP:wght@900&family=Kaisei+Tokumin:wght@800&family=DotGothic16&family=M+PLUS+Rounded+1c:wght@800&family=Zen+Old+Mincho:wght@900&display=swap">
+<style>
+  :root { --bg:#0b0b10; --fg:#ece8df; --mute:#8d8a9a; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.7 "Hiragino Sans","Yu Gothic","Noto Sans JP",sans-serif; }
+  header { padding:24px 20px 4px; max-width:1500px; margin:0 auto; }
+  h1 { font-size:19px; margin:0 0 4px; letter-spacing:.06em; }
+  header p { margin:0; color:var(--mute); max-width:78ch; }
+  main { display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:16px; padding:16px 20px 40px; max-width:1500px; margin:0 auto; }
+  figure { margin:0; } canvas { display:block; width:100%; height:auto; border:1px solid #23232c; border-radius:4px; }
+  figcaption { padding:6px 2px; font-size:13px; color:var(--mute); } figcaption b { color:var(--fg); }
+</style>
+</head>
+<body>
+<header><h1>派手さの質感 — サムネイル案（実装前の試作）</h1><p>文字を大きくして埋めるのではなく、飛沫・筆跡・粒子・光線・多層の背景で厚みを出す。すべて決まった式（乱数なし）で描いた画で、実装でもそのまま使える。</p></header>
+<main id="m"></main>
+<script>
+'use strict';
+const W = 960, H = 360;
+const TXT = '夜を越えて', CAP = "WE WON'T STOP";
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+/** 決まった乱数（seed から） */
+function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+/* ───── 質感の道具 ───── */
+let NOISE = null;
+function noiseTile() { if (NOISE) return NOISE; const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'), d = g.createImageData(256, 256), r = rng(7); for (let i = 0; i < d.data.length; i += 4) { const v = 90 + r() * 165; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; } g.putImageData(d, 0, 0); NOISE = c; return c; }
+/** 粒子（フィルムの粒・紙の質感）。overlay で重ねる */
+function grain(g, a, mode = 'overlay') { g.save(); g.globalCompositeOperation = mode; g.globalAlpha = a; g.fillStyle = g.createPattern(noiseTile(), 'repeat'); g.fillRect(0, 0, W, H); g.restore(); }
+/** インクの飛沫: 中心の塊 + 向きに沿って飛ぶ粒と細い筋 */
+function splatter(g, x, y, r, color, seed, ang = 0, spread = 0.9, n = 90, a = 1) {
+  const R = rng(seed); g.save(); g.fillStyle = color; g.strokeStyle = color; g.globalAlpha = a;
+  g.beginPath(); for (let i = 0; i <= 28; i++) { const t = (i / 28) * Math.PI * 2, rr = r * (0.7 + R() * 0.55); g.lineTo(x + Math.cos(t) * rr, y + Math.sin(t) * rr * 0.7); } g.fill();
+  for (let i = 0; i < n; i++) {
+    const t = ang + (R() - 0.5) * spread * 2, d = r * (0.8 + Math.pow(R(), 1.6) * 7), s = r * (0.03 + R() * 0.16) * (1 - d / (r * 9));
+    const px = x + Math.cos(t) * d, py = y + Math.sin(t) * d * 0.8;
+    if (R() < 0.35) { g.lineWidth = Math.max(0.6, s * 0.7); g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(t) * s * 7, py + Math.sin(t) * s * 7 * 0.8); g.stroke(); }
+    else { g.beginPath(); g.arc(px, py, Math.max(0.6, s), 0, 7); g.fill(); }
+  }
+  g.restore();
+}
+/** かすれた筆跡（太い帯 + 乾いた線の欠け） */
+function brush(g, x0, y0, x1, y1, w, color, seed, a = 1) {
+  const R = rng(seed), L = Math.hypot(x1 - x0, y1 - y0), ux = (x1 - x0) / L, uy = (y1 - y0) / L, nx = -uy, ny = ux; g.save(); g.fillStyle = color; g.globalAlpha = a;
+  const N = 60; g.beginPath();
+  for (let i = 0; i <= N; i++) { const t = i / N, j = (R() - 0.5) * w * 0.14; g.lineTo(x0 + ux * L * t + nx * (w / 2 + j), y0 + uy * L * t + ny * (w / 2 + j)); }
+  for (let i = N; i >= 0; i--) { const t = i / N, j = (R() - 0.5) * w * 0.14; g.lineTo(x0 + ux * L * t - nx * (w / 2 + j), y0 + uy * L * t - ny * (w / 2 + j)); }
+  g.fill();
+  g.globalCompositeOperation = 'destination-out'; g.globalAlpha = 0.5;
+  for (let k = 0; k < 26; k++) { const o = (R() - 0.5) * w, s = R() * 0.6, e = s + R() * 0.4; g.lineWidth = 0.8 + R() * 1.6; g.beginPath(); g.moveTo(x0 + ux * L * s + nx * o, y0 + uy * L * s + ny * o); g.lineTo(x0 + ux * L * e + nx * o, y0 + uy * L * e + ny * o); g.stroke(); }
+  g.restore();
+}
+/** 放射状の速度線（漫画の集中線） */
+function focus(g, cx, cy, color, n, inner, outer, a, seed, gap = 0.3) {
+  const R = rng(seed); g.save(); g.fillStyle = color; g.globalAlpha = a;
+  for (let i = 0; i < n; i++) { const t = (i / n) * Math.PI * 2 + (R() - 0.5) * 0.05, w = (0.012 + R() * 0.03), r0 = inner * (0.9 + R() * 0.3), r1 = outer * (0.7 + R() * 0.5); g.beginPath(); g.moveTo(cx + Math.cos(t - w) * r1, cy + Math.sin(t - w) * r1); g.lineTo(cx + Math.cos(t) * r0, cy + Math.sin(t) * r0); g.lineTo(cx + Math.cos(t + w) * r1, cy + Math.sin(t + w) * r1); g.fill(); }
+  g.restore();
+}
+/** ハーフトーンの点 */
+function halftone(g, x, y, w, h, sp, color, a, fn, ang = 0.5) {
+  g.save(); g.fillStyle = color; g.globalAlpha = a; g.beginPath(); g.rect(x, y, w, h); g.clip();
+  const c = Math.cos(ang), s = Math.sin(ang);
+  for (let i = -40; i < w / sp + 40; i++) for (let j = -40; j < h / sp + 40; j++) { const px = x + i * sp * c - j * sp * s, py = y + i * sp * s + j * sp * c, k = fn(clamp((px - x) / w), clamp((py - y) / h)); if (k > 0.05) { g.beginPath(); g.arc(px, py, sp * 0.5 * k, 0, 7); g.fill(); } }
+  g.restore();
+}
+/** 縁をがたがたにした多角形（破れ・かすれ） */
+function rough(g, pts, color, amp, seed, a = 1) {
+  const R = rng(seed); g.save(); g.fillStyle = color; g.globalAlpha = a; g.beginPath();
+  pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length], n = Math.max(3, Math.floor(Math.hypot(q[0] - p[0], q[1] - p[1]) / 7)); for (let k = 0; k < n; k++) { const t = k / n; g.lineTo(p[0] + (q[0] - p[0]) * t + (R() - 0.5) * amp, p[1] + (q[1] - p[1]) * t + (R() - 0.5) * amp); } });
+  g.closePath(); g.fill(); g.restore();
+}
+/** やわらかい光の玉（ボケ・光の粒）。足し合わせる */
+function bokeh(g, n, seed, colors, rmin, rmax, a, area = [0, 0, W, H]) {
+  const R = rng(seed); g.save(); g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < n; i++) { const x = area[0] + R() * area[2], y = area[1] + R() * area[3], r = rmin + R() * (rmax - rmin), c = colors[Math.floor(R() * colors.length)], gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, c); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.globalAlpha = a * (0.3 + R() * 0.7); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
+  g.restore();
+}
+function glow(g, x, y, r, color, a) { g.save(); g.globalCompositeOperation = 'lighter'; const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, color); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.globalAlpha = a; g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); g.restore(); }
+/** 天からの光の筋 */
+function rays(g, x, y, color, n, len, a, seed, spread = 0.9, base = Math.PI / 2) {
+  const R = rng(seed); g.save(); g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < n; i++) { const t = base + (R() - 0.5) * spread, w = 0.01 + R() * 0.035, gr = g.createLinearGradient(x, y, x + Math.cos(t) * len, y + Math.sin(t) * len); gr.addColorStop(0, color); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.globalAlpha = a * (0.4 + R() * 0.6); g.fillStyle = gr; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(t - w) * len, y + Math.sin(t - w) * len); g.lineTo(x + Math.cos(t + w) * len, y + Math.sin(t + w) * len); g.fill(); }
+  g.restore();
+}
+/** 文字: 傾き・字間・硬い影・縁・光・RGB ずれ */
+function text(g, str, x, y, size, font, color, o = {}) {
+  const chars = [...str]; g.save(); g.translate(x, y); if (o.rot) g.rotate(o.rot); if (o.skew) g.transform(1, 0, o.skew, 1, 0, 0);
+  g.font = font.replace('SIZE', size); g.textBaseline = 'middle'; g.textAlign = 'left';
+  const adv = chars.map(c => g.measureText(c).width + size * (o.track || 0)); const total = adv.reduce((a, b) => a + b, 0) - size * (o.track || 0);
+  const x0 = o.align === 'left' ? 0 : o.align === 'right' ? -total : -total / 2;
+  const draw = (dx, dy, col, mode, a = 1, stroke = 0) => { g.save(); g.globalCompositeOperation = mode || 'source-over'; g.globalAlpha = a * (o.alpha ?? 1); let px = x0 + dx; chars.forEach((c, i) => { if (stroke) { g.lineWidth = stroke; g.strokeStyle = col; g.lineJoin = 'round'; g.strokeText(c, px, dy); } else { g.fillStyle = col; g.fillText(c, px, dy); } px += adv[i]; }); g.restore(); };
+  if (o.shadow) for (let k = o.shadow.n; k >= 1; k--) draw(o.shadow.dx * k / o.shadow.n, o.shadow.dy * k / o.shadow.n, o.shadow.color);
+  if (o.rgb) { draw(-o.rgb, 0, '#ff2a6d', 'lighter', 0.8); draw(o.rgb, 0, '#00e5ff', 'lighter', 0.8); }
+  if (o.glow) { g.save(); g.shadowColor = o.glow; g.shadowBlur = size * 0.35; draw(0, 0, color); g.restore(); }
+  if (o.stroke) draw(0, 0, o.stroke.color, 'source-over', 1, o.stroke.w);
+  draw(0, 0, color);
+  g.restore(); return total;
+}
+const micro = (g, s, x, y, size, color, a = 0.8, track = 0.3, align = 'left') => { g.save(); g.globalAlpha = a; text(g, s, x, y, size, '400 SIZEpx "DotGothic16",monospace', color, { track, align }); g.restore(); };
+const line = (g, x0, y0, x1, y1, color, w, a = 1) => { g.save(); g.strokeStyle = color; g.lineWidth = w; g.globalAlpha = a; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); g.restore(); };
+
+/* ───── 8 つの案（同じ文: 「夜を越えて」） ───── */
+const SANS = '900 SIZEpx "Noto Sans JP",sans-serif', DELA = '400 SIZEpx "Dela Gothic One",sans-serif', MIN = '700 SIZEpx "Noto Serif JP",serif', MINL = '300 SIZEpx "Noto Serif JP",serif', TOK = '800 SIZEpx "Kaisei Tokumin",serif', ROUND = '800 SIZEpx "M PLUS Rounded 1c",sans-serif';
+const PIECES = [
+  { n: 'A　ハイパー — 飛沫と速度線', d: '黒地。ピンクとシアンのインクの飛沫が左右から飛び込み、速度線が中心へ。主役は傾いて、硬い影を重ねる。語尾は小さく字間を広げる', f(g) {
+    g.fillStyle = '#07070b'; g.fillRect(0, 0, W, H);
+    focus(g, W * 0.46, H * 0.5, '#ffffff', 90, 140, 520, 0.06, 5);
+    splatter(g, 40, 90, 46, '#ff3db8', 11, 0.12, 0.7, 120); brush(g, -20, 150, 300, 118, 36, '#ff3db8', 21, 0.95); brush(g, 0, 250, 240, 232, 22, '#ff3db8', 22, 0.8);
+    splatter(g, W - 30, 265, 44, '#29e6ff', 12, Math.PI + 0.1, 0.7, 120); brush(g, W + 20, 220, W - 320, 250, 34, '#29e6ff', 23, 0.95); brush(g, W, 100, W - 220, 118, 20, '#29e6ff', 24, 0.8);
+    text(g, TXT, W * 0.46, H * 0.5, 134, SANS, '#fff', { skew: -0.28, rot: -0.04, shadow: { n: 8, dx: 10, dy: 9, color: '#ff3db8' }, track: 0.02 });
+    micro(g, CAP, W * 0.64, H * 0.74, 13, '#29e6ff', 0.95, 0.5); for (let i = 0; i < 7; i++) line(g, W * 0.1 + i * 9, H * 0.5, W * 0.1 + i * 9, H * 0.5 + 13, '#ff3db8', 2);
+    grain(g, 0.12);
+  } },
+  { n: 'B　ポップ — ハーフトーンと破れた帯', d: '黄色地。黒いハーフトーンの点がグラデーションで流れ、破れた黒の帯とピンクの帯が斜めに走る。主役は白に太い黒縁、色のずれた影', f(g) {
+    g.fillStyle = '#ffe500'; g.fillRect(0, 0, W, H);
+    halftone(g, 0, 0, W, H, 11, '#111', 0.9, (x, y) => clamp(1.15 - x * 1.2 - (1 - y) * 0.1), 0.6); halftone(g, 0, 0, W, H, 9, '#ff3db8', 0.7, (x, y) => clamp(x * 1.3 - 0.45 - y * 0.2), 0.3);
+    rough(g, [[-20, 270], [W + 20, 120], [W + 20, 190], [-20, 340]], '#111', 12, 31); rough(g, [[-20, 240], [W + 20, 90], [W + 20, 112], [-20, 262]], '#ff3db8', 8, 32);
+    text(g, '夜を', W * 0.28, H * 0.43, 96, SANS, '#fff', { rot: -0.15, skew: -0.1, stroke: { color: '#111', w: 16 }, shadow: { n: 6, dx: 8, dy: 8, color: '#111' } });
+    text(g, '越えて', W * 0.62, H * 0.33, 150, SANS, '#fff', { rot: -0.15, skew: -0.1, stroke: { color: '#111', w: 18 }, shadow: { n: 7, dx: 10, dy: 10, color: '#ff3db8' } });
+    micro(g, CAP, W * 0.08, H * 0.9, 14, '#111', 1, 0.5); splatter(g, W * 0.9, H * 0.82, 20, '#111', 33, -0.5, 1.2, 60);
+    grain(g, 0.18);
+  } },
+  { n: 'C　夏 — 太陽の光線と水面の粒', d: '深い海の青。大きな太陽のフレアと光線、水面にきらめく光の粒、泡立つ波の帯。丸い太い字は小さめに、水平線の上へ', f(g) {
+    const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#06304f'); bg.addColorStop(0.62, '#0a6d9a'); bg.addColorStop(1, '#021a2e'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    rays(g, W * 0.78, H * 0.18, '#ffd37a', 16, 520, 0.32, 41, 1.9, Math.PI * 0.62); glow(g, W * 0.78, H * 0.18, 230, '#ffcf6b', 0.85); glow(g, W * 0.78, H * 0.18, 70, '#fff6d8', 1);
+    g.fillStyle = '#021a2e'; g.globalAlpha = 0.5; g.fillRect(0, H * 0.62, W, H); g.globalAlpha = 1; bokeh(g, 110, 42, ['#bff4ff', '#fff1c4', '#7fe3ff'], 3, 16, 0.8, [0, H * 0.62, W, H * 0.38]);
+    for (let r = 0; r < 4; r++) { g.fillStyle = ['#2bb6e6', '#1d8fc4', '#0e5f93', '#0a3d66'][r]; g.globalAlpha = 0.8; g.beginPath(); g.moveTo(0, H); for (let x = 0; x <= W; x += 8) g.lineTo(x, H * (0.72 + r * 0.07) + Math.sin(x / 70 + r * 1.7) * 9); g.lineTo(W, H); g.fill(); }
+    g.globalAlpha = 1; text(g, TXT, W * 0.36, H * 0.4, 104, ROUND, '#ffffff', { shadow: { n: 6, dx: 0, dy: 7, color: '#02284866' }, glow: '#7fe3ff' });
+    micro(g, 'SUMMER  26.2°N 127.7°E', W * 0.06, H * 0.9, 12, '#bff4ff', 0.9, 0.35); grain(g, 0.08);
+  } },
+  { n: 'D　冬 — 吹雪の奥行き', d: '青黒い空。手前の大きくぼけた雪、奥の細かい雪の層、雪に埋もれた巨大な字、角に霜の結晶。細い明朝を光らせる', f(g) {
+    const bg = g.createLinearGradient(0, 0, W, H); bg.addColorStop(0, '#0a1830'); bg.addColorStop(1, '#03060f'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    text(g, '雪', W * 0.74, H * 0.58, 470, TOK, '#cfe6ff', { alpha: 0.075 });
+    bokeh(g, 24, 51, ['#e8f4ff'], 14, 46, 0.22); bokeh(g, 160, 52, ['#ffffff', '#cfe6ff'], 2, 8, 0.7);
+    for (let a = 0; a < 6; a++) { const t = a * Math.PI / 3 + 0.2, cx = 70, cy = 70; line(g, cx, cy, cx + Math.cos(t) * 76, cy + Math.sin(t) * 76, '#bfe3ff', 1.8, 0.8); for (const f of [0.55, 0.8]) for (const s of [-1, 1]) line(g, cx + Math.cos(t) * 76 * f, cy + Math.sin(t) * 76 * f, cx + Math.cos(t) * 76 * (f - 0.14) - Math.sin(t) * 12 * s, cy + Math.sin(t) * 76 * (f - 0.14) + Math.cos(t) * 12 * s, '#bfe3ff', 1.2, 0.7); }
+    text(g, TXT, W * 0.5, H * 0.5, 96, MINL, '#f3f9ff', { track: 0.18, glow: '#9fcfff' }); line(g, W * 0.18, H * 0.68, W * 0.82, H * 0.68, '#bfe3ff', 1.2, 0.7); micro(g, 'WINTER  NO.07', W * 0.5, H * 0.76, 12, '#a9c6e3', 0.9, 0.5, 'center');
+    bokeh(g, 14, 53, ['#ffffff'], 18, 50, 0.18); grain(g, 0.1);
+  } },
+  { n: 'E　ゴシック — ステンドグラスの光', d: '暗い聖堂。尖ったアーチの窓の骨組みと、赤・青・琥珀のガラスの破片、天井から降りる光の筋と舞う塵。明朝は生成りで細い赤の線', f(g) {
+    g.fillStyle = '#060507'; g.fillRect(0, 0, W, H);
+    const cx = W * 0.5, top = 14, bot = H + 20, aw = 330;
+    const arch = (w, col, a, lw) => { g.save(); g.strokeStyle = col; g.globalAlpha = a; g.lineWidth = lw; g.beginPath(); g.moveTo(cx - w / 2, bot); g.lineTo(cx - w / 2, H * 0.4); g.quadraticCurveTo(cx - w / 2, top + 30, cx, top); g.quadraticCurveTo(cx + w / 2, top + 30, cx + w / 2, H * 0.4); g.lineTo(cx + w / 2, bot); g.stroke(); g.restore(); };
+    // ガラス: アーチの形で切り抜き、鉛線で区切った色ガラス（赤・青・琥珀・紫）。中央は文字のために暗くする
+    g.save(); g.beginPath(); g.moveTo(cx - aw / 2, bot); g.lineTo(cx - aw / 2, H * 0.4); g.quadraticCurveTo(cx - aw / 2, top + 30, cx, top); g.quadraticCurveTo(cx + aw / 2, top + 30, cx + aw / 2, H * 0.4); g.lineTo(cx + aw / 2, bot); g.clip();
+    const cols = ['#a3162c', '#1c3f8f', '#c98a18', '#7c1fa0', '#0f6b5a', '#a3162c'], pw = aw / 3;
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) { g.globalAlpha = 0.5; g.fillStyle = cols[(r * 2 + c * 3) % cols.length]; g.fillRect(cx - aw / 2 + c * pw + 2, top + r * (H / 3.4) + 2, pw - 4, H / 3.4 - 4); }
+    g.globalAlpha = 0.72; g.fillStyle = '#060507'; g.fillRect(cx - aw / 2, H * 0.44, aw, H * 0.2); g.globalAlpha = 1; g.restore();
+    for (let c = 1; c < 3; c++) line(g, cx - aw / 2 + c * pw, top + 8, cx - aw / 2 + c * pw, bot, '#2b2118', 3, 0.95);
+    for (let r = 1; r < 4; r++) line(g, cx - aw / 2, top + r * (H / 3.4), cx + aw / 2, top + r * (H / 3.4), '#2b2118', 3, 0.95);
+    rays(g, cx, 0, '#ffdca8', 14, 520, 0.2, 61, 0.7, Math.PI / 2); arch(aw, '#e9d9bf', 0.85, 3); arch(aw - 26, '#e9d9bf', 0.45, 1.5);
+    line(g, cx, top + 10, cx, bot, '#e9d9bf', 1.6, 0.5); line(g, cx - aw / 2, H * 0.52, cx + aw / 2, H * 0.52, '#e9d9bf', 1.4, 0.5);
+    bokeh(g, 70, 62, ['#fff0d0'], 1.5, 5, 0.6); glow(g, cx, H * 0.55, 190, '#ffcc88', 0.18);
+    text(g, TXT, cx, H * 0.56, 66, TOK, '#f4efe6', { track: 0.32, shadow: { n: 3, dx: 0, dy: 0, color: '#000' }, glow: '#ffdca8' }); line(g, cx - 120, H * 0.7, cx + 120, H * 0.7, '#c62a3a', 1.6, 0.9); micro(g, 'REQUIEM', cx, H * 0.78, 11, '#e9d9bf', 0.75, 0.6, 'center'); grain(g, 0.12);
+  } },
+  { n: 'F　端末 — ネオンとグリッチ', d: '黒地。遠近の格子の床、水平線のにじみ、走査線。主役はシアンのネオンで、横にずれた帯と色ずれ。小さな等幅の状態表示', f(g) {
+    g.fillStyle = '#04030a'; g.fillRect(0, 0, W, H); const hy = H * 0.56; glow(g, W / 2, hy, 420, '#ff2a9d', 0.4); glow(g, W / 2, hy, 160, '#7a5cff', 0.5);
+    for (let i = -14; i <= 14; i++) line(g, W / 2 + i * 14, hy, W / 2 + i * 120, H + 10, '#ff2a9d', 1.3, 0.55);
+    for (let k = 1; k < 10; k++) { const y = hy + Math.pow(k / 10, 2.1) * (H - hy); line(g, 0, y, W, y, '#ff2a9d', 1.2, 0.5); } line(g, 0, hy, W, hy, '#ffd1f0', 2, 0.9);
+    g.fillStyle = '#000'; for (let y = 0; y < H; y += 4) { g.globalAlpha = 0.28; g.fillRect(0, y, W, 1.4); } g.globalAlpha = 1;
+    const base = (dx, col, a, mode) => { g.save(); g.globalCompositeOperation = mode; g.globalAlpha = a; text(g, TXT, W * 0.5 + dx, H * 0.34, 118, SANS, col, { track: 0.04 }); g.restore(); };
+    base(-5, '#ff2a6d', 0.9, 'lighter'); base(5, '#00e5ff', 0.9, 'lighter'); g.save(); g.shadowColor = '#00e5ff'; g.shadowBlur = 40; text(g, TXT, W * 0.5, H * 0.34, 118, SANS, '#eaffff', { track: 0.04 }); g.restore();
+    g.save(); g.beginPath(); g.rect(0, H * 0.31, W, 14); g.clip(); text(g, TXT, W * 0.5 + 34, H * 0.34, 118, SANS, '#00e5ff', { track: 0.04 }); g.restore();
+    g.save(); g.beginPath(); g.rect(0, H * 0.42, W, 9); g.clip(); text(g, TXT, W * 0.5 - 48, H * 0.34, 118, SANS, '#ff2a6d', { track: 0.04 }); g.restore();
+    micro(g, 'STATUS: ONLINE   SIGNAL 98%   ' + CAP, W * 0.06, H * 0.93, 12, '#00e5ff', 0.95, 0.35); grain(g, 0.1);
+  } },
+  { n: 'G　星図 — 天の川と星雲', d: '深い紺。紫・青・桃の星雲、斜めに流れる天の川の星の帯、光る節をつないだ星座の線、流れ星。淡く光る字は小さめ', f(g) {
+    g.fillStyle = '#03050f'; g.fillRect(0, 0, W, H); glow(g, W * 0.25, H * 0.3, 360, '#5b2a9e', 0.5); glow(g, W * 0.7, H * 0.7, 380, '#1f4fb3', 0.45); glow(g, W * 0.55, H * 0.2, 220, '#c2459b', 0.3);
+    const R = rng(71); g.save(); g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 1500; i++) { const t = R(), s = (R() + R() + R() - 1.5) * 90, x = t * W * 1.2 - 60, y = H * 0.85 - t * H * 0.7 + s, r = 0.4 + R() * R() * 1.7; g.globalAlpha = 0.3 + R() * 0.7; g.fillStyle = R() < 0.2 ? '#ffd9b0' : '#cfe0ff'; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+    for (let i = 0; i < 160; i++) { g.globalAlpha = 0.3 + R() * 0.7; g.fillStyle = '#fff'; g.beginPath(); g.arc(R() * W, R() * H, 0.5 + R() * 1.3, 0, 7); g.fill(); } g.restore();
+    const pts = [[W * 0.14, H * 0.7], [W * 0.27, H * 0.5], [W * 0.4, H * 0.62], [W * 0.5, H * 0.3], [W * 0.66, H * 0.42], [W * 0.82, H * 0.24]];
+    pts.forEach((p, i) => { if (i) line(g, pts[i - 1][0], pts[i - 1][1], p[0], p[1], '#aac8ff', 1.4, 0.8); });
+    pts.forEach((p, i) => { glow(g, p[0], p[1], 38, '#aac8ff', 0.8); g.fillStyle = '#fff'; g.beginPath(); g.arc(p[0], p[1], 3.2, 0, 7); g.fill(); line(g, p[0] - 16, p[1], p[0] + 16, p[1], '#cfe0ff', 1, 0.7); line(g, p[0], p[1] - 16, p[0], p[1] + 16, '#cfe0ff', 1, 0.7); micro(g, 'α' + (i + 1), p[0] + 8, p[1] - 12, 10, '#aac8ff', 0.8, 0.2); });
+    g.save(); const sg = g.createLinearGradient(W * 0.9, 20, W * 0.62, 90); sg.addColorStop(0, '#fff'); sg.addColorStop(1, 'rgba(255,255,255,0)'); g.strokeStyle = sg; g.lineWidth = 2.5; g.beginPath(); g.moveTo(W * 0.92, 18); g.lineTo(W * 0.6, 96); g.stroke(); g.restore();
+    text(g, TXT, W * 0.5, H * 0.82, 56, '400 SIZEpx "Klee One","Noto Serif JP",serif', '#f1f6ff', { track: 0.25, glow: '#9fc2ff' }); micro(g, CAP, W * 0.5, H * 0.93, 11, '#aac8ff', 0.85, 0.5, 'center'); grain(g, 0.07);
+  } },
+  { n: 'H　和 — 墨と朱の円', d: '生成りの紙。かすれた墨の帯と朱の大きな円、縦組みの太い明朝に朱の判。飛沫は墨。ほかの案とは別の「和」の方向', f(g) {
+    g.fillStyle = '#efe8d8'; g.fillRect(0, 0, W, H); grain(g, 0.3, 'multiply');
+    g.save(); g.fillStyle = '#d3321f'; g.globalAlpha = 0.95; g.beginPath(); const R0 = rng(81); for (let i = 0; i <= 40; i++) { const t = (i / 40) * Math.PI * 2, r = 118 * (0.97 + R0() * 0.06); g.lineTo(W * 0.74 + Math.cos(t) * r, H * 0.48 + Math.sin(t) * r); } g.fill(); g.restore();
+    brush(g, W * 0.02, H * 0.78, W * 0.7, H * 0.66, 46, '#14110f', 82, 0.94); brush(g, W * 0.3, H * 0.9, W * 0.98, H * 0.8, 20, '#14110f', 83, 0.85); splatter(g, W * 0.1, H * 0.2, 12, '#14110f', 84, 0.2, 1.2, 70); splatter(g, W * 0.92, H * 0.15, 9, '#14110f', 85, 2.6, 1, 50);
+    const cx = W * 0.36; text(g, '夜を', cx, H * 0.3, 96, '900 SIZEpx "Zen Old Mincho",serif', '#14110f', { track: 0.06 }); text(g, '越えて', cx, H * 0.5, 96, '900 SIZEpx "Zen Old Mincho",serif', '#14110f', { track: 0.06 });
+    g.save(); g.fillStyle = '#d3321f'; g.fillRect(W * 0.52, H * 0.12, 34, 34); g.globalAlpha = 1; text(g, '夜', W * 0.52 + 17, H * 0.12 + 18, 26, '900 SIZEpx "Zen Old Mincho",serif', '#efe8d8', {}); g.restore(); micro(g, CAP, W * 0.04, H * 0.93, 12, '#14110f', 0.85, 0.5); grain(g, 0.1);
+  } },
+];
+const main = document.getElementById('m'), ctxs = [];
+PIECES.forEach((p) => { const fig = document.createElement('figure'); fig.innerHTML = `<canvas width="${W}" height="${H}"></canvas><figcaption><b>${p.n}</b><br>${p.d}</figcaption>`; main.appendChild(fig); ctxs.push(fig.querySelector('canvas').getContext('2d')); });
+window.renderAll = () => PIECES.forEach((p, i) => { const g = ctxs[i]; g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; p.f(g); });
+Promise.all(['400 40px "Dela Gothic One"', '900 40px "Noto Sans JP"', '700 40px "Noto Serif JP"', '300 40px "Noto Serif JP"', '800 40px "Kaisei Tokumin"', '400 40px "DotGothic16"', '800 40px "M PLUS Rounded 1c"', '900 40px "Zen Old Mincho"'].map(f => document.fonts.load(f, TXT + '雪夜' + CAP).catch(() => {}))).then(() => { window.renderAll(); window.__ready = true; });
+</script>
+</body>
+</html>
