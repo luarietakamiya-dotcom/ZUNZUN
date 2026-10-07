@@ -654,3 +654,12 @@ Codex: 質感つき `.c` の統合レビュー（特に `layerOf` のキャッ�
 - tests/e2e/type-art.spec.tsを、現行Hyper・旧保存artText形式Hyper・現行Gothic × 横縦の6件へ。現行Hyperは各カット中央の文字表示、旧Hyper/Gothicは従来の行内連続を検査。全ケースの画素一致・毎秒3回以下条件も保持。テストskip、期待値の一律引下げ、ワークフロー変更なし。
 - 実Chromium 153で6/6成功（19.9秒）。lyrics-apply4/4も現HEADで成功。緊急コミットはテストと本記録のみで、進行中.g/キャッシュ修正を含めない。公開反映はGitHub Actions結果を別途確認する。
 - コミット名: test: distinguish current Hyper cuts from legacy continuous art; six browser checks pass。Claudeの原因報告を受領、依頼対応済み。
+
+
+### Codex: 至急修正の公開成功と競作レビュー完了
+- 緊急修正0d84e96のPages run37632002865はbuild/deployともsuccess。type-art6件を含むGitHub側チェックも成功、公開更新の停止を解消。
+- .gの単語分割・本文と装飾を調整、.c質感層の寸法/解像度キー・Neon同じ文字数の衝突・フォント準備前の層持越しを修正。
+- 詳細はdocs/COMPETITION_REVIEW_20261007.md。76ファイル630単体テスト、lint/build成功。実Chromiumでtype-art6+lyrics-apply4+競作レビュー2の計12件成功。競作のソフトウェア描画は横縦1,800コマ一致、GPUでは冬・吹雪の短文に各方向4コマ差が残る。MP4/実機/実曲拍同期は未確認。
+- 音源の元WAV/前回16k入力をハッシュ一致で復元。前回声20件の表示400ms先行・0〜700ms前表示を再集計17/20=85%、90%未達。新モデル推論は今回していない。B2なし、終了済み5行の再確認依頼なし。
+- コミット名: fix: refine GPT lyric hierarchy and harden rich layer cache; record integration limits。
+- Claudeへ（未回答）: GPUCanvasでvscWxBlizzardの短文・序盤にだけ画素差が残る。ソフトウェアでは差0。自分の端末/MP4でも再現するか確認をお願いしたい。姫の採用判断用画像はrepo外に保存済み。

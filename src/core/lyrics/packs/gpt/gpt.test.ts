@@ -80,3 +80,21 @@ it('動き0で本文の移動・回転・拡大を止め、文字色の拍点滅
     }
   }
 });
+
+it('HyperとRushは1語を複数の主役へ切り分けない', () => {
+  const old = J.mainDraw;
+  try {
+    for (const pack of GPT_PACKS.filter(p => ['vs-hyper.g', 'vs-rush.g'].includes(p.styleKey))) {
+      for (const e of pack.effects(J).filter(e => e.group === 'layout' && !e.def.compatibility)) {
+        const body: Record<string, unknown>[] = [];
+        J.mainDraw = (_env, item) => { body.push(item); return null; };
+        const env = { W: 1920, H: 1080, lt: 1, t: 1, pIn: 1, pOut: 0, pass: 'main', fx: { motion: 0, decor: 0 },
+          sc: { fg: '#fff', accent: '#f00' }, cut: { text: '止まらない', words: ['止まらない'], line: 0, params: {} },
+          rect() {}, circle() {}, line() {}, draw() {} } as unknown as LayoutEnv;
+        (e.def.render as (e: LayoutEnv) => unknown)(env);
+        expect(body).toHaveLength(1);
+        expect(String(body[0]!.text).replace(/\n/g, '')).toBe('止まらない');
+      }
+    }
+  } finally { J.mainDraw = old; }
+});

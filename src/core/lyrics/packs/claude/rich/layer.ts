@@ -10,10 +10,14 @@ import type { G } from './kit';
 const cache = new Map<string, HTMLCanvasElement>();
 const MAX_ENTRIES = 24;
 
+/** フォント準備中の下描きで作った層を、本番へ持ち越さない。 */
+export function clearRichLayers(): void { cache.clear(); }
+
 /** 層を取り出す（無ければ paint で描く）。描画面が無い環境（ユニットテスト）では null */
 export function layerOf(key: string, W: number, H: number, paint: (g: G) => void, maxPx = 1280): HTMLCanvasElement | null {
-  const hit = cache.get(key);
-  if (hit) { cache.delete(key); cache.set(key, hit); return hit; }
+  const cacheKey = JSON.stringify([key, W, H, maxPx]);
+  const hit = cache.get(cacheKey);
+  if (hit) { cache.delete(cacheKey); cache.set(cacheKey, hit); return hit; }
   if (typeof document === 'undefined') return null;
   const k = Math.min(1, maxPx / Math.max(W, H)), c = document.createElement('canvas');
   c.width = Math.max(1, Math.round(W * k)); c.height = Math.max(1, Math.round(H * k));
@@ -21,7 +25,7 @@ export function layerOf(key: string, W: number, H: number, paint: (g: G) => void
   if (!g || typeof g.save !== 'function' || typeof g.scale !== 'function') return null;
   g.scale(k, k);
   try { paint(g); } catch { return null; }
-  cache.set(key, c);
+  cache.set(cacheKey, c);
   if (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value as string);
   return c;
 }

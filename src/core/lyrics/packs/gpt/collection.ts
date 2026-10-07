@@ -1,6 +1,6 @@
 import { hyperPack } from '../kinetic-packs';
 import type { MotionPack, PackEffect, PackJ, PackEnv, PackItem, PackBox } from '../types';
-import { clean, piecesOf, union, type LayoutEnv } from '../design-kit';
+import { clean, piecesOf, wordsOf, mergeWords, union, type LayoutEnv } from '../design-kit';
 import { easeOut, easeInOut, beatOf, flashAllowed } from '../util';
 
 type Theme = 'Hyper' | 'Echo' | 'Rush' | 'Rose' | 'Signal' | 'Afterglow';
@@ -8,7 +8,7 @@ const cap = (x: number) => Math.max(0, Math.min(1, x));
 const names: Record<Theme, string> = { Hyper: 'ハイパー・ビート', Echo: 'エコー', Rush: 'ラッシュ', Rose: 'ダークローズ', Signal: 'シグナル', Afterglow: 'アフターグロウ' };
 const colors: Record<Theme, [string, string, string, string]> = {
   Hyper: ['#08090D', '#FFFFFF', '#FF48C4', '#70F4FF'], Echo: ['#060D13', '#FFFFFF', '#57DFED', '#799EA8'],
-  Rush: ['#F3EDE0', '#171713', '#D1202D', '#4C4941'], Rose: ['#13070E', '#F8EBDD', '#922737', '#A66E70'],
+  Rush: ['#F3EDE0', '#171713', '#D1202D', '#4C4941'], Rose: ['#13070E', '#F8EBDD', '#C84760', '#CB9398'],
   Signal: ['#071525', '#E9F0E8', '#BDFA45', '#5D8395'], Afterglow: ['#F3EFE6', '#282B30', '#2754B5', '#787C84'],
 };
 const fontOf = (theme: Theme) => ['Rose', 'Afterglow'].includes(theme) ? 'mincho' : theme === 'Signal' ? 'gothic_med' : 'dela';
@@ -96,12 +96,13 @@ function render(J: PackJ, env: LayoutEnv, theme: Theme, variant: number): PackBo
   // 紙の2作品は暗い映像の上でも読めるよう、本文の土台として紙色を保つ。
   // 装飾0でも本文と土台は残り、飛沫・罫線・背景文字は消える。
   if (env.pass === 'main' && (theme === 'Rush' || theme === 'Afterglow')) env.rect(0, 0, W, H, sc.bg, 1);
-  const k = motionOf(env), decor = cap(env.fx.decor ?? .5), side = Number(env.cut.params.side ?? 1);
+  const k = motionOf(env), decor = cap((env.fx.decor ?? .5) * (['Rose', 'Signal', 'Afterglow'].includes(theme) ? 1.8 : 1)), side = Number(env.cut.params.side ?? 1);
   const visible = easeOut(cap(env.pIn)) * (1 - easeOut(cap(env.pOut)));
-  const parts = piecesOf(env.cut, theme === 'Rush' ? 2 : 3);
+  const parts = theme === 'Hyper' || theme === 'Rush' ? mergeWords(wordsOf(env.cut), theme === 'Rush' ? 2 : 3) : piecesOf(env.cut, 3);
   let box: PackBox | null = null;
   const word = (s: string, x: number, y: number, width: number, height: number, max: number, options: Record<string, unknown> = {}, ghost = false) => {
-    const lines = J.splitLines(s, Math.max(2, Math.floor(width / max)));
+    const one = J.fitSize([s], font, width, height);
+    const lines = one >= max * .55 ? [s] : J.splitLines(s, Math.max(2, Math.ceil([...s].length / 2)));
     const item = { text: Array.isArray(lines) ? lines.join('\n') : lines, font,
       size: Math.min(max, J.fitSize(lines, font, width, height)), x: W * x, y: H * y, color: sc.fg, ...options };
     if (ghost) { if (env.pass === 'main' && decor > 0) env.draw({ ...item, alpha: Number(options.alpha ?? .18) * decor * visible }); }
@@ -133,7 +134,7 @@ function render(J: PackJ, env: LayoutEnv, theme: Theme, variant: number): PackBo
   if (theme === 'Hyper') {
     const hero = Math.floor(parts.length / 2);
     parts.forEach((p, i) => word(p, portrait || variant === 1 ? .5 + (i - hero) * .04 : .5 + (i - hero) * .25, portrait || variant === 1 ? .5 + (i - hero) * .19 : .5 + (i - hero) * (variant === 2 ? -.12 : .08),
-      W * (portrait ? .8 : i === hero ? .46 : .23), H * .21, u * (i === hero ? .23 : .09), { rot: -4 * side, color: i === hero ? sc.fg : sc.accent, mi: i }));
+      W * (parts.length === 1 ? .84 : portrait ? .8 : i === hero ? .46 : .23), H * .28, u * (i === hero ? .26 : .09), { rot: -4 * side, color: i === hero ? sc.fg : sc.accent, mi: i }));
     line([[.05, .19], [.3 + .04 * Math.sin(env.lt * 2) * k, .19]], sc.accent, .8, .006);
     line([[.7, .82], [.95, .82]], sc.accent2 ?? sc.accent, .8, .006);
   } else if (theme === 'Echo') {
@@ -144,17 +145,17 @@ function render(J: PackJ, env: LayoutEnv, theme: Theme, variant: number): PackBo
     line([[.72, .88], [.85, .91], [.96, .81]], sc.accent, .5);
   } else if (theme === 'Rush') {
     const gap = portrait ? .24 : .13;
-    parts.forEach((p, i) => word(p, portrait ? .48 + i * .04 : .32 + i * .3, .5 + (i - .5) * -gap,
-      W * (portrait ? .75 : .5), H * .26, u * (i === 0 ? .13 : .25), { rot: -9, color: i ? sc.accent : sc.fg, mi: i }));
+    parts.forEach((p, i) => word(p, parts.length === 1 ? .5 : portrait ? .48 + i * .04 : .32 + i * .3, parts.length === 1 ? .5 : .5 + (i - .5) * -gap,
+      W * (parts.length === 1 ? .82 : portrait ? .75 : .5), H * .26, u * (parts.length === 1 || i > 0 ? .25 : .13), { rot: -9, color: i ? sc.accent : sc.fg, mi: i }));
     line([[.03, .82], [.97, .57]], sc.accent, .8, .014);
     line([[.03, .86], [.97, .61]], sc.fg, .9, .025);
     line([[.05, .3], [.94, .06]], sc.accent, .8);
   } else if (theme === 'Rose') {
-    word(text, variant === 1 ? .43 : .5, variant === 2 ? .59 : .5, W * .76, H * .32, u * .12);
+    word(text, variant === 1 ? .43 : .5, variant === 2 ? .59 : .5, W * .82, H * .36, u * .20);
     // 手描きの棘と花弁。本文と重ならない上下の帯にのみ置く。
     for (const baseline of [.14, .85]) {
       const points: [number, number][] = Array.from({ length: 27 }, (_, i) => [i / 26, baseline + .055 * Math.sin(i * .35 + env.lt * .15 * k)]);
-      line(points, sc.accent, .85, .0025);
+      line(points, sc.accent, 1, .004);
       for (let i = 3; i < 25; i += 3) { const [x, y] = points[i]!; line([[x - .018, y], [x, y - .03], [x + .01, y + .007]], sc.accent, .8); }
     }
     if (env.pass === 'main' && decor > 0) for (let j = 0; j < 5; j++) {
@@ -162,24 +163,24 @@ function render(J: PackJ, env: LayoutEnv, theme: Theme, variant: number): PackBo
         const t = i / 49 * Math.PI * 2, radius = u * (.033 + .013 * Math.cos(5 * t + j * .8));
         return [W * .81 + Math.cos(t + j * .55) * radius, H * .18 + Math.sin(t + j * .55) * radius];
       });
-      env.line(points, sc.accent, u * .0015, .7 * decor * visible);
+      env.line(points, sc.accent, u * .0025, .95 * decor * visible);
     }
     line([[.35, .69], [.65, .69]], sc.accent, .6);
   } else if (theme === 'Signal') {
-    for (let i = 1; i < 8; i++) { line([[i / 8, .08], [i / 8, .92]], sc.accent2 ?? sc.accent, .36, .0007); }
-    for (let i = 1; i < 6; i++) line([[.05, i / 6], [.95, i / 6]], sc.accent2 ?? sc.accent, .36, .0007);
+    for (let i = 1; i < 8; i++) { line([[i / 8, .08], [i / 8, .92]], sc.accent2 ?? sc.accent, .55, .001); }
+    for (let i = 1; i < 6; i++) line([[.05, i / 6], [.95, i / 6]], sc.accent2 ?? sc.accent, .55, .001);
     const x = variant === 1 ? .4 : .52, y = variant === 2 ? .6 : .5;
-    word(text, x, y, W * .73, H * .23, u * .09);
+    word(text, x, y, W * .78, H * .30, u * .17);
     line([[x - .36, y - .14], [x - .36, y - .08]], sc.accent, .9, .005);
     line([[x + .32, y + .08], [x + .32, y + .14]], sc.accent, .9, .005);
     for (let i = 0; i < 18; i++) {
       const height = .016 + .04 * (.5 + .5 * Math.sin(i * .7 + env.lt * 1.2 * k));
-      line([[.57 + i * .018, .78], [.57 + i * .018, .78 - height]], sc.accent, .65, .003);
+      line([[.57 + i * .018, .78], [.57 + i * .018, .78 - height]], sc.accent, .95, .005);
     }
   } else {
     const first = [...text][0] ?? '';
-    word(first, portrait ? .64 : .76, .4, W * .6, H * .7, u * .72, { color: sc.fg, rot: -8, alpha: .16 }, true);
-    word(text, variant === 1 ? .4 : .33, variant === 2 ? .6 : .72, W * .53, H * .21, u * .075);
+    word(first, portrait ? .64 : .76, .4, W * .6, H * .7, u * .72, { color: sc.fg, rot: -8, alpha: .27 }, true);
+    word(text, variant === 1 ? .42 : .36, variant === 2 ? .6 : .72, W * .60, H * .27, u * .135);
     line([[.05, .84], [.47, .84]], sc.accent, .75);
     line([[.53, .9], [.94, .66]], sc.accent, .6);
   }

@@ -13,6 +13,7 @@ import { buildLyricsView } from './view';
 import type { MotionLevel } from '../types';
 import { tr } from '../i18n';
 import { directTypeArtPlan } from './packs/type-art-plan';
+import { clearRichLayers } from './packs/claude/rich/layer';
 
 /**
  * ZUNZUN と、同梱した JIZURA の歌詞モーションエンジン (vendor/jizura/jizura-engine.js、window.J) をつなぐ。
@@ -599,6 +600,7 @@ async function prepareFonts(J: JizuraApi, plan: JizuraPlan, text: string): Promi
   await waitFontsIdle(Math.max(0, deadline - Date.now()));
   J.glyphs.clear();
   J.metrics.clear();
+  clearRichLayers();
 }
 
 /**

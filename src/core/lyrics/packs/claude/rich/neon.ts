@@ -51,8 +51,8 @@ function render(J: PackJ, env: LayoutEnv, v: number): PackBox | null {
   const ph = phrases(env), rich = richOf(env), beat = beatHit(env), flick = env.lt % 4 < 0.12 ? 0.6 : 1;
   let box: PackBox | null = null;
   const put = (item: Record<string, unknown>) => { box = union(box, J.mainDraw(env, item)); };
-  place(env, layerOf(`nx:far:${v}:${W}x${H}:${seed}:${text.length}`, W, H, (g) => paintFar(g, W, H, v, seed, text)), { enter: 'fade', alpha: rich }, beat.hit, k);
-  if (v === 2) place(env, layerOf(`nx:rain:${W}x${H}:${seed}:${text.length}`, W, H, (g) => paintRain(g, W, H, seed, text)), { enter: 'fade', scrollY: 0.22, alpha: rich }, 0, k);
+  place(env, layerOf(`nx:far:${v}:${W}x${H}:${seed}:${JSON.stringify(text)}`, W, H, (g) => paintFar(g, W, H, v, seed, text)), { enter: 'fade', alpha: rich }, beat.hit, k);
+  if (v === 2) place(env, layerOf(`nx:rain:${W}x${H}:${seed}:${JSON.stringify(text)}`, W, H, (g) => paintRain(g, W, H, seed, text)), { enter: 'fade', scrollY: 0.22, alpha: rich }, 0, k);
   const rest = [...ph.pre, ...ph.post].join(' ');
 
   if (v === 0) {
