@@ -39,6 +39,8 @@ export interface Place {
   alpha?: number;
   /** 登場を遅らせる割合（0..1） */
   delay?: number;
+  /** 縦に流れ続ける速さ（画面の高さ / 秒）。降る雪・文字の雨に使う（層を 2 枚つないで繰り返す） */
+  scrollY?: number;
 }
 
 /** 層を env.ctx に重ねる。env.pass が main 以外のときは何もしない */
@@ -63,7 +65,7 @@ export function place(env: LayoutEnv, layer: HTMLCanvasElement | null, o: Place 
   g.globalAlpha = a;
   if (clip < 1) { g.beginPath(); if (enter === 'wipeL') g.rect(0, 0, W * clip, H); else g.rect(W * (1 - clip), 0, W * clip, H); g.clip(); }
   g.translate(W / 2 + dx, H / 2 + dy); g.scale(s, s); g.translate(-W / 2, -H / 2);
-  g.drawImage(layer, 0, 0, W, H);
+  if (o.scrollY) { const off = (((env.lt * o.scrollY * motion) % 1) + 1) % 1 * H; g.drawImage(layer, 0, off, W, H); g.drawImage(layer, 0, off - H, W, H); } else g.drawImage(layer, 0, 0, W, H);
   g.restore();
 }
 
