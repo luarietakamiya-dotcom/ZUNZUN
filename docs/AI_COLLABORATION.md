@@ -24,7 +24,7 @@
 | Claude | A-001: 自動歌詞同期の設計レビュー | docs/AI_COLLABORATION.md（追記のみ）。docs/AUTO_LYRIC_SYNC.md は Codex の文書なので触らない | レビュー完了 (2026-10-05)。コード・依存の変更なし | |
 | Codex | **トラック A**: D-005 文字のアート（代表 2 作品 Hyper・Gothic から） | `src/core/lyrics/packs/`、`src/core/lyrics/jizura-adapter.ts`、`src/ui/panels/lyric-motion.ts`、歌詞テスト/CI | A1公開・24コマ比較作成。A2は姫の見た目判断待ち (2026-10-05) |
 | Codex | **トラック B**: A-002 自動歌詞同期 + M-001 MusicSync 情報の収集 | `public/experiments/lyric-sync/`、`docs/AUTO_LYRIC_SYNC.md`、`docs/CODEX_SYNC_EXPERIMENT.md` | B0ソース読解・B1 WASM無音測定完了。実素材/実歌唱精度未確認、B2未実装 (2026-10-05) |
-| Claude | **競作 C**: リリックモーションの Claude 版（スタイル名・キーの語尾 `.c`）。姫の指示（2026-10-06）で、**Claude がコードを書く** | 新規 `src/core/lyrics/packs/claude/`（パック・テスト）、`src/core/lyrics/packs/index.ts` に **1 行だけ**（`...CLAUDE_PACKS`）。既存パック・Codex の `.g` 版・JIZURA 本体は触らない | 第 1・2 弾を push (2026-10-06)。姫の見比べ待ち |
+| Claude | **競作 C**: リリックモーションの Claude 版（スタイル名・キーの語尾 `.c`）。姫の指示（2026-10-06）で、**Claude がコードを書く** | 新規 `src/core/lyrics/packs/claude/`（パック・テスト）、`src/core/lyrics/packs/index.ts` に **1 行だけ**（`...CLAUDE_PACKS`）。既存パック・Codex の `.g` 版・JIZURA 本体は触らない | 第 1〜3 弾を push (2026-10-07)。質感つき 5 スタイルを追加。姫の見比べ待ち |
 | Codex | **競作 G**: リリックモーションの GPT 版（語尾 `.g`）。Codex が着手時に対象ファイルを記入（推奨: `src/core/lyrics/packs/gpt/`、`packs/index.ts` に 1 行） | 着手時に Codex が記入 | 姫の指示 (2026-10-06)・未着手 |
 | Claude | D-005 / トラック A・B の設計レビュー（各フェーズ完了時）と試作の修正 | `docs/art-studies/`、本ファイルへの追記 | 待機（Codex の報告待ち） |
 
@@ -580,4 +580,24 @@ MusicSyncの保存済み監査資料からソースZIPを発見したため、�
 ### 相手への依頼
 - **Codex**: Claude 版 `.c` を見て、統合レビュー（C-004 の形）をお願いしたい（長文・短文・縦横・動き 0 / 装飾 0・seed の再現性・既存機能）。type-art / lyrics-apply の既存 3 件の失敗は Codex の担当として扱ってよいか確認したい。
 - **姫**: 「リリックモーション」タブで `.c` と `.g` を見比べて、いい方（または構図ごとにいい方）を選んでほしい。直したいところは、構図の名前と「大きい／小さい／暗い」などの一言で十分。
+
+## 2026-10-07 Claude: 競作 C 質感つきスタイル（飛沫・ポップ・冬・ネオン・星図・和）の報告
+
+### 実施内容
+姫の指示（ABDFGH の方向・「見比べたい」）で、既存の `.c` 6 スタイルは残したまま、質感つきの 6 スタイル（各 4 構図、計 24）を並べて追加した。
+ハイパー・飛沫.c / ポップ・爆発.c / 冬・吹雪.c / 端末・ネオン.c / 星図・銀河.c / 和・墨.c。
+背景・飛沫・筆・ハーフトーン・星・山などは、カットごとに 1 枚のキャンバスへ描いてキャッシュし、毎コマは drawImage だけ（`rich/layer.ts`）。雪と文字の雨は層を縦に流す（`scrollY`）。
+
+### 変更ファイル
+`src/core/lyrics/packs/claude/rich/`（`kit.ts` `layer.ts` `common.ts` `splash.ts` `pop.ts` `winter.ts` `neon.ts` `star.ts` `wa.ts`）、`claude/index.ts`、`claude-packs.test.ts`（1 字ずつ置くシール構図を分割検査から除外）。
+
+### 検証済み
+`tsc -b` / `npm run lint` / 全 vitest 624 件 / `npm run build`。実エンジンでの横長の静止画（全 24 構図）。
+### 未確認
+縦長（ハイパー・飛沫以外）、動きの質感、描画の負荷（キャッシュの効果を計測していない）、実音源との拍同期、MP4 書き出し、E2E（type-art / lyrics-apply は Codex 側で既存の失敗）。
+不透明な背景は下のレイヤーを覆う（装飾スライダーで薄くなり、0 で文字だけ）。バラ・月のクレーターなどは手続き生成の近似。
+
+### 相手への依頼
+Codex: 質感つき `.c` の統合レビュー（特に `layerOf` のキャッシュと書き出し時の決定論、縦長の確認）。
+姫: `.c`（旧 6 / 新 6）と `.g` の見比べと、残す構図の選択。
 
