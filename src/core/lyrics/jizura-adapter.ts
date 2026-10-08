@@ -15,6 +15,7 @@ import { tr } from '../i18n';
 import { directTypeArtPlan } from './packs/type-art-plan';
 import { clearRichLayers } from './packs/claude/rich/layer';
 import { prepareSubtitlePlan, subtitlePack } from './packs/gpt/subtitle';
+import { MOONFEATHER_STYLE_KEY, prepareMoonPlan } from './packs/claude/moonfeather';
 
 /**
  * ZUNZUN と、同梱した JIZURA の歌詞モーションエンジン (vendor/jizura/jizura-engine.js、window.J) をつなぐ。
@@ -661,6 +662,7 @@ export class LyricMotion {
     } else plan = makePlan();
     directTypeArtPlan(plan, lyrics.motion);
     if (lyrics.motion.style === subtitlePack.styleKey || (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom?.base === subtitlePack.styleKey)) prepareSubtitlePlan(plan);
+    if (lyrics.motion.style === MOONFEATHER_STYLE_KEY || (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom?.base === MOONFEATHER_STYLE_KEY)) prepareMoonPlan(plan, sections, audio?.duration ?? 0);
     await prepareFonts(J, plan, lyricsForEngine(lyrics.text, lyrics.source) + HUD_CHARS);
     // 本番の Renderer は書体の準備が終わってから作る (内部のキャッシュに仮の書体の文字を残さない)
     const renderer = withSeededRandom(deriveSeed(seed, 'renderer'), () => {
