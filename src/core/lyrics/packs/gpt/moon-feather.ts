@@ -85,8 +85,13 @@ function effects(J: PackJ): PackEffect[] {
         ctx.save(); ctx.beginPath(); ctx.rect(W * .06, H * .77, W * .88, H * .16); ctx.clip();
         try {
           if (env.pass === 'main' && decor > 0) {
-            const progress = k > 0 ? cap(env.lt / Math.max(.1, env.cut.dur)) : .5;
-            lunar(ctx, W * (.09 + .82 * progress), H * .845, H * .062, phase, cap(decor * 1.6) * shown * .7);
+            const first = measured.lay.find(glyph => !/\s/.test(glyph.ch));
+            if (first) {
+              const radius = Math.min(H * .047, size * 1.3);
+              const moonX = Math.max(W * .06 + radius, x + first.x - size * .45);
+              const moonY = Math.max(H * .77 + radius, y + first.y - size * .7);
+              lunar(ctx, moonX, moonY, radius, phase, cap(decor * 1.6) * shown * .7);
+            }
           }
           const box = J.mainDraw(env, { text: display, font: FONT, size, x, y, track: .08, lead: 1.4, color: '#FFF5DF',
             shadow: { color: '#000000dd', blur: size * .14, dy: size * .05 }, moonChars: chars, moonDirections: insertionDirections(chars) });
@@ -124,7 +129,7 @@ export const moonFeatherPack: MotionPack = {
   buildStyle(J) {
     const base = subtitlePack.buildStyle(J), bias: Record<string, Record<string, number>> = {};
     for (const e of effects(J)) (bias[e.group] ??= {})[e.key] = 10;
-    return { ...base, name: '月と羽根・字幕.g', desc: '時間差で上下から挿入し、定位置の近づいた部分から現れる。着地から羽根、背面を流れる月',
+    return { ...base, name: '月と羽根・字幕.g', desc: '時間差で上下から挿入し、定位置の近づいた部分から現れる。着地から羽根、先頭文字の左上に重なる月',
       fonts: { display: [FONT], body: [FONT], serif: [FONT], mono: ['mono'] }, bias };
   },
   configure(project, J) {
