@@ -3,7 +3,7 @@ import { buildJizuraProject, installTimingPatch, type JizuraApi } from '../../ji
 import { registerMotionPacks } from '../index';
 import type { LayoutEnv } from '../design-kit';
 import type { PackJ } from '../types';
-import { layGlyphs, lines, moonFeatherClaudePack, prepareMoonPlan } from './moonfeather';
+import { layGlyphs, lines, moonFeatherClaudePack, phaseOf, prepareMoonPlan } from './moonfeather';
 
 let J: JizuraApi & PackJ;
 beforeAll(async () => {
@@ -77,4 +77,12 @@ it('動き 0 は文字が定位置で止まり羽根を出さない。装飾 0 �
   const d = def()[0]!, log: Call[] = [];
   d.render({ W: 1920, H: 1080, lt: 1, pIn: 1, pOut: 0, pass: 'ghost', fx: {}, sc: { fg: '#fff', accent: '#fff' }, ctx: fakeCtx(log), cut: { dur: 3, text: '夜', params: {} } } as unknown as LayoutEnv);
   expect(log.length).toBe(0);
+});
+
+it('月はなめらかに満ち欠けする: 前のカットの形（moonFrom）を覚える。満ちる側と欠ける側を 1 つの数で表す', () => {
+  expect(phaseOf(0, true)).toBe(0); expect(phaseOf(1, true)).toBe(1); expect(phaseOf(0.3, false)).toBeCloseTo(1.7);
+  const plan = { cuts: [{ start: 1, params: {} }, { start: 30, params: {} }] };
+  prepareMoonPlan(plan, [{ kind: 'intro', label: '', start: 0, end: 10 }, { kind: 'chorus', label: '', start: 20, end: 60 }], 100);
+  const [a, b] = plan.cuts as unknown as { params: { moonFrom: number } }[];
+  expect(a!.params.moonFrom).toBeCloseTo(0.12); expect(b!.params.moonFrom).toBeCloseTo(0.12);
 });
