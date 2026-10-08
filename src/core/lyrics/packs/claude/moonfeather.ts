@@ -10,7 +10,7 @@ import { sectionAt, type Section } from '../../sections';
  *  - 1 文字ずつ上か下から、少しずつずらして差し込む（前の文字が終わる前に次が始まる）。上下は 1 語ごとに替える。
  *  - 差し込みは透明から。定位置に近づいた側から文字が見えてくる（文字全体が薄く見えるのではない）。
  *  - 差し込みが終わった文字から羽根が舞い散る。
- *  - 月が文字の後ろを横切る。イントロは三日月、サビは満月、など区切りで満ち欠けが変わる。
+ *  - 月は先頭の文字の左上にかかって止まる（横には動かさない）。文字にかかった部分は透かす。イントロは三日月、サビは満月、など区切りで満ち欠けが変わる。
  * 描くものは字幕の帯からはみ出さない（clip）。決定論: 乱数は J.r（カットの seed）だけ。
  */
 const FONT = 'shippori';
@@ -135,13 +135,13 @@ function drawFeather(g: CanvasRenderingContext2D, x: number, y: number, len: num
 
 const DUR_IN = 0.62;
 
-function render(J: PackJ, env: LayoutEnv, variant: number): PackBox | null {
+function render(J: PackJ, env: LayoutEnv): PackBox | null {
   const { W, H, ctx } = env, text = clean(env.cut.text);
   if (!text) return null;
   const u = Math.min(W, H), bx = W * BAND.x, by = H * BAND.y, bw = W * BAND.w, bh = H * BAND.h;
   const box: PackBox = { x0: bx, y0: by, x1: bx + bw, y1: by + bh };
   if (env.pass !== 'main') return box;
-  const k = motionOf(env), decor = decorOf(env), seed = (Number(env.cut.seed ?? 1) | 0) + variant * 977;
+  const k = motionOf(env), decor = decorOf(env), seed = Number(env.cut.seed ?? 1) | 0;
   const rows = lines(text), maxSize = Math.min(u * (W < H ? 0.085 : 0.066), H * 0.056);
   let size = maxSize;
   const fit = J.fitSize(rows, FONT, bw * 0.96, bh * 0.92, { lead: 1.42 });
@@ -155,10 +155,20 @@ function render(J: PackJ, env: LayoutEnv, variant: number): PackBox | null {
 
   ctx.save(); ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
   try {
-    // 月: 字の後ろを横切る（左→右、構図 2 は右→左）。動き 0 では中央に止める
-    const r = bh * 0.42, prog = k === 0 ? 0.5 : easeInOut(cap(env.lt / dur)), span = bw - r * 2.4;
-    const mx = bx + r * 1.2 + span * (variant === 1 ? 1 - prog : prog), my = by + bh * 0.46;
-    drawMoon(ctx, mx, my, r, moonIllum, waxing, 0.78 * vis, seed, J);
+    // 月: 先頭の文字の左上にかかる位置に止める（横には動かさない）。文字にかかった部分は透かして抜く
+    const first = glyphs[0], r = bh * 0.4;
+    if (first) {
+      const mx = first.x - first.size * 0.5, my = Math.max(by + r * 1.04, first.y - first.size * 0.5), pad = Math.ceil(r * 0.5), dim = Math.ceil(r * 2 + pad * 2);
+      const sg = scratchOf(dim, dim);
+      if (sg) {
+        drawMoon(sg, dim / 2, dim / 2, r, moonIllum, waxing, 1, seed, J);
+        const hx = dim / 2 + (first.x - mx), hy = dim / 2 + (first.y - my), hr = first.size * 0.78;
+        const hole = sg.createRadialGradient(hx, hy, hr * 0.35, hx, hy, hr);
+        hole.addColorStop(0, 'rgba(0,0,0,0.88)'); hole.addColorStop(1, 'rgba(0,0,0,0)');
+        sg.globalCompositeOperation = 'destination-out'; sg.fillStyle = hole; sg.fillRect(0, 0, dim, dim);
+        ctx.save(); ctx.globalAlpha = 0.8 * vis; ctx.drawImage(scratch as HTMLCanvasElement, mx - dim / 2, my - dim / 2); ctx.restore();
+      } else drawMoon(ctx, mx, my, r, moonIllum, waxing, 0.5 * vis, seed, J);
+    }
     // 羽根: 差し込みが終わった文字から舞い散る
     if (k > 0 && decor > 0.02) {
       const per = decor > 0.6 ? 3 : 2;
@@ -207,12 +217,12 @@ function render(J: PackJ, env: LayoutEnv, variant: number): PackBox | null {
 }
 
 const effects = (J: PackJ): PackEffect[] => {
-  const layoutDef = (v: number, key: string, name: string): PackEffect => ({
-    group: 'layout', key, def: { name, fits: () => true, w: 1, portrait: 1, plan: (_rng: Rng) => ({ font: FONT }), render: (env: LayoutEnv) => render(J, env, v) },
+  const layoutDef = (key: string, name: string): PackEffect => ({
+    group: 'layout', key, def: { name, fits: () => true, w: 1, portrait: 1, plan: (_rng: Rng) => ({ font: FONT }), render: (env: LayoutEnv) => render(J, env) },
   });
   const still = (_env: PackEnv): Record<string, never> => ({});
   return [
-    layoutDef(0, 'vscMfCenter', '月が左から右へ.c'), layoutDef(1, 'vscMfReverse', '月が右から左へ.c'),
+    layoutDef('vscMfCenter', '先頭の文字に月がかかる.c'),
     { group: 'enter', key: 'vscMfIn', def: { name: '字幕・差し込み（構図が描く）.c', inDur: (dur: number) => Math.min(0.5, dur * 0.3), apply: still } },
     { group: 'hold', key: 'vscMfHold', def: { name: '字幕・静止.c', apply: still } },
     { group: 'exit', key: 'vscMfOut', def: { name: '字幕・退場（構図が描く）.c', outDur: (dur: number) => Math.min(0.5, dur * 0.25), apply: still } },

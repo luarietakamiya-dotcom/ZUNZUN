@@ -57,7 +57,7 @@ it('文字は字幕の帯の中に並び、語ごとに上下が替わる（か�
 
 it('描画は帯で clip され、座標は有限。同じ入力なら同じ呼び出し（決定論）', () => {
   for (const [W, H] of [[1920, 1080], [1080, 1920], [1280, 400]] as const) for (const text of ['夜', '止まらない鼓動が夜を切り裂いてもっと高く叫べ光の向こうへ今すぐここで', 'Moonlight 羽根の夜'])
-    for (const lt of [0.05, 0.5, 1.4, 2.6]) for (const layout of [0, 1]) {
+    for (const lt of [0.05, 0.5, 1.4, 2.6]) for (const layout of [0]) {
       const a = run(text, lt, { W, H, layout }), b = run(text, lt, { W, H, layout });
       expect(JSON.stringify(a.log)).toBe(JSON.stringify(b.log));
       const clip = a.log.find(([n]) => n === 'rect')!;
