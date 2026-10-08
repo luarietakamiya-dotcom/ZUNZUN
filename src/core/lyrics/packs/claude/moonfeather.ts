@@ -110,7 +110,7 @@ function drawMoon(g: CanvasRenderingContext2D, cx: number, cy: number, r: number
   g.beginPath(); g.moveTo(0, -r); g.arc(0, 0, r, -Math.PI / 2, Math.PI / 2, false);
   if (Math.abs(t) < 0.5) g.lineTo(0, -r); else g.ellipse(0, 0, Math.abs(t), r, 0, Math.PI / 2, -Math.PI / 2, t > 0);
   g.closePath();
-  g.shadowColor = 'rgba(255,240,200,0.75)'; g.shadowBlur = r * 0.35;
+  g.shadowColor = 'rgba(255,240,200,0.55)'; g.shadowBlur = r * 0.22;
   const gr = g.createRadialGradient(-r * 0.25, -r * 0.2, r * 0.1, 0, 0, r * 1.05); gr.addColorStop(0, '#fffbea'); gr.addColorStop(1, '#e6d9a8');
   g.fillStyle = gr; g.fill(); g.shadowBlur = 0;
   g.clip();
@@ -122,14 +122,23 @@ function drawMoon(g: CanvasRenderingContext2D, cx: number, cy: number, r: number
 }
 
 /** 羽根 1 枚（軸と、両側の羽弁） */
+/** 羽根 1 枚: 細い軸と、左右で幅の違う羽弁。羽弁には斜めの切れ込み（羽枝）を数本入れる */
 function drawFeather(g: CanvasRenderingContext2D, x: number, y: number, len: number, ang: number, a: number, color: string): void {
-  g.save(); g.translate(x, y); g.rotate(ang); g.globalAlpha = a;
-  g.fillStyle = color; g.strokeStyle = color; g.lineWidth = Math.max(0.6, len * 0.035);
-  g.beginPath(); g.moveTo(-len / 2, 0);
-  g.bezierCurveTo(-len * 0.2, -len * 0.3, len * 0.25, -len * 0.26, len / 2, 0);
-  g.bezierCurveTo(len * 0.25, len * 0.2, -len * 0.2, len * 0.22, -len / 2, 0);
-  g.closePath(); g.globalAlpha = a * 0.78; g.fill();
-  g.globalAlpha = a; g.beginPath(); g.moveTo(-len * 0.62, len * 0.03); g.lineTo(len * 0.46, -len * 0.01); g.stroke();
+  if (a <= 0.01) return;
+  g.save(); g.translate(x, y); g.rotate(ang);
+  const L = len / 2, w = len * 0.16;
+  g.globalAlpha = a * 0.9; g.fillStyle = color;
+  g.beginPath(); g.moveTo(-L, 0);
+  g.bezierCurveTo(-L * 0.5, -w * 1.25, L * 0.45, -w * 1.1, L, -w * 0.08);
+  g.bezierCurveTo(L * 0.5, w * 0.9, -L * 0.4, w * 0.95, -L * 0.82, w * 0.12);
+  g.closePath(); g.fill();
+  // 羽枝の切れ込み（背景が透ける細い隙間）
+  g.globalCompositeOperation = 'destination-out'; g.lineWidth = Math.max(0.6, len * 0.012); g.strokeStyle = '#000';
+  for (const t of [-0.35, 0.05, 0.4]) { g.beginPath(); g.moveTo(L * t, -w * 0.05); g.lineTo(L * (t + 0.22), -w * 1.1); g.stroke(); }
+  g.globalCompositeOperation = 'source-over';
+  // 軸
+  g.globalAlpha = a; g.strokeStyle = color; g.lineWidth = Math.max(0.8, len * 0.022);
+  g.beginPath(); g.moveTo(-L * 1.12, w * 0.22); g.quadraticCurveTo(0, -w * 0.05, L * 0.95, -w * 0.1); g.stroke();
   g.restore();
 }
 
@@ -174,14 +183,16 @@ function render(J: PackJ, env: LayoutEnv): PackBox | null {
       const per = decor > 0.6 ? 3 : 2;
       glyphs.forEach((gl, i) => {
         for (let f = 0; f < per; f++) {
-          const age = env.lt - (i * stagger + din) - f * 0.07;
-          const life = 0.9 + J.r(seed, i, f * 3 + 1) * 0.6;
+          const r = (n: number) => J.r(seed, i, f * 7 + n);
+          const age = env.lt - (i * stagger + din) - f * 0.09, life = 1.4 + r(1) * 0.8;
           if (age < 0 || age > life) continue;
-          const p = age / life, sway = Math.sin(age * 3.1 + J.r(seed, i, f * 3 + 2) * 6.28);
-          const wind = (J.r(seed, i, f * 3 + 3) < 0.5 ? -1 : 1) * (0.9 + J.r(seed, i, f * 3 + 3) * 1.6) * size * 1.8, rise = (J.r(seed, i, f * 3 + 4) - 0.6) * size * 1.0;
-          const fly = Math.pow(p, 0.55), px = gl.x + wind * fly + sway * size * 0.3, py = gl.y + rise * fly + p * p * size * 0.9;
-          const al = (1 - p) * Math.min(1, age * 6) * decor * vis * (1 - exit);
-          drawFeather(ctx, px, py, size * (0.55 + J.r(seed, i, f * 3 + 5) * 0.35), sway * 0.9 + p * 3 + J.r(seed, i, f) * 6, al, feather);
+          // 文字の上の縁からふわりと離れ、左右へ流れながらゆっくり落ちる（落ち葉のように揺れる）
+          const p = age / life, side = r(2) < 0.5 ? -1 : 1, drift = side * (2 + r(3) * 2.6) * size;
+          const px = gl.x + drift * (1 - Math.pow(1 - p, 3)) + Math.sin(age * 2.6 + r(4) * 6.28) * size * 0.35;
+          const py = gl.y - gl.size * 0.4 - (0.3 + r(5) * 0.5) * size * Math.sin(Math.min(1, p * 1.6) * Math.PI) + p * p * size * 1.1;
+          const al = Math.min(1, age * 5) * Math.pow(1 - p, 0.7) * decor * vis * (1 - exit);
+          const ang = side * 0.4 + Math.sin(age * 2.2 + r(6) * 6.28) * 0.7 + p * side * 1.2;
+          drawFeather(ctx, px, py, size * (0.85 + r(7) * 0.4), ang, al, feather);
         }
       });
     }
@@ -197,7 +208,7 @@ function render(J: PackJ, env: LayoutEnv): PackBox | null {
       target.save();
       target.font = (J as unknown as { fontCSS(f: string, s: number): string }).fontCSS(FONT, gl.size);
       target.textAlign = 'center'; target.textBaseline = 'middle';
-      target.shadowColor = 'rgba(0,0,0,0.8)'; target.shadowBlur = gl.size * 0.16; target.shadowOffsetY = gl.size * 0.04;
+      target.shadowColor = 'rgba(0,0,0,0.6)'; target.shadowBlur = gl.size * 0.09; target.shadowOffsetY = gl.size * 0.03;
       target.fillStyle = fg; if (!sg) target.globalAlpha = a;
       target.fillText(gl.ch, ox, oy);
       target.restore();
