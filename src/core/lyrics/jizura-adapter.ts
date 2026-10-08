@@ -16,6 +16,7 @@ import { directTypeArtPlan } from './packs/type-art-plan';
 import { clearRichLayers } from './packs/claude/rich/layer';
 import { prepareSubtitlePlan, subtitlePack } from './packs/gpt/subtitle';
 import { MOONFEATHER_STYLE_KEY, prepareMoonPlan } from './packs/claude/moonfeather';
+import { oneCutPerLine } from './mv-lines';
 import { moonFeatherPack, prepareMoonPlan as prepareGptMoonPlan } from './packs/gpt/moon-feather';
 
 /**
@@ -666,6 +667,8 @@ export class LyricMotion {
     if (lyrics.motion.style === subtitlePack.styleKey || (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom?.base === subtitlePack.styleKey)) prepareSubtitlePlan(plan);
     if (lyrics.motion.style === moonFeatherPack.styleKey || (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom?.base === moonFeatherPack.styleKey)) prepareGptMoonPlan(plan, sections, lyricsView.times.starts);
     if (lyrics.motion.style === MOONFEATHER_STYLE_KEY || (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom?.base === MOONFEATHER_STYLE_KEY)) prepareMoonPlan(plan, sections, audio?.duration ?? 0);
+    // MV 用（字幕の帯）は 1 行を頭から終わりまで丸ごと見せる（かけら・まとめ直しをしない。2026-10-08 姫）
+    if ([subtitlePack.styleKey, MOONFEATHER_STYLE_KEY].some((k) => lyrics.motion.style === k || (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom?.base === k))) oneCutPerLine(plan);
     await prepareFonts(J, plan, lyricsForEngine(lyrics.text, lyrics.source) + HUD_CHARS);
     // 本番の Renderer は書体の準備が終わってから作る (内部のキャッシュに仮の書体の文字を残さない)
     const renderer = withSeededRandom(deriveSeed(seed, 'renderer'), () => {
