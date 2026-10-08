@@ -291,7 +291,7 @@ export function renderLyricsPanel(): HTMLElement {
   }
   const fileInput = el('input');
   fileInput.type = 'file';
-  fileInput.accept = '.txt,.lrc,.srt,text/plain';
+  // 絞り込み (accept) は付けない: スマホでは .srt / .lrc が灰色になって選べない (2026-10-08 姫「スマホで選べない」)。形式は拡張子と中身で判定する
   // 書き出し (SRT = 開始と終了、LRC = 開始のみ)。画面に出ている時刻（手動・LRC・仮の時刻）をそのまま使う。歌詞が空のときは押せない
   const downloadText = (name: string, mime: string, body: string): void => {
     const url = URL.createObjectURL(new Blob([body], { type: `${mime};charset=utf-8` }));
