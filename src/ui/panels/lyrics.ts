@@ -27,6 +27,7 @@ import { store } from '../../core/store';
 import { defaultLyrics, type LyricBlank, type LyricsSettings, type LyricsSource, type LyricsTiming } from '../../core/types';
 import { blankFromPlayhead, normalizeBlanks } from '../../core/lyrics/blanks';
 import { lyricSyncTargets } from '../../core/lyrics/stem';
+import { lyricsToLrc, lyricsToSrt } from '../../core/lyrics/export';
 import { anyFileButton, AUDIO_ACCEPT } from './panel-helpers';
 import { createRhythmEditor } from './lyrics-rhythm';
 import { activeStem, createStemCard } from './lyrics-stem';
@@ -291,6 +292,15 @@ export function renderLyricsPanel(): HTMLElement {
   const fileInput = el('input');
   fileInput.type = 'file';
   fileInput.accept = '.txt,.lrc,.srt,text/plain';
+  // 書き出し (SRT = 開始と終了、LRC = 開始のみ)。画面に出ている時刻（手動・LRC・仮の時刻）をそのまま使う。歌詞が空のときは押せない
+  const downloadText = (name: string, mime: string, body: string): void => {
+    const url = URL.createObjectURL(new Blob([body], { type: `${mime};charset=utf-8` }));
+    const a = el('a');
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const exportSrt = button(tr('SRT で書き出す', 'Export SRT'), () => { const t = lyricsToSrt(view); if (t) downloadText('lyrics.srt', 'application/x-subrip', t); });
+  const exportLrc = button(tr('LRC で書き出す', 'Export LRC'), () => { const t = lyricsToLrc(view); if (t) downloadText('lyrics.lrc', 'text/plain', t); });
   const textarea = el('textarea', { className: 'lyrics-textarea' });
   textarea.rows = 10;
   textarea.maxLength = MAX_LYRICS_LENGTH;
@@ -313,6 +323,7 @@ export function renderLyricsPanel(): HTMLElement {
   ]);
   inputCard.append(
     el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('形式:', 'Format:') }), sourceSelect, el('span', { className: 'param-label', textContent: tr('ファイルから読み込む:', 'Load from file:') }), fileInput]),
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('今の歌詞と時刻を書き出す:', 'Export the lyrics with their times:') }), exportSrt, exportLrc]),
     textarea,
     syntax,
   );
@@ -567,6 +578,7 @@ export function renderLyricsPanel(): HTMLElement {
     syncHistoryWithStore();
     const lyrics = currentLyrics();
     view = buildLyricsView(lyrics, store.audio.isLoaded ? store.audio.duration : undefined);
+    exportSrt.disabled = exportLrc.disabled = lyricsToSrt(view) === '';
     syncedTimes = {
       starts: view.times.starts.map((s, i) => (view.startSource[i] === 'estimate' ? Infinity : s)),
       ends: view.times.ends,
