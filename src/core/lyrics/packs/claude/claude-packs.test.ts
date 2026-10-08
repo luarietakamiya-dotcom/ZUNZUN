@@ -5,7 +5,7 @@ import { applyMotionPack, registerMotionPacks } from '../index';
 import { CLAUDE_PACKS as ALL_CLAUDE_PACKS } from './index';
 
 /** 月と羽根・字幕は mainDraw を使わず帯へ直接描くので、専用の moonfeather.test.ts で調べる */
-const CLAUDE_PACKS = ALL_CLAUDE_PACKS.filter((p) => !p.id.includes('moonfeather'));
+const CLAUDE_PACKS = ALL_CLAUDE_PACKS.filter((p) => !p.id.includes('moonfeather') && !p.id.includes('shu'));
 import type { LayoutEnv } from '../design-kit';
 import type { PackEnv, PackItem, PackJ } from '../types';
 

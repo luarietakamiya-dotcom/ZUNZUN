@@ -31,10 +31,10 @@ page.on('pageerror', (e) => console.error('ページのエラー:', String(e).sl
 const FD = process.env.LYRIC_FONTS;
 let fontCss = '';
 if (FD) {
-  const packs = [['dela-gothic-one', '400'], ['kaisei-tokumin', '800'], ['dotgothic16', '400'], ['zen-old-mincho', '900'], ['noto-serif-jp', '300'], ['noto-serif-jp', '500'], ['noto-serif-jp', '700'], ['klee-one', '600'], ['noto-sans-jp', '900'], ['noto-sans-jp', '700'], ['noto-sans-jp', '500'], ['noto-sans-jp', '300'], ['m-plus-rounded-1c', '800'], ['shippori-mincho-b1', '800']];
+  const packs = [['dela-gothic-one', '400'], ['kaisei-tokumin', '800'], ['dotgothic16', '400'], ['zen-old-mincho', '900'], ['noto-serif-jp', '300'], ['noto-serif-jp', '500'], ['noto-serif-jp', '700'], ['klee-one', '600'], ['noto-sans-jp', '900'], ['noto-sans-jp', '700'], ['noto-sans-jp', '500'], ['noto-sans-jp', '300'], ['m-plus-rounded-1c', '800'], ['shippori-mincho-b1', '800'], ['yuji-syuku', '400']];
   for (const [n, w] of packs) {
     const f = path.join(FD, n, `${w}.css`);
-    if (fs.existsSync(f)) fontCss += fs.readFileSync(f, 'utf8').replace(/url\(\.\/files\/([^)]+)\)/g, (_m, file) => `url(${URL_}__fonts/${n}/${file})`);
+    if (fs.existsSync(f)) fontCss += fs.readFileSync(f, 'utf8').replace(/url\(\.\/files\/([^)]+)\)/g, (_m, file) => `url(${URL_}__fonts/${n}/files/${file})`);
   }
   await page.route('**/__fonts/**', (route) => {
     const p = path.join(FD, new URL(route.request().url()).pathname.replace('/__fonts/', ''));
@@ -73,6 +73,9 @@ for (const style of STYLES) {
     lines.forEach((_, i) => { times[String(i)] = 0.5 + i * bar2; ends[String(i)] = 0.5 + (i + 1) * bar2 - 0.15; });
     const lyrics = { ...defaultLyrics(), text: lines.join('\n'), motion: { ...defaultLyrics().motion, style }, timing: { ...defaultLyrics().timing, lineTimes: times, lineEnds: ends } };
     const m = await A.LyricMotion.create(lyrics, A.buildJizuraAudio(analysis, null), { projectSeed: 41, width: W, height: H, fps: FPS });
+    // 書体は使う瞬間に取りに行くので、先に歌詞の文字で読み込んでおく（最初のコマから正しい書体で描く）
+    const allText = lines.join('') + 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    await Promise.all([...document.fonts].map((f) => document.fonts.load(`${f.weight} 40px "${f.family.replace(/"/g, '')}"`, allText).catch(() => null)));
     await document.fonts.ready;
     const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
     const g = canvas.getContext('2d');
