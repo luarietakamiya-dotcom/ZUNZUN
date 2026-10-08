@@ -36,7 +36,7 @@ test('MV字幕は横縦・短長文・全構図の出入りも下部帯に収ま
     }
     return { outside, visible, frames, layouts: new Set(layouts).size };
   });
-  expect(result).toEqual({ outside: 0, visible: 12, frames: 72, layouts: 3 });
+  expect(result).toEqual({ outside: 0, visible: 36, frames: 216, layouts: 9 });
 });
 
 test('自動の曲名・間奏カードもMVの下部字幕へ収める', async ({ page }) => {

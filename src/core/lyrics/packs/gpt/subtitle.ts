@@ -5,6 +5,81 @@ import { easeOut, easeInOut } from '../util';
 const set = 'vsgSubtitle';
 const cap = (v: number) => Math.max(0, Math.min(1, v));
 const motion = (env: PackEnv) => cap(env.fx.motion ?? .7);
+const modes = ['float', 'mist', 'slide', 'gather', 'reflow', 'wave'] as const;
+type Mode = typeof modes[number];
+interface KineticItem extends PackItem {
+  subtitleMode?: Mode;
+  subtitleOffsets?: { dx: number; dy: number }[];
+}
+
+function kineticLayout(J: PackJ, mode: Mode): PackEffect {
+  const font = mode === 'float' || mode === 'mist' ? 'mincho_bold' : 'gothic_med';
+  const names: Record<Mode, string> = { float: '一文字ずつ浮かぶ.g', mist: '霧から浮かぶ.g', slide: '横から滑り込む.g', gather: '左右から集まる.g', reflow: '一段から二段へ.g', wave: '文字が波打つ.g' };
+  return { group: 'layout', key: `vsgSubtitle${mode}Layout`, def: {
+    name: names[mode], fits: () => true, w: 1, portrait: 1, plan: () => ({ font }),
+    render(env: LayoutEnv) {
+      const { W, H, ctx } = env, text = clean(env.cut.text);
+      if (!text) return null;
+      const width = W * .8, max = Math.min(W, H) * .072;
+      const lines = subtitleLines(text, mode === 'reflow' || J.fitSize([text], font, width, H * .12) < max * .7);
+      let size = Math.min(max, H * .058, J.fitSize(lines, font, width, H * .12, { lead: 1.35 }));
+      if (mode === 'reflow') size = Math.min(size, J.fitSize([text], font, width, H * .12));
+      const offsets: { dx: number; dy: number }[] = [];
+      if (mode === 'reflow') {
+        const from = J.measure({ text, font, size }), to = J.measure({ text: lines.join('\n'), font, size, lead: 1.35 });
+        let cursor = 0;
+        for (const target of to.lay) {
+          while (cursor < from.lay.length && from.lay[cursor]!.ch !== target.ch) cursor++;
+          const origin = from.lay[cursor++] ?? target;
+          offsets.push({ dx: origin.x - target.x, dy: origin.y - target.y });
+        }
+      }
+      ctx.save(); ctx.beginPath(); ctx.rect(W * .06, H * .77, W * .88, H * .16); ctx.clip();
+      try {
+        return J.mainDraw({ ...env, cut: { ...env.cut, treat: 'vsgSubtitleGeometry' } }, { text: lines.join('\n'), font, size, x: W / 2, y: H * .849, lead: 1.35,
+          color: env.sc.fg, shadow: { color: '#000000dd', blur: size * .15, dy: size * .045 },
+          subtitleMode: mode, subtitleOffsets: offsets, enter: 'vsgSubtitleKineticIn', hold: 'vsgSubtitleKineticHold', exit: 'vsgSubtitleKineticOut' });
+      } finally { ctx.restore(); }
+    },
+  } };
+}
+
+const kineticEffects: PackEffect[] = [
+  { group: 'treat', key: 'vsgSubtitleGeometry', def: { name: '字幕帯・組版を組み替える.g',
+    apply(env: PackEnv, raw: PackItem) {
+      const item = raw as KineticItem;
+      if (item.subtitleMode !== 'reflow') return;
+      const k = motion(env), q = k === 0 ? 1 : easeInOut(cap((env.lt / Math.max(.1, env.cut.dur) - .28) / .36));
+      item.charFns.push(i => ({ dx: (item.subtitleOffsets?.[i]?.dx ?? 0) * (1 - q) * k, dy: (item.subtitleOffsets?.[i]?.dy ?? 0) * (1 - q) * k }));
+    } } },
+  { group: 'enter', key: 'vsgSubtitleKineticIn', def: { name: '字幕帯・文字の登場.g', inDur: (dur: number) => Math.min(1.25, dur * .38),
+    apply(env: PackEnv, raw: PackItem, p: number) {
+      const item = raw as KineticItem, mode = item.subtitleMode ?? 'float', k = motion(env);
+      item.charFns.push((i, _g, n) => {
+        const fraction = i / Math.max(1, n - 1), stagger = mode === 'float' ? 2 : mode === 'mist' ? 1.5 : .35;
+        const q = easeOut(cap(p * (1 + stagger) - fraction * stagger));
+        return { a: q, dx: mode === 'slide' ? (1 - q) * item.size * -5 * k : mode === 'gather' ? (1 - q) * item.size * (fraction < .5 ? -4 : 4) * k : 0,
+          dy: ['float', 'mist', 'wave'].includes(mode) ? (1 - q) * item.size * (mode === 'wave' ? -.65 : .75) * k : 0,
+          blur: mode === 'mist' ? (1 - q) * item.size * .24 * k : 0 };
+      });
+    } } },
+  { group: 'hold', key: 'vsgSubtitleKineticHold', def: { name: '字幕帯・組み替えと波.g',
+    apply(env: PackEnv, raw: PackItem) {
+      const item = raw as KineticItem, k = motion(env);
+      item.charFns.push((i) => {
+        return { dy: item.subtitleMode === 'wave' ? Math.sin(env.lt * 3.2 - i * .6) * item.size * .2 * k : 0 };
+      });
+    } } },
+  { group: 'exit', key: 'vsgSubtitleKineticOut', def: { name: '字幕帯・ほどけて退場.g', outDur: (dur: number) => Math.min(.55, dur * .22),
+    apply(env: PackEnv, raw: PackItem, p: number) {
+      const item = raw as KineticItem, k = motion(env);
+      item.charFns.push((i, _g, n) => {
+        const q = easeInOut(cap(p * 1.45 - i / Math.max(1, n - 1) * .45));
+        return { a: 1 - q, dx: item.subtitleMode === 'slide' ? q * item.size * 3 * k : 0,
+          dy: item.subtitleMode === 'float' || item.subtitleMode === 'mist' ? -q * item.size * .5 * k : 0 };
+      });
+    } } },
+];
 
 /** エンジンが自動で作る曲名・間奏カードも、字幕帯の組版へ移す。 */
 export function prepareSubtitlePlan(plan: { cuts: unknown[] }): void {
@@ -66,7 +141,7 @@ function layout(J: PackJ, variant: number): PackEffect {
 }
 
 function effects(J: PackJ): PackEffect[] {
-  return [0, 1, 2].map(v => layout(J, v)).concat([
+  return [...[0, 1, 2].map(v => { const effect = layout(J, v); return { ...effect, def: { ...effect.def, compatibility: true } }; }), ...modes.map(mode => kineticLayout(J, mode)), ...kineticEffects].concat([
     { group: 'enter', key: 'vsgSubtitleIn', def: { name: '字幕・言葉を送る.g', inDur: (dur: number) => Math.min(.42, dur * .28),
       apply(env: PackEnv, item: PackItem, p: number) {
         item.charFns.push((i, _g, n) => {
@@ -87,8 +162,8 @@ export const subtitlePack: MotionPack = {
   buildStyle(J) {
     const base = structuredClone(J.STYLES.noir!);
     const bias: Record<string, Record<string, number>> = {};
-    for (const effect of effects(J)) (bias[effect.group] ??= {})[effect.key] = 10;
-    return { ...base, name: 'MV・シネマ字幕.g', desc: '画面下の字幕帯だけで動く。中央・左下・右下二段。映像の主役と余白を残す',
+    for (const effect of effects(J)) (bias[effect.group] ??= {})[effect.key] = effect.def.compatibility || ['vsgSubtitleIn', 'vsgSubtitleHold', 'vsgSubtitleOut'].includes(effect.key) ? 0 : 10;
+    return { ...base, name: 'MV・シネマ字幕.g', desc: '字幕帯で一文字ずつ浮かぶ・霧・横滑り・左右集合・一段から二段・波。中央の映像を残す',
       fonts: { display: ['mincho_bold', 'gothic_med'], body: ['gothic_med'], serif: ['mincho_bold'], mono: ['mono'] },
       schemes: [{ bg: '#05080C', fg: '#F5F1E9', sub: '#F5F1E9', accent: '#D8BA7E', accent2: '#D8BA7E', ink: '#F5F1E9', dim: '#05080C', ghostA: '#D8BA7E', ghostB: '#D8BA7E' }],
       bias, decor: {}, texture: { grain: 0, paper: 0, scan: 0 }, ghost: 0, glow: 0, hud: false };
