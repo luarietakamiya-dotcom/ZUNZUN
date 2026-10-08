@@ -16,6 +16,7 @@ import { directTypeArtPlan } from './packs/type-art-plan';
 import { clearRichLayers } from './packs/claude/rich/layer';
 import { prepareSubtitlePlan, subtitlePack } from './packs/gpt/subtitle';
 import { MOONFEATHER_STYLE_KEY, prepareMoonPlan } from './packs/claude/moonfeather';
+import { moonFeatherPack, prepareMoonPlan as prepareGptMoonPlan } from './packs/gpt/moon-feather';
 
 /**
  * ZUNZUN と、同梱した JIZURA の歌詞モーションエンジン (vendor/jizura/jizura-engine.js、window.J) をつなぐ。
@@ -642,7 +643,8 @@ export class LyricMotion {
     };
     // 曲の区切り (歌詞の [サビ] などの見出し) ごとに動きの強さを変える (core/lyrics/section-motion.ts)。
     // 強さごとに段取りを作り、区切りごとにその強さのカットと効果をつなぐ。描くときも区切りの強さの fx を渡す
-    const sections = buildLyricsView(lyrics, audio?.duration).sections;
+    const lyricsView = buildLyricsView(lyrics, audio?.duration);
+    const sections = lyricsView.sections;
     const spans = sectionLevels(sections, lyrics.motion.sections);
     let plan: JizuraPlan;
     let fxSpans: { start: number; end: number; fx: Record<string, unknown> }[] | null = null;
@@ -662,6 +664,7 @@ export class LyricMotion {
     } else plan = makePlan();
     directTypeArtPlan(plan, lyrics.motion);
     if (lyrics.motion.style === subtitlePack.styleKey || (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom?.base === subtitlePack.styleKey)) prepareSubtitlePlan(plan);
+    if (lyrics.motion.style === moonFeatherPack.styleKey || (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom?.base === moonFeatherPack.styleKey)) prepareGptMoonPlan(plan, sections, lyricsView.times.starts);
     if (lyrics.motion.style === MOONFEATHER_STYLE_KEY || (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom?.base === MOONFEATHER_STYLE_KEY)) prepareMoonPlan(plan, sections, audio?.duration ?? 0);
     await prepareFonts(J, plan, lyricsForEngine(lyrics.text, lyrics.source) + HUD_CHARS);
     // 本番の Renderer は書体の準備が終わってから作る (内部のキャッシュに仮の書体の文字を残さない)

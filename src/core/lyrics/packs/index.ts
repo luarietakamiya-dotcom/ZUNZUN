@@ -4,6 +4,7 @@ import { KINETIC_PACKS } from './kinetic-packs';
 import { CLAUDE_PACKS } from './claude';
 import { GPT_PACKS } from './gpt';
 import { subtitlePack } from './gpt/subtitle';
+import { moonFeatherPack } from './gpt/moon-feather';
 import { calmPack } from './calm';
 import { cinemaPack } from './cinema';
 import { designPack } from './design';
@@ -16,7 +17,7 @@ import type { MotionPack, PackContext, PackJ } from './types';
  * オリジナルの歌詞モーション (演出パック) の一覧と、JIZURA への登録・プロジェクトへの反映。
  * パックを足すときは、ここの PACKS に 1 行足す。
  */
-export const PACKS: readonly MotionPack[] = [calmPack, intensePack, rockPack, popPack, designPack, cinemaPack, simplePack, terminalPack, constellationPack, ...KINETIC_PACKS, ...CLAUDE_PACKS, ...GPT_PACKS, subtitlePack];
+export const PACKS: readonly MotionPack[] = [calmPack, intensePack, rockPack, popPack, designPack, cinemaPack, simplePack, terminalPack, constellationPack, ...KINETIC_PACKS, ...CLAUDE_PACKS, ...GPT_PACKS, subtitlePack, moonFeatherPack];
 
 /** パックの演出とスタイルを JIZURA に登録する (何度呼んでも 1 回だけ) */
 export function registerMotionPacks(J: PackJ & { __zunzunPacks?: boolean }): void {

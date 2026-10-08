@@ -65,6 +65,7 @@ export interface CharMod {
   color?: string;
   skew?: number;
   hide?: boolean;
+  clipY?: [number, number];
 }
 
 /** JIZURA が演出に渡す、描く文字 (item) のうち使う分 */
