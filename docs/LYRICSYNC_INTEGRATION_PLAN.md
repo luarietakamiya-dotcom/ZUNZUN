@@ -1,0 +1,74 @@
+# LyricSync 組み込みの計画（姫の承認待ち・実装はまだしない）
+
+作成: Claude / 2026-10-13
+元の資料: LyricSync のセッションからの引き継ぎ（HANDOFF_ZUNZUN.md、2026-10-12。姫がこの会話に貼った内容）
+CLAUDE.md の決まり: 設計の方針を変えるので「Phase 4・Plan Mode」。**この計画を姫が承認するまで、コードは書かない。**
+
+---
+
+## 0. 前提（ZUNZUN 側で確かめたこと）
+- ZUNZUN は**ブラウザの Web アプリだけ**。Electron 版は無い。動く場所は 2 つ。
+  - 公開版: `https://luarietakamiya-dotcom.github.io/ZUNZUN/`（GitHub Pages。スマホでも使っている）
+  - 手元: `npm run dev` → `http://localhost:5173`
+- 歌詞の時刻は `project.lyrics.timing`（`lineTimes` / `lineEnds` / `snap` / `snapWindowMs` / `blanks`）。読み込みは `sanitizeProject()`（`src/core/project/validate.ts`）が、行番号の上限や数値の範囲を確かめている。
+- LRC・SRT の読み込みはすでにある（歌詞タブの「ファイルから読み込む」）。書き出しも 2026-10-08 に追加済み。
+- Codex が別の道（A-003: 既知の歌詞と声の照合の実験）を進めている。そこで使った MMS の照合モデルは **CC-BY-NC-4.0（非商用）** なので「製品には採用しない」と記録している。LyricSync も MMS を使っている（後述 6）。
+
+## 1. 方針をこう変える（設計書の書き換え案）
+今の設計書（`docs/ARCHITECTURE.md`）:
+- 94 行目「Suno のブックマークレットと、AI による歌詞の自動アライメントは作りません」
+- 156 行目「『半自動タップ＋タイムラインでの後調整』を標準にします。AI は使いません」
+
+**書き換え案:**
+> ZUNZUN 本体には、AI の照合モデルを入れない（同梱もダウンロードもしない）。
+> ただし、**利用者の PC で動く別のツール LyricSync の結果を読み込むこと**と、**同じ PC の LyricSync（127.0.0.1）を呼び出すこと**はできるようにする。
+> 自動で付けた時刻は「たたき台」で、半自動タップ・タイムラインでの後調整を標準とする考え方は変えない。
+> 外への送信はしない（LyricSync は同じ PC の中で動き、音源も歌詞も PC の外に出ない）。
+
+理由: 「ローカル完結」「後調整が標準」という ZUNZUN の芯は保ったまま、手打ちが苦手な姫の手間を減らせる。重いモデルは ZUNZUN に入らないので、アプリは軽いまま。
+
+## 2. 段階に分けて入れる（おすすめ）
+### 段階 0: 今すぐ（コードの変更なし）
+LyricSync が作った `.lrc` を、歌詞タブの「ファイルから読み込む」で読む。LyricSync は間奏の行を `[間奏]` として残すので、行番号は変わらない（資料のとおり）。
+
+### 段階 1: 「LyricSync の結果を読み込む」（ネットに出ない。公開版とスマホでも使える）
+- 歌詞タブに「LyricSync の結果を読み込む」を足す。LyricSync の出力（`files.zunzun` の JSON、または応答の JSON 全体）を選ぶと、`lineTimes` / `lineEnds` だけを今の歌詞の時刻として入れる。
+  - `snap` / `snapWindowMs` は**入れない**（姫が決めた吸着の設定を上書きしないため）。
+  - 入れる前に **行の数と中身が今の歌詞と合うか** を確かめる。合わなければ入れずに「歌詞が違います」と出す（行番号のずれ防止）。このために LyricSync 側の出力に「行の本文（または歌詞のハッシュ）」が要る → 6 の依頼 (a)。
+  - 読み込みは「取り消し」で戻せる（今の歌詞の履歴に積む）。
+- `review`（自信の低い行の番号）は、**タイムラインで目立たせる**（色の印）。プロジェクトの JSON には保存しない（`sanitizeProject()` を変えずに済む）。その行を手で動かしたら印は消える。
+- **自動の結果にさらに吸着はかけない**（LyricSync の評価で、吸着はクリック音に引っぱられて精度が下がったため）。ドラッグのときの吸着は、今までどおり姫の設定に従う。
+
+### 段階 2: 「自動で合わせる」ボタン（手元の `npm run dev` のときだけ）
+- 歌詞タブに「LyricSync で自動で合わせる」を足す。LyricSync の `clients/lyricsync-client.ts`（fetch だけ・tsc --strict で型チェック済み）を**そのまま**コピーして使う（ZUNZUN 側で中身を変えない）。
+- 送るもの: 音源のファイル（`audio: Blob`）、今の歌詞の本文、ボーカルのステムがあれば `vocals`（分離を飛ばせて精度も上がる）。
+- 受けたら段階 1 と同じ処理（行の照合 → `lineTimes` / `lineEnds` → `review` の印）。
+- 1 曲 30〜130 秒かかるので、待っている表示と「中止」を付ける。
+- LyricSync が起動していない（`health()` が null）ときは「LyricSync が起動していません。PC で `lyricsync.exe serve` を起動してください」と案内する。ブラウザからはサーバーを起動できない。
+- **公開版（GitHub Pages）とスマホでは使えない**ので、ボタンは出すが押せない状態にして理由を書く。理由は 2 つ:
+  1. LyricSync のサーバーは localhost・file://・app:// のページしか受け付けない（公開版の Origin `https://luarietakamiya-dotcom.github.io` は 403）。
+  2. Chrome は、インターネット上のページから PC 内（127.0.0.1）への通信に、追加の許可（Private Network Access / Local Network Access）を求める。
+  公開版でも使いたい場合は、LyricSync 側の対応が要る → 6 の依頼 (b)。
+
+## 3. 変えるファイル（承認後）
+- 新規 `src/core/lyrics/lyricsync.ts`（LyricSync の出力を検証して `timing` に直す。行の照合）とその単体テスト。
+- 段階 2 のみ: 新規 `src/core/lyrics/lyricsync-client.ts`（LyricSync のファイルをそのままコピー）。
+- `src/ui/panels/lyrics.ts`（ボタンと案内）、`src/ui/panels/lyrics-timeline.ts`（`review` の印）。
+- `docs/ARCHITECTURE.md`（1 の書き換え）、`docs/HANDOFF.md`。
+- 変えないもの: `sanitizeProject()` / `validate.ts`（新しい項目を保存しないため）、LyricSync のコード、JIZURA。新しいパッケージは足さない。
+
+## 4. 確かめ方
+- 単体テスト: 正しい出力・行の数が違う・本文が違う・間奏を含む・数値がおかしい（NaN・負・逆順）・`review` の番号が範囲外、の各場合。
+- E2E: LyricSync の応答をまねたテスト用のサーバー（Playwright の route）で、段階 2 のボタン → 時刻が入る → `review` の行に印、まで。起動していない場合の案内も。
+- 姫の PC での実地: THREE COUNT などで「自動で合わせる」→ 印の行を手直し → 書き出し。**これは私にはできない**（LyricSync が姫の PC にしかないため）。
+
+## 5. 決めてほしいこと（姫へ）
+1. **方針の書き換え（1）に賛成か。**
+2. **どこまで入れるか**: 段階 1 だけ／段階 1 と 2。（おすすめ: 1 と 2。2 は手元の `npm run dev` のときだけ動く）
+3. **Codex の A-003（自動同期の実験）をどうするか**: LyricSync を使うなら、Codex の B2（製品への組み込み）は止めて、LyricSync の結果の評価・手直しの UI に回すのが重複しないと思う。
+4. `review` の印をプロジェクトに保存したいか（保存するなら `sanitizeProject()` の変更が要る。おすすめは保存しない）。
+
+## 6. LyricSync 側へのお願い（姫から伝えてほしい。LyricSync のコードは ZUNZUN 側では変えない）
+- (a) 出力に**行の本文（または歌詞のハッシュ）**を入れてほしい。ZUNZUN が「今の歌詞と同じ行番号か」を確かめるため。
+- (b) 公開版（GitHub Pages）からも使いたい場合: 許可する Origin に `https://luarietakamiya-dotcom.github.io` を足し、Chrome の Private Network Access の事前確認（preflight）に `Access-Control-Allow-Private-Network: true` で答えてほしい。
+- (c) **MMS の照合モデルの利用条件（CC-BY-NC-4.0、非商用）**の確認。作った MV を収益化する場合に問題がないか、LyricSync 側で確かめてほしい（Codex の実験でも、この条件で「製品に採用しない」としていた）。私は法律の判断はできないので、気になる点として挙げる。
