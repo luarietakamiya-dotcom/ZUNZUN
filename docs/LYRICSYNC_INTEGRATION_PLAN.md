@@ -39,16 +39,18 @@ LyricSync が作った `.lrc` を、歌詞タブの「ファイルから読み�
 - `review`（自信の低い行の番号）は、**タイムラインで目立たせる**（色の印）。プロジェクトの JSON には保存しない（`sanitizeProject()` を変えずに済む）。その行を手で動かしたら印は消える。
 - **自動の結果にさらに吸着はかけない**（LyricSync の評価で、吸着はクリック音に引っぱられて精度が下がったため）。ドラッグのときの吸着は、今までどおり姫の設定に従う。
 
-### 段階 2: 「自動で合わせる」ボタン（手元の `npm run dev` のときだけ）
+### 段階 2: 「自動で合わせる」ボタン（**公開版を PC の Chrome で開いたとき**も使う。2026-10-13 姫「公開版にしたい」）
 - 歌詞タブに「LyricSync で自動で合わせる」を足す。LyricSync の `clients/lyricsync-client.ts`（fetch だけ・tsc --strict で型チェック済み）を**そのまま**コピーして使う（ZUNZUN 側で中身を変えない）。
 - 送るもの: 音源のファイル（`audio: Blob`）、今の歌詞の本文、ボーカルのステムがあれば `vocals`（分離を飛ばせて精度も上がる）。
 - 受けたら段階 1 と同じ処理（行の照合 → `lineTimes` / `lineEnds` → `review` の印）。
 - 1 曲 30〜130 秒かかるので、待っている表示と「中止」を付ける。
 - LyricSync が起動していない（`health()` が null）ときは「LyricSync が起動していません。PC で `lyricsync.exe serve` を起動してください」と案内する。ブラウザからはサーバーを起動できない。
-- **公開版（GitHub Pages）とスマホでは使えない**ので、ボタンは出すが押せない状態にして理由を書く。理由は 2 つ:
-  1. LyricSync のサーバーは localhost・file://・app:// のページしか受け付けない（公開版の Origin `https://luarietakamiya-dotcom.github.io` は 403）。
-  2. Chrome は、インターネット上のページから PC 内（127.0.0.1）への通信に、追加の許可（Private Network Access / Local Network Access）を求める。
-  公開版でも使いたい場合は、LyricSync 側の対応が要る → 6 の依頼 (b)。
+- **公開版（GitHub Pages）から使う**ための条件（2026-10-13 姫の希望で、これを前提にする）:
+  1. LyricSync 側: 許可する Origin に `https://luarietakamiya-dotcom.github.io` を足し、Private Network Access の preflight に `Access-Control-Allow-Private-Network: true` で答える（6 の依頼 (b)。LyricSync のセッションに姫から伝える）。
+  2. 姫: 新しい Chrome が「ローカルネットワークへのアクセスを許可しますか」と聞いたら許可する（初回だけ）。
+  3. ZUNZUN: うまくいかない理由を出し分けて案内する（起動していない／Origin で断られた（403）／ブラウザが許可していない）。
+- **スマホでは使えない**（LyricSync は PC にあるため）。PC の公開版で合わせた結果を、プロジェクトの保存か SRT・LRC で持っていく。ボタンは押せない状態にして理由を書く。
+- まずは PC の Chrome を前提にする。Safari・Firefox は未確認。
 
 ## 3. 変えるファイル（承認後）
 - 新規 `src/core/lyrics/lyricsync.ts`（LyricSync の出力を検証して `timing` に直す。行の照合）とその単体テスト。
@@ -64,11 +66,11 @@ LyricSync が作った `.lrc` を、歌詞タブの「ファイルから読み�
 
 ## 5. 決めてほしいこと（姫へ）
 1. **方針の書き換え（1）に賛成か。**
-2. **どこまで入れるか**: 段階 1 だけ／段階 1 と 2。（おすすめ: 1 と 2。2 は手元の `npm run dev` のときだけ動く）
+2. **どこまで入れるか**: 段階 1 と 2（2 は公開版の PC の Chrome でも使う。姫の希望）。
 3. **Codex の A-003（自動同期の実験）をどうするか**: LyricSync を使うなら、Codex の B2（製品への組み込み）は止めて、LyricSync の結果の評価・手直しの UI に回すのが重複しないと思う。
 4. `review` の印をプロジェクトに保存したいか（保存するなら `sanitizeProject()` の変更が要る。おすすめは保存しない）。
 
 ## 6. LyricSync 側へのお願い（姫から伝えてほしい。LyricSync のコードは ZUNZUN 側では変えない）
 - (a) 出力に**行の本文（または歌詞のハッシュ）**を入れてほしい。ZUNZUN が「今の歌詞と同じ行番号か」を確かめるため。
-- (b) 公開版（GitHub Pages）からも使いたい場合: 許可する Origin に `https://luarietakamiya-dotcom.github.io` を足し、Chrome の Private Network Access の事前確認（preflight）に `Access-Control-Allow-Private-Network: true` で答えてほしい。
+- (b) **（必須になった）** 公開版（GitHub Pages）から使うために: 許可する Origin に `https://luarietakamiya-dotcom.github.io` を足し、Chrome の Private Network Access の事前確認（preflight）に `Access-Control-Allow-Private-Network: true` で答えてほしい。
 - (c) **MMS の照合モデルの利用条件（CC-BY-NC-4.0、非商用）**の確認。作った MV を収益化する場合に問題がないか、LyricSync 側で確かめてほしい（Codex の実験でも、この条件で「製品に採用しない」としていた）。私は法律の判断はできないので、気になる点として挙げる。
