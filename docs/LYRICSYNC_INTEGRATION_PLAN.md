@@ -1,4 +1,4 @@
-# LyricSync 組み込みの計画（姫の承認待ち・実装はまだしない）
+# LyricSync 組み込みの計画（2026-10-14 姫が承認。段階 1 は実装済み）
 
 作成: Claude / 2026-10-13
 元の資料: LyricSync のセッションからの引き継ぎ（HANDOFF_ZUNZUN.md、2026-10-12。姫がこの会話に貼った内容）
@@ -74,3 +74,15 @@ LyricSync が作った `.lrc` を、歌詞タブの「ファイルから読み�
 - (a) 出力に**行の本文（または歌詞のハッシュ）**を入れてほしい。ZUNZUN が「今の歌詞と同じ行番号か」を確かめるため。
 - (b) **（必須になった）** 公開版（GitHub Pages）から使うために: 許可する Origin に `https://luarietakamiya-dotcom.github.io` を足し、Chrome の Private Network Access の事前確認（preflight）に `Access-Control-Allow-Private-Network: true` で答えてほしい。
 - (c) **MMS の照合モデルの利用条件（CC-BY-NC-4.0、非商用）**の確認。作った MV を収益化する場合に問題がないか、LyricSync 側で確かめてほしい（Codex の実験でも、この条件で「製品に採用しない」としていた）。私は法律の判断はできないので、気になる点として挙げる。
+
+
+## 7. 決まったこと（2026-10-14 姫「LyricSync を導入した人だけ使える、にする」「OK」）
+- **LyricSync を自分の PC に入れた人だけの機能**にする。入れていない人は今までどおり手で合わせる。
+- 設計書の方針を書き換えた（`docs/ARCHITECTURE.md` の 94 行目・「歌詞同期の方針」の改定）。
+- 「要確認」の印はプロジェクトに保存しない。
+- Codex の A-003 の製品化（B2）は止める。Codex は LyricSync の結果を手直しする画面のレビューに回る。
+- 途中で試した別案: 音を聞かない AI に数字の材料だけ渡す方式は使えない水準だった（`docs/LLM_TEXT_ALIGNMENT_20261014.md`）。
+
+## 8. 実装の状況
+- **段階 1（済み）**: 歌詞タブ「LyricSync の結果を読み込む」。`src/core/lyrics/lyricsync.ts`（読み込みと検証。行の数・本文・値を確かめ、合わなければ取り込まない）、`src/ui/panels/lyrics.ts`（ボタン・案内・結果の表示・取り消し）、`src/ui/panels/lyrics-timeline.ts`（自信の低い行に橙の線と「要確認」。その行を手で動かすと消える）。
+- **段階 2（未着手）**: 「LyricSync で自動で合わせる」ボタン。LyricSync の `clients/lyricsync-client.ts` の実物（API の道すじ・応答の形）が手元に無いので、姫から受け取ってから作る。

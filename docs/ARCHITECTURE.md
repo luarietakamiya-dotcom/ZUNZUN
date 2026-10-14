@@ -91,7 +91,7 @@ interface VisualizerPreset {
 対象：音源読み込み、Audio Analyzer、Visualizer Preset Manager、Solar Gate、Milky Way、Live Stage、PNG Overlay、Project Save/Load（ユーザー指定どおり）。
 - プレビュー再生（再生、停止、シーク）と、共通パラメータ9項目の最小UIを含みます。
 - 書き出しは基盤のみです。MP4を1本出せるところまで作ります（Phase 2のExport基盤）。
-- 対象外：歌詞（Lyric Motion、半自動同期、タイムライン編集）とWebM/PNG連番は、MVPのあとに作ります。Sunoのブックマークレットと、AIによる歌詞の自動アライメントは作りません。
+- 対象外：歌詞（Lyric Motion、半自動同期、タイムライン編集）とWebM/PNG連番は、MVPのあとに作ります。Sunoのブックマークレットと、ZUNZUN 本体に組み込む AI の歌詞の自動アライメントは作りません（2026-10-14 改定: 利用者が自分の PC に入れた別ツール LyricSync の結果を使うことはできる。下の「歌詞同期の方針」を参照）。
 
 ## 7. 実装順序（1ステップごとにビルド、テスト、コミット）
 0. `docs/ARCHITECTURE.md` と、ライセンス、NOTICEの雛形をコミットします ← 承認後の最初の作業
@@ -154,6 +154,8 @@ zunzun/
 
 ## 歌詞同期の方針（MVP後、`core/lyrics`）
 **決定：LYRIMOやSunoのブックマークレットは使いません。**「半自動タップ＋タイムラインでの後調整」を標準にします。AIは使いません。
+
+**改定（2026-10-14、姫の承認。計画: `docs/LYRICSYNC_INTEGRATION_PLAN.md`）:** ZUNZUN 本体には AI の照合モデルを入れません（同梱もダウンロードもしない）。ただし、**利用者が自分の PC に入れた別ツール LyricSync（歌詞の自動タイミング合わせ）の結果**は使えます。LyricSync を入れていない人は、今までどおり半自動タップとタイムラインで合わせます。自動の結果は「たたき台」で、自信の低い行はタイムラインに「要確認」の印を出し、手で直す前提です（後調整が標準という考えは変えない）。ZUNZUN からの外への送信はありません（LyricSync は利用者の PC の中で動く）。
 
 入力
 - 歌詞テキスト（貼り付け）、LRC、SRTを受け付けます。

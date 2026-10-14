@@ -39,6 +39,8 @@ export interface TimelineData {
   rhythm: RhythmGrid | null;
   /** 小節の頭 (昇順、normalizeBars 済み)。小節線のドラッグの番号はこの並びの番号 */
   barHeads: readonly number[];
+  /** 自信の低い行 (LyricSync の結果の review)。true の行はブロックの上に橙の線と「要確認」を出す */
+  review?: readonly boolean[];
   /** 曲の区切り (歌詞の [サビ] などの見出しから)。波形の段とブロックの段の間に色の帯で出す */
   sections?: readonly Section[];
   /** 歌詞の空白 (斜線の帯)。selectedBlank = 選んでいる空白の番号 (-1 = なし) */
@@ -366,9 +368,11 @@ export class LyricsTimeline {
       g.rect(x0 + 4, BLOCK_TOP, Math.max(0, x1 - x0 - 8), BLOCK_H);
       g.clip();
       g.fillStyle = d.source[i] === 'estimate' ? COLORS.textDim : COLORS.text;
-      const label = `${i + 1}. ${d.lines[i]!.interlude ? tr('〔間奏〕', '[interlude]') : d.lines[i]!.text}`;
+      const flagged = d.review?.[i] === true;
+      const label = `${i + 1}. ${flagged ? tr('要確認 ', 'Check ') : ''}${d.lines[i]!.interlude ? tr('〔間奏〕', '[interlude]') : d.lines[i]!.text}`;
       g.fillText(label, x0 + 6, BLOCK_TOP + BLOCK_H / 2);
       g.restore();
+      if (flagged) { g.fillStyle = '#f5a623'; g.fillRect(x0, BLOCK_TOP, Math.max(2, x1 - x0), 3); }
     }
 
     // 歌詞の空白 (斜線の帯。ドラッグ中は見た目だけ動かす)

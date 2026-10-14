@@ -28,6 +28,7 @@ import { defaultLyrics, type LyricBlank, type LyricsSettings, type LyricsSource,
 import { blankFromPlayhead, normalizeBlanks } from '../../core/lyrics/blanks';
 import { lyricSyncTargets } from '../../core/lyrics/stem';
 import { lyricsToLrc, lyricsToSrt } from '../../core/lyrics/export';
+import { readLyricSyncResult } from '../../core/lyrics/lyricsync';
 import { anyFileButton, AUDIO_ACCEPT } from './panel-helpers';
 import { createRhythmEditor } from './lyrics-rhythm';
 import { activeStem, createStemCard } from './lyrics-stem';
@@ -98,6 +99,14 @@ const START_SOURCE_LABELS = (): Record<'manual' | 'lrc' | 'estimate', string> =>
 function startSourceLabel(src: 'manual' | 'lrc' | 'estimate', source: LyricsSource): string {
   return src === 'lrc' && source === 'srt' ? 'SRT' : START_SOURCE_LABELS()[src];
 }
+
+/**
+ * LyricSync の結果で「自信が低い」とされた行（タブを切り替えても残すため、モジュール単位に置く）。
+ * 歌詞の本文が変わったら無効。その行を手で動かしたら、その行の印は消す。プロジェクトには保存しない（姫の決定 2026-10-14）
+ */
+let reviewFlags: { text: string; lines: Set<number> } | null = null;
+const reviewFor = (text: string, n: number): boolean[] | undefined =>
+  reviewFlags && reviewFlags.text === text ? Array.from({ length: n }, (_, i) => reviewFlags!.lines.has(i)) : undefined;
 
 function currentLyrics(): LyricsSettings {
   return store.lyrics ?? defaultLyrics();
@@ -292,6 +301,32 @@ export function renderLyricsPanel(): HTMLElement {
   const fileInput = el('input');
   fileInput.type = 'file';
   // 絞り込み (accept) は付けない: スマホでは .srt / .lrc が灰色になって選べない (2026-10-08 姫「スマホで選べない」)。形式は拡張子と中身で判定する
+  // LyricSync（PC で動く自動タイミング合わせ。入れた人だけの機能）の結果のファイルを読み込む。計画: docs/LYRICSYNC_INTEGRATION_PLAN.md
+  const lyricSyncInput = el('input');
+  lyricSyncInput.type = 'file';
+  lyricSyncInput.hidden = true;
+  const lyricSyncMsg = el('p', { className: 'lyrics-help' });
+  const lyricSyncBtn = button(tr('LyricSync の結果を読み込む', 'Load a LyricSync result'), () => lyricSyncInput.click());
+  lyricSyncInput.addEventListener('change', () => {
+    const file = lyricSyncInput.files?.[0];
+    lyricSyncInput.value = '';
+    if (!file) return;
+    void file.text().then((raw) => {
+      let json: unknown;
+      try { json = JSON.parse(raw); } catch { lyricSyncMsg.textContent = tr('JSON のファイルではありません。LyricSync が書き出した結果（.json）を選んでください', 'Not a JSON file. Choose the result (.json) written by LyricSync'); return; }
+      const res = readLyricSyncResult(json, view.parsed.lines, store.audio.isLoaded ? store.audio.duration : NaN);
+      if (!res.ok) { lyricSyncMsg.textContent = tr(`読み込めませんでした: ${res.error}`, `Could not load: ${res.error}`); return; }
+      if (tap) stopTap();
+      commitTiming({ lineTimes: res.value.lineTimes, lineEnds: res.value.lineEnds });
+      reviewFlags = { text: currentLyrics().text, lines: new Set(res.value.review) };
+      const n = Object.keys(res.value.lineTimes).length, k = res.value.review.length;
+      lyricSyncMsg.textContent = tr(
+        `${n} 行に時刻を入れました。${k ? `自信の低い ${k} 行は、タイムラインに橙の線と「要確認」が出ます。聞いて直してください。` : ''}${res.value.warnings.length ? ` 注意: ${res.value.warnings.join(' / ')}` : ''}（取り消しで戻せます）`,
+        `Times set for ${n} lines.${k ? ` ${k} low-confidence lines are marked "Check" with an orange bar in the timeline.` : ''}${res.value.warnings.length ? ` Note: ${res.value.warnings.join(' / ')}` : ''} (Undo restores the previous times)`,
+      );
+      refresh();
+    });
+  });
   // 書き出し (SRT = 開始と終了、LRC = 開始のみ)。画面に出ている時刻（手動・LRC・仮の時刻）をそのまま使う。歌詞が空のときは押せない
   const downloadText = (name: string, mime: string, body: string): void => {
     const url = URL.createObjectURL(new Blob([body], { type: `${mime};charset=utf-8` }));
@@ -324,6 +359,9 @@ export function renderLyricsPanel(): HTMLElement {
   inputCard.append(
     el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('形式:', 'Format:') }), sourceSelect, el('span', { className: 'param-label', textContent: tr('ファイルから読み込む:', 'Load from file:') }), fileInput]),
     el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('今の歌詞と時刻を書き出す:', 'Export the lyrics with their times:') }), exportSrt, exportLrc]),
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('自動で合わせた結果:', 'Auto-synced result:') }), lyricSyncBtn, lyricSyncInput]),
+    el('p', { className: 'lyrics-help', textContent: tr('LyricSync（PC で動く、歌詞の自動タイミング合わせのツール）を入れた人向けです。LyricSync が書き出した結果（.json）を読み込むと、各行の時刻が入ります。入れていなくても、今までどおり手で合わせられます。', 'For people who have LyricSync (an automatic lyric-timing tool that runs on your PC). Loading its result (.json) sets the time of each line. Without it, sync by hand as before.') }),
+    lyricSyncMsg,
     textarea,
     syntax,
   );
@@ -368,8 +406,10 @@ export function renderLyricsPanel(): HTMLElement {
     onSeek: (t) => {
       if (store.audio.isLoaded) store.audio.seek(t);
     },
-    onDragCommit: (kind, i, value) =>
-      applyEdit((c, t) => (kind === 'start' ? moveLineStart(c, t, i, value) : kind === 'end' ? moveLineEnd(c, t, i, value) : moveLine(c, t, i, value))),
+    onDragCommit: (kind, i, value) => {
+      reviewFlags?.lines.delete(i);
+      applyEdit((c, t) => (kind === 'start' ? moveLineStart(c, t, i, value) : kind === 'end' ? moveLineEnd(c, t, i, value) : moveLine(c, t, i, value)));
+    },
     // timeline 側の noSnap は「Shift を押している」。吸着のオン・オフを Shift で一時的に逆にする
     snap: (t, shift) => snapTime(t, snapTargets(), currentLyrics().timing.snapWindowMs / 1000, timelineSnap !== shift).t,
     // 小節線のドラッグ (R2 の残り)。小節の頭の書き換え・吸着はリズム欄に任せる
@@ -613,6 +653,7 @@ export function renderLyricsPanel(): HTMLElement {
       rhythm: rhythmEditor.grid(),
       barHeads: rhythmEditor.barHeads(),
       sections: view.sections,
+      review: reviewFor(lyrics.text, view.parsed.lines.length),
       blanks: lyrics.timing.blanks ?? [],
       selectedBlank,
     });
