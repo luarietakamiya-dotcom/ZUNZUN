@@ -1,0 +1,6 @@
+.venv/
+assets/
+private/
+__pycache__/
+*.npz
+*.npy
