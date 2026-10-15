@@ -81,14 +81,35 @@ describe('runLyricSyncJob', () => {
     expect(await runLyricSyncJob({ ...base, fetchFn: fakeFetch([json({ id: 'j' }), json({ detail: 'Not Found' }, 404)]).fn })).toMatchObject({ ok: false, reason: 'http', error: expect.stringContaining('見失い') });
     expect(await runLyricSyncJob({ ...base, fetchFn: fakeFetch([json({ id: 'j' }), new TypeError('x')]).fn })).toMatchObject({ ok: false, reason: 'offline' });
   });
-  it('中止すると待つのをやめる。時間切れも止まる', async () => {
+  it('中止すると待つのをやめ、LyricSync にも取り消し（DELETE /jobs/{id}）を送る', async () => {
     const ctrl = new AbortController();
-    const f = fakeFetch([json({ id: 'j' }), json({ status: 'running' }), json({ status: 'running' })]);
+    const f = fakeFetch([json({ id: 'j', status: 'queued' }), json({ id: 'j', status: 'running' }), json({ id: 'j', status: 'running', cancel_requested: true })]);
     const res = await runLyricSyncJob({ ...base, fetchFn: f.fn, signal: ctrl.signal, onProgress: () => ctrl.abort() });
-    expect(res).toMatchObject({ ok: false, reason: 'aborted' });
-    expect(f.calls.length).toBe(2);
+    expect(res).toMatchObject({ ok: false, reason: 'aborted', error: expect.stringContaining('計算も止めました') });
+    expect(f.calls.length).toBe(3);
+    expect(f.calls[2]).toMatchObject({ url: 'http://127.0.0.1:8765/jobs/j', init: { method: 'DELETE' } });
+    // 取り消しの窓口が無い版（1.0.0 は 405）なら、裏で計算が続くと伝える
+    const ctrl2 = new AbortController();
+    const old = fakeFetch([json({ id: 'j' }), json({ status: 'running' }), json({ detail: 'Method Not Allowed' }, 405)]);
+    const res2 = await runLyricSyncJob({ ...base, fetchFn: old.fn, signal: ctrl2.signal, onProgress: () => ctrl2.abort() });
+    expect(res2).toMatchObject({ ok: false, reason: 'aborted', error: expect.stringContaining('裏で計算を続けます') });
+    // 送る前に中止していたら、何も送らない
+    const ctrl3 = new AbortController();
+    ctrl3.abort();
+    const none = fakeFetch([]);
+    expect(await runLyricSyncJob({ ...base, fetchFn: none.fn, signal: ctrl3.signal })).toMatchObject({ ok: false, reason: 'aborted' });
+    expect(none.calls).toEqual([]);
+  });
+  it('時間切れでも止まり、LyricSync に取り消しを送る', async () => {
     let t = 0;
-    const slow = await runLyricSyncJob({ ...base, timeoutSec: 10, now: () => (t += 6000), fetchFn: fakeFetch([json({ id: 'j' }), json({ status: 'running' }), json({ status: 'running' })]).fn });
-    expect(slow).toMatchObject({ ok: false, reason: 'timeout' });
+    const f = fakeFetch([json({ id: 'j' }), json({ status: 'running' }), json({ id: 'j', status: 'cancelled' })]);
+    const slow = await runLyricSyncJob({ ...base, timeoutSec: 10, now: () => (t += 6000), fetchFn: f.fn });
+    expect(slow).toMatchObject({ ok: false, reason: 'timeout', error: expect.stringContaining('計算も止めました') });
+    expect(f.calls[2]!.init?.method).toBe('DELETE');
+  });
+  it('LyricSync 1.1.0 の本物の失敗の応答（2026-10-15 に THREE COUNT で出たもの）を、止まった段階つきで伝える', async () => {
+    const real = { id: '2e7a318db986', status: 'error', progress: 0.9, message: '合わなかった行をその周りだけで合わせ直しています', created: 1792072063.39, cancel_requested: false, result: null, error: 'ValueError: max() arg is an empty sequence' };
+    expect(readJobState(real)).toEqual({ kind: 'failed', error: 'ValueError: max() arg is an empty sequence（「合わなかった行をその周りだけで合わせ直しています」の段階で止まりました）' });
+    expect(readJobState({ ...real, status: 'cancelled', error: null })).toEqual({ kind: 'failed', error: 'LyricSync の側で取り消されました' });
   });
 });

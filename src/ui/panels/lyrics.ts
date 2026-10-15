@@ -29,7 +29,7 @@ import { blankFromPlayhead, normalizeBlanks } from '../../core/lyrics/blanks';
 import { lyricSyncTargets } from '../../core/lyrics/stem';
 import { lyricsToLrc, lyricsToSrt } from '../../core/lyrics/export';
 import { readLyricSyncResult } from '../../core/lyrics/lyricsync';
-import { lyricSyncHealth, runLyricSyncJob } from '../../core/lyrics/lyricsync-remote';
+import { lyricSyncHealth, runLyricSyncJob, type RunResult } from '../../core/lyrics/lyricsync-remote';
 import { ReviewFlags } from '../../core/lyrics/review-flags';
 import { anyFileButton, AUDIO_ACCEPT } from './panel-helpers';
 import { createRhythmEditor } from './lyrics-rhythm';
@@ -192,6 +192,22 @@ function describeSnapAll(r: SnapAllResult): string {
   );
 }
 
+/**
+ * 「LyricSync で自動で合わせる」の仕事。1〜2 分かかる間にタブを替えたり表示を切り替えたりするとパネルが作り直されるので、
+ * パネルの外（モジュール）に持つ。作り直されたパネルは view を差し替えて、様子の表示と結果の取り込みを引き継ぐ
+ * （2026-10-15 本物の LyricSync で試したとき、途中でパネルが作り直されて結果もエラーも出なくなった）
+ */
+interface LyricSyncRun {
+  ctrl: AbortController;
+  startLyrics: LyricsSettings;
+  msg: string;
+  /** 終わったら入る。取り込むか表示したら lyricSyncRun ごと消す */
+  outcome?: RunResult;
+  /** いちばん新しく作られたパネルの表示を更新する */
+  view: (() => void) | null;
+}
+let lyricSyncRun: LyricSyncRun | null = null;
+
 export function renderLyricsPanel(): HTMLElement {
   syncHistoryWithStore();
 
@@ -344,7 +360,8 @@ export function renderLyricsPanel(): HTMLElement {
     const file = lyricSyncInput.files?.[0];
     lyricSyncInput.value = '';
     if (!file) return;
-    lyricSyncAbort?.abort();
+    // 動いている「自動で合わせる」は止め、その結果は出さない（ファイルの読み込みを優先）
+    if (lyricSyncRun) { lyricSyncRun.ctrl.abort(); lyricSyncRun = null; setLyricSyncBusy(false); }
     const gen = ++lyricSyncGen, startLyrics = currentLyrics();
     void file.text().then((raw) => {
       if (gen !== lyricSyncGen || !lyricSyncBtn.isConnected) return;
@@ -353,63 +370,76 @@ export function renderLyricsPanel(): HTMLElement {
       applyLyricSync(json, gen, startLyrics);
     });
   });
-  // 「LyricSync で自動で合わせる」: 同じ PC の LyricSync（127.0.0.1）に曲と歌詞を送り、終わるまで待って取り込む（段階 2）
-  let lyricSyncAbort: AbortController | null = null;
+  // 「LyricSync で自動で合わせる」: 同じ PC の LyricSync（127.0.0.1）に曲と歌詞を送り、終わるまで待って取り込む（段階 2）。
+  // 仕事そのものは lyricSyncRun（モジュール）に持ち、このパネルは表示と取り込みだけを受け持つ
   let lastLyricSyncRaw: unknown = null;
   const lyricSyncSaveRaw = button(tr('応答を保存（不具合の報告用）', 'Save the response (for bug reports)'), () => {
     downloadText('lyricsync-response.json', 'application/json', JSON.stringify(lastLyricSyncRaw, null, 2));
   });
   lyricSyncSaveRaw.hidden = true;
-  const lyricSyncStop = button(tr('中止', 'Stop'), () => lyricSyncAbort?.abort());
+  const lyricSyncStop = button(tr('中止', 'Stop'), () => lyricSyncRun?.ctrl.abort());
   lyricSyncStop.hidden = true;
+  const setLyricSyncBusy = (busy: boolean): void => { lyricSyncAuto.disabled = busy; lyricSyncStop.hidden = !busy; };
+  /** lyricSyncRun の様子をこのパネルに出す。終わっていれば取り込むか結果を出して、仕事を片付ける */
+  const showLyricSyncRun = (): void => {
+    const run = lyricSyncRun;
+    if (!run || !lyricSyncAuto.isConnected) return; // 古いパネル（タブを替えた後など）は何もしない。次に作られるパネルが引き継ぐ
+    const res = run.outcome;
+    if (!res) { setLyricSyncBusy(true); lyricSyncMsg.textContent = run.msg; return; }
+    lyricSyncRun = null;
+    setLyricSyncBusy(false);
+    if (res.ok) { applyLyricSync(res.result, ++lyricSyncGen, run.startLyrics); return; }
+    lyricSyncMsg.textContent = res.reason === 'aborted' ? res.error : tr(`うまくいきませんでした: ${res.error}`, `It did not work: ${res.error}`);
+    if (res.raw !== undefined) { lastLyricSyncRaw = res.raw; lyricSyncSaveRaw.hidden = false; }
+  };
   const lyricSyncAuto = button(tr('LyricSync で自動で合わせる', 'Auto-sync with LyricSync'), () => {
     const audio = store.audio.file;
     const startLyrics = currentLyrics();
     lyricSyncSaveRaw.hidden = true;
     if (!audio || !store.audio.isLoaded) { lyricSyncMsg.textContent = tr('先に「音楽」タブで曲を読み込んでください', 'Load a song in the Music tab first'); return; }
     if (!startLyrics.text.trim()) { lyricSyncMsg.textContent = tr('先に歌詞を入れてください', 'Enter the lyrics first'); return; }
-    lyricSyncAbort?.abort();
-    const gen = ++lyricSyncGen, ctrl = new AbortController();
-    lyricSyncAbort = ctrl;
+    lyricSyncRun?.ctrl.abort();
+    ++lyricSyncGen;
+    const run: LyricSyncRun = { ctrl: new AbortController(), startLyrics, msg: tr('LyricSync につないでいます…', 'Connecting to LyricSync…'), view: null };
+    lyricSyncRun = run;
+    run.view = showLyricSyncRun;
     const stem = activeStem();
-    const setBusy = (busy: boolean) => { lyricSyncAuto.disabled = busy; lyricSyncStop.hidden = !busy; };
-    setBusy(true);
-    lyricSyncMsg.textContent = tr('LyricSync につないでいます…', 'Connecting to LyricSync…');
+    const say = (msg: string): void => { if (lyricSyncRun !== run) return; run.msg = msg; run.view?.(); };
+    const finish = (outcome: RunResult): void => { if (lyricSyncRun !== run) return; run.outcome = outcome; run.view?.(); };
+    say(run.msg);
     void (async () => {
+      const health = await lyricSyncHealth({ signal: run.ctrl.signal });
+      if (!health) {
+        finish(run.ctrl.signal.aborted ? { ok: false, reason: 'aborted', error: tr('中止しました', 'Stopped') } : {
+          ok: false,
+          reason: 'offline',
+          error: tr(
+            'LyricSync につながりませんでした。(1) PC のデスクトップにある「LyricSync」をダブルクリックして起動してください（右下の通知領域にアイコンが出ます）。(2) Chrome が「ローカル ネットワークへのアクセス」を聞いてきたら「許可」を押してください。(3) スマホからは使えません（LyricSync は PC で動くため）。',
+            'Could not reach LyricSync. (1) Double-click "LyricSync" on your PC desktop to start it (an icon appears in the notification area). (2) If Chrome asks about local network access, click Allow. (3) It does not work from a phone (LyricSync runs on the PC).',
+          ),
+        });
+        return;
+      }
+      const first = health.modelLoaded === false ? tr('（1 曲目は AI の読み込みがあるので、いつもより長くかかります）', ' (the first song takes longer while the AI model loads)') : '';
+      say(tr(`LyricSync に送りました。ふつう 30 秒〜2 分ほどかかります${first}`, `Sent to LyricSync. It usually takes 30 s to 2 min${first}`));
       try {
-        const health = await lyricSyncHealth({ signal: ctrl.signal });
-        if (gen !== lyricSyncGen) return;
-        if (!health) {
-          lyricSyncMsg.textContent = tr(
-            'LyricSync につながりませんでした。(1) PC で LyricSync を起動してください（lyricsync.exe serve）。(2) Chrome が「ローカル ネットワークへのアクセス」を聞いてきたら「許可」を押してください。(3) スマホからは使えません（LyricSync は PC で動くため）。',
-            'Could not reach LyricSync. (1) Start LyricSync on your PC (lyricsync.exe serve). (2) If Chrome asks about local network access, click Allow. (3) It does not work from a phone (LyricSync runs on the PC).',
-          );
-          return;
-        }
-        const first = health.modelLoaded === false ? tr('（1 曲目は AI の読み込みがあるので、いつもより長くかかります）', ' (the first song takes longer while the AI model loads)') : '';
-        lyricSyncMsg.textContent = tr(`LyricSync に送りました。ふつう 30 秒〜2 分ほどかかります${first}`, `Sent to LyricSync. It usually takes 30 s to 2 min${first}`);
-        const res = await runLyricSyncJob({
+        finish(await runLyricSyncJob({
           audio, audioName: audio.name,
           vocals: stem?.file ?? null, vocalsName: stem?.file.name,
           lyrics: startLyrics.text,
-          signal: ctrl.signal,
+          signal: run.ctrl.signal,
           onProgress: ({ elapsed, progress, message }) => {
-            if (gen !== lyricSyncGen) return;
             const pct = progress == null ? '' : ` ${Math.round(progress * 100)}%`;
-            lyricSyncMsg.textContent = tr(`LyricSync で合わせています…${pct}（${Math.round(elapsed)} 秒）${message ? ` ${message}` : ''}${first}`, `LyricSync is syncing…${pct} (${Math.round(elapsed)} s)${message ? ` ${message}` : ''}${first}`);
+            say(tr(`LyricSync で合わせています…${pct}（${Math.round(elapsed)} 秒）${message ? ` ${message}` : ''}${first}`, `LyricSync is syncing…${pct} (${Math.round(elapsed)} s)${message ? ` ${message}` : ''}${first}`));
           },
-        });
-        if (gen !== lyricSyncGen) return;
-        if (res.ok) { applyLyricSync(res.result, gen, startLyrics); return; }
-        lyricSyncMsg.textContent = res.reason === 'aborted'
-          ? tr('中止しました（LyricSync は裏で計算を続けますが、結果は取り込みません）', 'Stopped (LyricSync keeps computing in the background, but the result is not applied)')
-          : tr(`うまくいきませんでした: ${res.error}`, `It did not work: ${res.error}`);
-        if (res.raw !== undefined) { lastLyricSyncRaw = res.raw; lyricSyncSaveRaw.hidden = false; }
-      } finally {
-        if (lyricSyncAbort === ctrl) { lyricSyncAbort = null; if (lyricSyncAuto.isConnected) setBusy(false); }
+        }));
+      } catch (e) {
+        finish({ ok: false, reason: 'format', error: String(e) });
       }
     })();
   });
+  // 作り直されたパネルが、動いている仕事（または、パネルが無い間に終わった仕事）を引き継ぐ
+  if (lyricSyncRun) { lyricSyncRun.view = showLyricSyncRun; queueMicrotask(showLyricSyncRun); }
   const exportSrt = button(tr('SRT で書き出す', 'Export SRT'), () => { const t = lyricsToSrt(view); if (t) downloadText('lyrics.srt', 'application/x-subrip', t); });
   const exportLrc = button(tr('LRC で書き出す', 'Export LRC'), () => { const t = lyricsToLrc(view); if (t) downloadText('lyrics.lrc', 'text/plain', t); });
   const textarea = el('textarea', { className: 'lyrics-textarea' });
