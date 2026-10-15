@@ -20,6 +20,8 @@ export interface LoadedStem {
   duration: number;
   analysis: AudioAnalysis;
   audioBuffer: AudioBuffer;
+  /** 元のファイル (LyricSync へ送るため) */
+  file: File;
 }
 
 let loaded: LoadedStem | null = null;
@@ -38,6 +40,7 @@ export async function loadVocalStem(file: File): Promise<LoadedStem> {
     duration: decoded.duration,
     analysis: analyzeSamples(decoded.mono, decoded.sampleRate),
     audioBuffer: decoded.audioBuffer,
+    file,
   };
   loaded = stem;
   return stem;

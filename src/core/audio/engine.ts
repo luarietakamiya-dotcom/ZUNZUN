@@ -20,6 +20,8 @@ export class AudioEngine {
   private _player: AudioPlayer | null = null;
   private _audioBuffer: AudioBuffer | null = null;
   private _fileName = '';
+  /** 読み込んだ元のファイル (LyricSync へ送るため。メモリにだけ置き、Project JSON には入れない) */
+  private _file: File | null = null;
   private _sha256 = '';
   private _lastT = 0;
 
@@ -42,6 +44,11 @@ export class AudioEngine {
 
   get fileName(): string {
     return this._fileName;
+  }
+
+  /** 読み込んだ元のファイル (無ければ null) */
+  get file(): File | null {
+    return this._file;
   }
 
   /** Project JSON の audio.sha256 用。読み込み直したファイルが同じものかの照合に使う */
@@ -75,6 +82,7 @@ export class AudioEngine {
     this._player = new AudioPlayer(decoded.audioBuffer);
     this._audioBuffer = decoded.audioBuffer;
     this._fileName = file.name;
+    this._file = file;
     this._lastT = 0;
     this._sha256 = await sha256Hex(decoded.raw);
   }
@@ -156,6 +164,7 @@ export class AudioEngine {
     this._analysis = null;
     this._timeline = null;
     this._fileName = '';
+    this._file = null;
     this._sha256 = '';
     this._lastT = 0;
   }

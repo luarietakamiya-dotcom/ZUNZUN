@@ -772,3 +772,9 @@ Codex: 質感つき `.c` の統合レビュー（特に `layerOf` のキャッ�
 - Codex の提案を採用: 取り込み後はタップの再開位置を消して確認モードへ。
 - 検証: 単体テスト（lyricsync 6 件・review-flags 1 件）、E2E `tests/e2e/lyricsync-import.spec.ts` 3 件（取り込み→取り消しで戻る／未確認と行数違いの断り／読み込みを 800ms 遅らせて途中で歌詞を書き換えると取り込まない）、全 vitest・lint・build。未確認: 本物の LyricSync の出力ファイル。
 - 次の提案（姫の確認待ち）: Codex の案「要確認の行だけを 1 画面 1 行で『聞く → 印を選ぶ → 適用して次へ』（今のままでよい／どれでもない／分からない、ドラッグも残す、吸着は選んだときだけ）」。
+
+### 2026-10-15 Claude: LyricSync 段階 2「LyricSync で自動で合わせる」ボタン（姫「既製品っぽいツールに仕上げよう」）
+- 姫の PC で LyricSync の `/health`・`/openapi.json` を見せてもらい、窓口（`POST /jobs` → `GET /jobs/{jid}`、送るのは multipart の audio / vocals / lyrics / language / separate / formats）を確定。`lyricsync-client.ts` の実物は無いので、ZUNZUN 側で `src/core/lyrics/lyricsync-remote.ts` を書いた（計画の「client をそのままコピー」から変更）。
+- 応答の形は openapi に書かれていない（schema が空）。仕事の番号（id / jid / job_id / job.id）・状態（status / state、queued・running・done・error など）・結果（result / response / output か応答そのもの）をよくある名前で幅広く受け、読めない形なら止めて「応答を保存（不具合の報告用）」のボタンを出す。
+- 歌詞タブ: 「LyricSync で自動で合わせる」「中止」。読み込んだ曲（`AudioEngine.file` を新設、メモリだけ）とボーカルのステム（あれば。`LoadedStem.file` を新設し、送るときは分離を飛ばす）と、歌詞の本文（改行つき）を 127.0.0.1:8765 に送る。つながらなければ起動・Chrome の許可・スマホでは使えない、を案内。取り込みは段階 1 と同じ処理（照合・要確認・取り消し・途中で歌詞が変わったら取り込まない）。中止は「待つのをやめる」だけ（取り消しの窓口が無いため、画面にもそう書く）。
+- 検証: 単体テスト 7 件（`lyricsync-remote.test.ts`、まねの fetch）、E2E 2 件（Playwright の route で LyricSync をまねて、送る → 計算中 → 終わった → 4 行に時刻／起動していないときの案内）、全 vitest 668 件・lint・build。**未確認: 本物の LyricSync との通信**（応答の形、Chrome のローカル ネットワークの許可、実曲での時間）。route で横取りしているので、Chrome の Private Network Access の事前確認は E2E では通っていない。

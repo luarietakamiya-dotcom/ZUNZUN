@@ -85,4 +85,5 @@ LyricSync が作った `.lrc` を、歌詞タブの「ファイルから読み�
 
 ## 8. 実装の状況
 - **段階 1（済み）**: 歌詞タブ「LyricSync の結果を読み込む」。`src/core/lyrics/lyricsync.ts`（読み込みと検証。行の数・本文・値を確かめ、合わなければ取り込まない）、`src/ui/panels/lyrics.ts`（ボタン・案内・結果の表示・取り消し）、`src/ui/panels/lyrics-timeline.ts`（自信の低い行に橙の線と「要確認」。その行を手で動かすと消える）。
-- **段階 2（未着手）**: 「LyricSync で自動で合わせる」ボタン。LyricSync の `clients/lyricsync-client.ts` の実物（API の道すじ・応答の形）が手元に無いので、姫から受け取ってから作る。
+- **段階 2（2026-10-15 実装。本物との通信は未確認）**: 歌詞タブ「LyricSync で自動で合わせる」。`src/core/lyrics/lyricsync-remote.ts`（`/health` → `POST /jobs` → `GET /jobs/{jid}` を 2 秒ごと）。窓口は姫の PC の `/openapi.json` で確認。`lyricsync-client.ts` の実物は使わず ZUNZUN 側で書いた（応答の形は openapi に無いので、よくある名前を幅広く受け、読めなければ応答を保存して送ってもらう）。中止は待つのをやめるだけ（取り消しの窓口が無い）。
+- **LyricSync 側へのお願い（既製品らしくするため。姫から伝える）**: (d) ダブルクリックで起動できるショートカット（デスクトップ・スタートメニュー）と、起動中が分かる表示（タスクトレイなど）。(e) 応答の形（`/jobs`・`/jobs/{jid}` の JSON）を openapi に書く。(f) 仕事の取り消しの窓口（`DELETE /jobs/{jid}`）。

@@ -55,3 +55,55 @@ test('読み込みの途中で歌詞を書き換えたら、取り込まない�
   await expect.poll(() => message(page), { timeout: 5000 }).toContain('取り込みませんでした');
   expect(await timing(page)).toEqual(before);
 });
+
+/** 2 秒の無音の WAV（「自動で合わせる」は読み込んだ曲を送るので、曲が要る） */
+function testWav(): Buffer {
+  const rate = 22050, n = rate * 2, buf = Buffer.alloc(44 + n * 2);
+  buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write('WAVEfmt ', 8); buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22); buf.writeUInt32LE(rate, 24); buf.writeUInt32LE(rate * 2, 28);
+  buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(n * 2, 40);
+  return buf;
+}
+const syncMessage = async (page: Page) => (await page.locator('p.lyrics-help').allTextContents()).find((t) => /LyricSync|時刻を入れました|うまくいきませんでした/.test(t) && !/入れた人向け/.test(t)) ?? '';
+
+test('「LyricSync で自動で合わせる」: 曲と歌詞（改行つき）を 127.0.0.1 に送り、終わるまで待って取り込む', async ({ page }) => {
+  // まねの LyricSync: /health → /jobs（番号）→ /jobs/j1（計算中 → 終わった）
+  let posted = '', polls = 0;
+  await page.route('http://127.0.0.1:8765/**', async (route) => {
+    const req = route.request(), url = new URL(req.url());
+    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json' };
+    if (url.pathname === '/health') return route.fulfill({ headers: cors, body: JSON.stringify({ ok: true, gpu: 'RTX', model_loaded: false }) });
+    if (url.pathname === '/jobs' && req.method() === 'POST') { posted = req.postDataBuffer()?.toString('utf8') ?? ''; return route.fulfill({ headers: cors, body: JSON.stringify({ id: 'j1', status: 'queued' }) }); }
+    if (url.pathname === '/jobs/j1') {
+      polls++;
+      return route.fulfill({ headers: cors, body: JSON.stringify(polls < 2 ? { status: 'running', progress: 0.3 } : { status: 'done', result: RESULT }) });
+    }
+    return route.fulfill({ status: 404, headers: cors, body: '{}' });
+  });
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  await page.goto('/');
+  await page.locator('input[type="file"][accept^="audio/*"]').setInputFiles({ name: 'song.wav', mimeType: 'audio/wav', buffer: testWav() });
+  await expect.poll(() => page.evaluate(async () => (await import('/src/core/store.ts')).store.audio.isLoaded)).toBe(true);
+  await page.locator('button', { hasText: /^歌詞$/ }).first().click();
+  await page.fill('textarea.lyrics-textarea', LYRICS);
+  await page.waitForTimeout(300);
+  await page.getByRole('button', { name: 'LyricSync で自動で合わせる' }).click();
+  await expect.poll(() => syncMessage(page), { timeout: 15000 }).toContain('4 行に時刻を入れました');
+  expect(await timing(page)).toEqual({ '0': 1, '1': 3.5, '2': 6, '3': 9 });
+  expect(posted).toMatch(/赤いライトが\r?\n鼓動を撃った/);
+  expect(posted).toContain('name="audio"; filename="song.wav"');
+  expect(polls).toBe(2);
+});
+
+test('「LyricSync で自動で合わせる」: LyricSync が起動していなければ、起動の仕方を案内する', async ({ page }) => {
+  await page.route('http://127.0.0.1:8765/**', (route) => route.abort('connectionrefused'));
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  await page.goto('/');
+  await page.locator('input[type="file"][accept^="audio/*"]').setInputFiles({ name: 'song.wav', mimeType: 'audio/wav', buffer: testWav() });
+  await expect.poll(() => page.evaluate(async () => (await import('/src/core/store.ts')).store.audio.isLoaded)).toBe(true);
+  await page.locator('button', { hasText: /^歌詞$/ }).first().click();
+  await page.fill('textarea.lyrics-textarea', LYRICS);
+  await page.getByRole('button', { name: 'LyricSync で自動で合わせる' }).click();
+  await expect.poll(() => syncMessage(page)).toContain('lyricsync.exe serve');
+  await expect(page.getByRole('button', { name: 'LyricSync で自動で合わせる' })).toBeEnabled();
+});

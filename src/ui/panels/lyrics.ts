@@ -29,6 +29,7 @@ import { blankFromPlayhead, normalizeBlanks } from '../../core/lyrics/blanks';
 import { lyricSyncTargets } from '../../core/lyrics/stem';
 import { lyricsToLrc, lyricsToSrt } from '../../core/lyrics/export';
 import { readLyricSyncResult } from '../../core/lyrics/lyricsync';
+import { lyricSyncHealth, runLyricSyncJob } from '../../core/lyrics/lyricsync-remote';
 import { ReviewFlags } from '../../core/lyrics/review-flags';
 import { anyFileButton, AUDIO_ACCEPT } from './panel-helpers';
 import { createRhythmEditor } from './lyrics-rhythm';
@@ -304,39 +305,6 @@ export function renderLyricsPanel(): HTMLElement {
   lyricSyncInput.hidden = true;
   const lyricSyncMsg = el('p', { className: 'lyrics-help' });
   const lyricSyncBtn = button(tr('LyricSync の結果を読み込む', 'Load a LyricSync result'), () => lyricSyncInput.click());
-  let lyricSyncGen = 0;
-  lyricSyncInput.addEventListener('change', () => {
-    const file = lyricSyncInput.files?.[0];
-    lyricSyncInput.value = '';
-    if (!file) return;
-    // 読み込みの間に、別のファイルを選ぶ・歌詞を書き換える・プロジェクトを開く・タブを替える、が起きたら取り込まない
-    const gen = ++lyricSyncGen, startLyrics = currentLyrics(), startTiming = startLyrics.timing;
-    void file.text().then((raw) => {
-      const now = currentLyrics();
-      if (gen !== lyricSyncGen || !lyricSyncBtn.isConnected) return;
-      if (now.text !== startLyrics.text || now.timing.lineTimes !== startTiming.lineTimes || now.timing.lineEnds !== startTiming.lineEnds) {
-        lyricSyncMsg.textContent = tr('読み込みの間に歌詞かプロジェクトが変わったので、取り込みませんでした。もう一度選んでください', 'The lyrics or project changed while loading, so nothing was applied. Choose the file again');
-        return;
-      }
-      let json: unknown;
-      try { json = JSON.parse(raw); } catch { lyricSyncMsg.textContent = tr('JSON のファイルではありません。LyricSync が書き出した結果（.json）を選んでください', 'Not a JSON file. Choose the result (.json) written by LyricSync'); return; }
-      const lines = buildLyricsView(now, store.audio.isLoaded ? store.audio.duration : undefined).parsed.lines;
-      const res = readLyricSyncResult(json, lines, store.audio.isLoaded ? store.audio.duration : NaN);
-      if (!res.ok) { lyricSyncMsg.textContent = tr(`読み込めませんでした: ${res.error}`, `Could not load: ${res.error}`); return; }
-      if (tap) stopTap();
-      syncHistoryWithStore();
-      commitTiming({ lineTimes: res.value.lineTimes, lineEnds: res.value.lineEnds }, new Set(res.value.review));
-      // 取り込んだあとは、タップの再開位置を消して確認モードへ（Codex の提案: 古い再開位置で上書きしないため）
-      resumeLine = null;
-      setMode('check');
-      const n = Object.keys(res.value.lineTimes).length, k = res.value.review.length;
-      lyricSyncMsg.textContent = tr(
-        `${n} 行に時刻を入れました。${k ? `自信の低い ${k} 行は、タイムラインに橙の線と「要確認」が出ます。聞いて直してください。` : ''}${res.value.warnings.length ? ` 注意: ${res.value.warnings.join(' / ')}` : ''}（取り消しで戻せます）`,
-        `Times set for ${n} lines.${k ? ` ${k} low-confidence lines are marked "Check" with an orange bar in the timeline.` : ''}${res.value.warnings.length ? ` Note: ${res.value.warnings.join(' / ')}` : ''} (Undo restores the previous times)`,
-      );
-      refresh();
-    });
-  });
   // 書き出し (SRT = 開始と終了、LRC = 開始のみ)。画面に出ている時刻（手動・LRC・仮の時刻）をそのまま使う。歌詞が空のときは押せない
   const downloadText = (name: string, mime: string, body: string): void => {
     const url = URL.createObjectURL(new Blob([body], { type: `${mime};charset=utf-8` }));
@@ -344,6 +312,104 @@ export function renderLyricsPanel(): HTMLElement {
     a.href = url; a.download = name; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+  let lyricSyncGen = 0;
+  /**
+   * LyricSync の結果（応答の JSON）を今の歌詞に取り込む。ファイルの読み込みと「自動で合わせる」の両方で使う。
+   * 始めたときから、別の読み込みが始まった・歌詞かプロジェクトが変わった・タブを替えた、なら取り込まない
+   */
+  const applyLyricSync = (json: unknown, gen: number, startLyrics: LyricsSettings): void => {
+    const now = currentLyrics(), startTiming = startLyrics.timing;
+    if (gen !== lyricSyncGen || !lyricSyncBtn.isConnected) return;
+    if (now.text !== startLyrics.text || now.timing.lineTimes !== startTiming.lineTimes || now.timing.lineEnds !== startTiming.lineEnds) {
+      lyricSyncMsg.textContent = tr('読み込みの間に歌詞かプロジェクトが変わったので、取り込みませんでした。もう一度やり直してください', 'The lyrics or project changed while loading, so nothing was applied. Try again');
+      return;
+    }
+    const lines = buildLyricsView(now, store.audio.isLoaded ? store.audio.duration : undefined).parsed.lines;
+    const res = readLyricSyncResult(json, lines, store.audio.isLoaded ? store.audio.duration : NaN);
+    if (!res.ok) { lyricSyncMsg.textContent = tr(`読み込めませんでした: ${res.error}`, `Could not load: ${res.error}`); lastLyricSyncRaw = json; lyricSyncSaveRaw.hidden = false; return; }
+    if (tap) stopTap();
+    syncHistoryWithStore();
+    commitTiming({ lineTimes: res.value.lineTimes, lineEnds: res.value.lineEnds }, new Set(res.value.review));
+    // 取り込んだあとは、タップの再開位置を消して確認モードへ（Codex の提案: 古い再開位置で上書きしないため）
+    resumeLine = null;
+    setMode('check');
+    const n = Object.keys(res.value.lineTimes).length, k = res.value.review.length;
+    lyricSyncMsg.textContent = tr(
+      `${n} 行に時刻を入れました。${k ? `自信の低い ${k} 行は、タイムラインに橙の線と「要確認」が出ます。聞いて直してください。` : ''}${res.value.warnings.length ? ` 注意: ${res.value.warnings.join(' / ')}` : ''}（取り消しで戻せます）`,
+      `Times set for ${n} lines.${k ? ` ${k} low-confidence lines are marked "Check" with an orange bar in the timeline.` : ''}${res.value.warnings.length ? ` Note: ${res.value.warnings.join(' / ')}` : ''} (Undo restores the previous times)`,
+    );
+    refresh();
+  };
+  lyricSyncInput.addEventListener('change', () => {
+    const file = lyricSyncInput.files?.[0];
+    lyricSyncInput.value = '';
+    if (!file) return;
+    lyricSyncAbort?.abort();
+    const gen = ++lyricSyncGen, startLyrics = currentLyrics();
+    void file.text().then((raw) => {
+      if (gen !== lyricSyncGen || !lyricSyncBtn.isConnected) return;
+      let json: unknown;
+      try { json = JSON.parse(raw); } catch { lyricSyncMsg.textContent = tr('JSON のファイルではありません。LyricSync が書き出した結果（.json）を選んでください', 'Not a JSON file. Choose the result (.json) written by LyricSync'); return; }
+      applyLyricSync(json, gen, startLyrics);
+    });
+  });
+  // 「LyricSync で自動で合わせる」: 同じ PC の LyricSync（127.0.0.1）に曲と歌詞を送り、終わるまで待って取り込む（段階 2）
+  let lyricSyncAbort: AbortController | null = null;
+  let lastLyricSyncRaw: unknown = null;
+  const lyricSyncSaveRaw = button(tr('応答を保存（不具合の報告用）', 'Save the response (for bug reports)'), () => {
+    downloadText('lyricsync-response.json', 'application/json', JSON.stringify(lastLyricSyncRaw, null, 2));
+  });
+  lyricSyncSaveRaw.hidden = true;
+  const lyricSyncStop = button(tr('中止', 'Stop'), () => lyricSyncAbort?.abort());
+  lyricSyncStop.hidden = true;
+  const lyricSyncAuto = button(tr('LyricSync で自動で合わせる', 'Auto-sync with LyricSync'), () => {
+    const audio = store.audio.file;
+    const startLyrics = currentLyrics();
+    lyricSyncSaveRaw.hidden = true;
+    if (!audio || !store.audio.isLoaded) { lyricSyncMsg.textContent = tr('先に「音楽」タブで曲を読み込んでください', 'Load a song in the Music tab first'); return; }
+    if (!startLyrics.text.trim()) { lyricSyncMsg.textContent = tr('先に歌詞を入れてください', 'Enter the lyrics first'); return; }
+    lyricSyncAbort?.abort();
+    const gen = ++lyricSyncGen, ctrl = new AbortController();
+    lyricSyncAbort = ctrl;
+    const stem = activeStem();
+    const setBusy = (busy: boolean) => { lyricSyncAuto.disabled = busy; lyricSyncStop.hidden = !busy; };
+    setBusy(true);
+    lyricSyncMsg.textContent = tr('LyricSync につないでいます…', 'Connecting to LyricSync…');
+    void (async () => {
+      try {
+        const health = await lyricSyncHealth({ signal: ctrl.signal });
+        if (gen !== lyricSyncGen) return;
+        if (!health) {
+          lyricSyncMsg.textContent = tr(
+            'LyricSync につながりませんでした。(1) PC で LyricSync を起動してください（lyricsync.exe serve）。(2) Chrome が「ローカル ネットワークへのアクセス」を聞いてきたら「許可」を押してください。(3) スマホからは使えません（LyricSync は PC で動くため）。',
+            'Could not reach LyricSync. (1) Start LyricSync on your PC (lyricsync.exe serve). (2) If Chrome asks about local network access, click Allow. (3) It does not work from a phone (LyricSync runs on the PC).',
+          );
+          return;
+        }
+        const first = health.modelLoaded === false ? tr('（1 曲目は AI の読み込みがあるので、いつもより長くかかります）', ' (the first song takes longer while the AI model loads)') : '';
+        lyricSyncMsg.textContent = tr(`LyricSync に送りました。ふつう 30 秒〜2 分ほどかかります${first}`, `Sent to LyricSync. It usually takes 30 s to 2 min${first}`);
+        const res = await runLyricSyncJob({
+          audio, audioName: audio.name,
+          vocals: stem?.file ?? null, vocalsName: stem?.file.name,
+          lyrics: startLyrics.text,
+          signal: ctrl.signal,
+          onProgress: ({ elapsed, progress, message }) => {
+            if (gen !== lyricSyncGen) return;
+            const pct = progress == null ? '' : ` ${Math.round(progress * 100)}%`;
+            lyricSyncMsg.textContent = tr(`LyricSync で合わせています…${pct}（${Math.round(elapsed)} 秒）${message ? ` ${message}` : ''}${first}`, `LyricSync is syncing…${pct} (${Math.round(elapsed)} s)${message ? ` ${message}` : ''}${first}`);
+          },
+        });
+        if (gen !== lyricSyncGen) return;
+        if (res.ok) { applyLyricSync(res.result, gen, startLyrics); return; }
+        lyricSyncMsg.textContent = res.reason === 'aborted'
+          ? tr('中止しました（LyricSync は裏で計算を続けますが、結果は取り込みません）', 'Stopped (LyricSync keeps computing in the background, but the result is not applied)')
+          : tr(`うまくいきませんでした: ${res.error}`, `It did not work: ${res.error}`);
+        if (res.raw !== undefined) { lastLyricSyncRaw = res.raw; lyricSyncSaveRaw.hidden = false; }
+      } finally {
+        if (lyricSyncAbort === ctrl) { lyricSyncAbort = null; if (lyricSyncAuto.isConnected) setBusy(false); }
+      }
+    })();
+  });
   const exportSrt = button(tr('SRT で書き出す', 'Export SRT'), () => { const t = lyricsToSrt(view); if (t) downloadText('lyrics.srt', 'application/x-subrip', t); });
   const exportLrc = button(tr('LRC で書き出す', 'Export LRC'), () => { const t = lyricsToLrc(view); if (t) downloadText('lyrics.lrc', 'text/plain', t); });
   const textarea = el('textarea', { className: 'lyrics-textarea' });
@@ -369,9 +435,10 @@ export function renderLyricsPanel(): HTMLElement {
   inputCard.append(
     el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('形式:', 'Format:') }), sourceSelect, el('span', { className: 'param-label', textContent: tr('ファイルから読み込む:', 'Load from file:') }), fileInput]),
     el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('今の歌詞と時刻を書き出す:', 'Export the lyrics with their times:') }), exportSrt, exportLrc]),
-    el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('自動で合わせた結果:', 'Auto-synced result:') }), lyricSyncBtn, lyricSyncInput]),
-    el('p', { className: 'lyrics-help', textContent: tr('LyricSync（PC で動く、歌詞の自動タイミング合わせのツール）を入れた人向けです。LyricSync が書き出した結果（.json）を読み込むと、各行の時刻が入ります。入れていなくても、今までどおり手で合わせられます。', 'For people who have LyricSync (an automatic lyric-timing tool that runs on your PC). Loading its result (.json) sets the time of each line. Without it, sync by hand as before.') }),
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('自動で合わせる:', 'Auto-sync:') }), lyricSyncAuto, lyricSyncStop, lyricSyncBtn, lyricSyncInput]),
+    el('p', { className: 'lyrics-help', textContent: tr('LyricSync（PC で動く、歌詞の自動タイミング合わせのツール）を入れた人向けです。PC で LyricSync を起動しておき、PC の Chrome でこのページを開いて「LyricSync で自動で合わせる」を押すと、今の曲と歌詞から各行の時刻が入ります（曲も歌詞も PC の外には出ません）。LyricSync が書き出した結果（.json）を読み込むこともできます。入れていなくても、今までどおり手で合わせられます。', 'For people who have LyricSync (an automatic lyric-timing tool that runs on your PC). Start LyricSync on the PC, open this page in Chrome on the same PC and press "Auto-sync with LyricSync": each line gets its time from the current song and lyrics (nothing leaves your PC). You can also load a result (.json) written by LyricSync. Without it, sync by hand as before.') }),
     lyricSyncMsg,
+    lyricSyncSaveRaw,
     textarea,
     syntax,
   );
