@@ -205,6 +205,8 @@ describe('buildJizuraProject', () => {
     // 歌詞モーションの設定 (既定値) がスタイルと fx に入る
     expect(p.style).toBe('noir');
     expect(p.fx).toEqual({ motion: 0.7, decor: 0.5, density: 0.55 });
+    // 飾りの数字・時刻を消す設定は、オンのときだけ fx に入る (本家 JIZURA と同じ名前)
+    expect((buildJizuraProject({ ...lyrics, motion: { ...lyrics.motion, hideNo: true, hideTime: true } }, defaults, { seed: 99, aspect: '9:16', fps: 30 }).fx as Record<string, unknown>)).toMatchObject({ hideNo: true, hideTime: true });
     // 画面を覆う場面転換は使わない (JIZURA の enabled で無効にする)
     const { trans, layout } = p.enabled as { trans: Record<string, boolean>; layout: Record<string, boolean> };
     for (const k of COVERING_TRANSITIONS) expect(trans[k]).toBe(false);

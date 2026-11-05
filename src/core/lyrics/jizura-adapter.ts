@@ -17,6 +17,7 @@ import { clearRichLayers } from './packs/claude/rich/layer';
 import { prepareSubtitlePlan, subtitlePack } from './packs/gpt/subtitle';
 import { MOONFEATHER_STYLE_KEY, prepareMoonPlan } from './packs/claude/moonfeather';
 import { oneCutPerLine } from './mv-lines';
+import { installDecoTextPatch } from './deco-text';
 import { prepareShuPlan, SHU_STYLE_KEY } from './packs/claude/shu';
 import { moonFeatherPack, prepareMoonPlan as prepareGptMoonPlan } from './packs/gpt/moon-feather';
 
@@ -126,6 +127,7 @@ export function loadJizura(): Promise<JizuraApi> {
     installTimingPatch(J);
     installAspectPatch(J);
     installGlyphIdPatch(J);
+    installDecoTextPatch(J);
     registerOddMeterPack(J as unknown as PackApi);
     // オリジナルの歌詞モーション (演出パック: 静寂 など)。そのスタイルのときだけ候補に入る (packs/index.ts)
     registerMotionPacks(J as unknown as PackJ);
@@ -346,7 +348,9 @@ export function buildJizuraProject(
     aspect: opts.aspect,
     fps: opts.fps,
     style: lyrics.motion.style,
-    fx: { ...fx, motion: lyrics.motion.motion, decor: lyrics.motion.decor, density: lyrics.motion.density },
+    fx: { ...fx, motion: lyrics.motion.motion, decor: lyrics.motion.decor, density: lyrics.motion.density,
+      // 飾りの数字・時刻を消す (core/lyrics/deco-text.ts)。オフのときは何も足さない (前と同じものを JIZURA に渡す)
+      ...(lyrics.motion.hideNo ? { hideNo: true } : {}), ...(lyrics.motion.hideTime ? { hideTime: true } : {}) },
     timing: {
       ...defaults.timing,
       lineTimes: { ...lyrics.timing.lineTimes },

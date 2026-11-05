@@ -197,12 +197,35 @@ export function renderLyricMotionPanel(): HTMLElement {
     sectionGrid,
     sectionNote,
   ]);
+  // 飾りの数字・時刻を消す（本家 JIZURA と同じ設定。core/lyrics/deco-text.ts。2026-11-05 姫）
+  const hideNo = el('input');
+  hideNo.type = 'checkbox';
+  hideNo.dataset.motion = 'hide-no';
+  hideNo.addEventListener('change', () => updateMotion({ hideNo: hideNo.checked }));
+  const hideTime = el('input');
+  hideTime.type = 'checkbox';
+  hideTime.dataset.motion = 'hide-time';
+  hideTime.addEventListener('change', () => updateMotion({ hideTime: hideTime.checked }));
+  const decoTextRow = el('div', {}, [
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [
+      el('label', { className: 'row-gap param-label' }, [hideNo, tr('飾りの数字を消す', 'Hide decorative numbers')]),
+      el('label', { className: 'row-gap param-label' }, [hideTime, tr('飾りの時刻を消す', 'Hide decorative times')]),
+    ]),
+    el('span', {
+      className: 'param-help',
+      textContent: tr(
+        '数字: 行と行の間のカウントダウン、構図や装飾が添える「No.01」「128」など。時刻: 「00:12.34」「REC 1:05」など。歌詞に入っている数字・時刻はそのまま出ます（JIZURA の同じ設定と同じ）。',
+        'Numbers: the countdown between lines and labels like "No.01" or "128" added by layouts and decorations. Times: "00:12.34", "REC 1:05" and so on. Numbers and times in the lyrics stay (same as the JIZURA setting).',
+      ),
+    }),
+  ]);
   const noLyrics = el('div', { className: 'placeholder-card' });
   const motionCard = el('div', { className: 'lyrics-card' }, [
     el('label', { className: 'row-gap param-label' }, [motionEnabled, tr('ビジュアライザーの上に歌詞の動きを重ねる', 'Show lyric motion over the visuals')]),
     el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('スタイル:', 'Style:') }), styleSelect, customBtn, motionStatus]),
     styleEditor.element,
     el('div', { className: 'param-grid lyrics-motion-grid' }, sliderRows),
+    decoTextRow,
     applyNotice.element,
     sampleButton,
     sampleControls,
@@ -254,7 +277,9 @@ export function renderLyricMotionPanel(): HTMLElement {
       row.input.value = String(m[def.key]);
       row.label.textContent = `${def.label}: ${m[def.key].toFixed(2)}`;
     }
-    for (const c of [styleSelect, ...[...motionInputs.values()].map((r) => r.input)]) c.disabled = !m.enabled;
+    hideNo.checked = !!m.hideNo;
+    hideTime.checked = !!m.hideTime;
+    for (const c of [styleSelect, hideNo, hideTime, ...[...motionInputs.values()].map((r) => r.input)]) c.disabled = !m.enabled;
     const sm = m.sections ?? defaultSectionMotion();
     sectionsOn.checked = sm.enabled;
     sectionsOn.disabled = !m.enabled;

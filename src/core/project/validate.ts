@@ -230,6 +230,8 @@ function sanitizeLyricsMotion(raw: unknown): LyricsMotion {
     custom: sanitizeCustomStyle(raw.custom),
     ...sanitizeMotionEdits(raw),
     ...(isPlainObject(raw.sections) ? { sections: sanitizeSectionMotion(raw.sections) } : {}),
+    ...(typeof raw.hideNo === 'boolean' ? { hideNo: raw.hideNo } : {}),
+    ...(typeof raw.hideTime === 'boolean' ? { hideTime: raw.hideTime } : {}),
   };
 }
 

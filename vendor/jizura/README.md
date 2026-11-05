@@ -24,6 +24,7 @@ ZUNZUN に合わせる必要があるところは、同梱ファイルではな�
 
 - 決定論: `J.Renderer` は紙の質感とフィルムの粒を `Math.random()` で作るので、Renderer を作るときと紙の質感の下準備のときだけ `Math.random` を seed 付きの乱数に差し替える。
 - 行の終了（ZUNZUN の `lineEnds`）: `J.computeTiming` を包んで反映する。
+- 飾りの数字・時刻を消す: 本家 v0.10.0 の「飾りの数字を消す / 飾りの時刻を消す」（#32、`src/03_text.js` の `J.decoTextKind` / `J.hideDecoText`）を、`src/core/lyrics/deco-text.ts` に同じ判定で写し、`J.drawItem` を包んで足している（2026-11-05）。同梱版を更新してこの機能が入ったら、包むのをやめて本家のものを使う。
 - フォント: JIZURA の実装どおり Google Fonts から読み込む（ZUNZUN で外部通信を許しているのはフォントの取得だけ。`docs/ARCHITECTURE.md` の技術選定を参照）。
 
 ## 更新のしかた
