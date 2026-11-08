@@ -328,7 +328,8 @@ export function renderLyricsPanel(): HTMLElement {
     a.href = url; a.download = name; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  let lyricSyncGen = 0;
+  const leadVocalBySong = new WeakMap<File, File>();
+let lyricSyncGen = 0;
   /**
    * LyricSync の結果（応答の JSON）を今の歌詞に取り込む。ファイルの読み込みと「自動で合わせる」の両方で使う。
    * 始めたときから、別の読み込みが始まった・歌詞かプロジェクトが変わった・タブを替えた、なら取り込まない
@@ -379,7 +380,7 @@ export function renderLyricsPanel(): HTMLElement {
   lyricSyncSaveRaw.hidden = true;
   const lyricSyncStop = button(tr('中止', 'Stop'), () => lyricSyncRun?.ctrl.abort());
   lyricSyncStop.hidden = true;
-  const setLyricSyncBusy = (busy: boolean): void => { lyricSyncAuto.disabled = busy; lyricSyncStop.hidden = !busy; };
+  const setLyricSyncBusy = (busy: boolean): void => { lyricSyncAuto.disabled = busy; lyricSyncStop.hidden = !busy; showLead(); };
   /** lyricSyncRun の様子をこのパネルに出す。終わっていれば取り込むか結果を出して、仕事を片付ける */
   const showLyricSyncRun = (): void => {
     const run = lyricSyncRun;
@@ -392,6 +393,30 @@ export function renderLyricsPanel(): HTMLElement {
     lyricSyncMsg.textContent = res.reason === 'aborted' ? res.error : tr(`うまくいきませんでした: ${res.error}`, `It did not work: ${res.error}`);
     if (res.raw !== undefined) { lastLyricSyncRaw = res.raw; lyricSyncSaveRaw.hidden = false; }
   };
+  const leadInput = document.createElement('input');
+  leadInput.type = 'file';
+  leadInput.accept = AUDIO_ACCEPT;
+  const leadLabel = el('label', { className: 'param-label' }, [
+    document.createTextNode(tr('リードボーカル参照音源（任意）: ', 'Lead vocal reference (optional): ')), leadInput,
+  ]);
+  const leadStatus = el('span', { className: 'param-label' });
+  const leadRemove = button(tr('参照を外す', 'Remove reference'), () => {
+    if (store.audio.file) leadVocalBySong.delete(store.audio.file);
+    showLead();
+  });
+  function showLead(): void {
+    const song = store.audio.file;
+    const ref = song && leadVocalBySong.get(song);
+    leadInput.disabled = !song || !!lyricSyncRun && !lyricSyncRun.outcome;
+    leadRemove.disabled = leadInput.disabled || !ref;
+    leadStatus.textContent = ref?.name ?? (song ? tr('専用参照なし', 'No dedicated reference') : tr('先に曲を読み込んでください', 'Load a song first'));
+  }
+  leadInput.onchange = () => {
+    const ref = leadInput.files?.[0];
+    if (ref && store.audio.file) leadVocalBySong.set(store.audio.file, ref);
+    leadInput.value = '';
+    showLead();
+  };
   const lyricSyncAuto = button(tr('LyricSync で自動で合わせる', 'Auto-sync with LyricSync'), () => {
     const audio = store.audio.file;
     const startLyrics = currentLyrics();
@@ -403,7 +428,7 @@ export function renderLyricsPanel(): HTMLElement {
     const run: LyricSyncRun = { ctrl: new AbortController(), startLyrics, msg: tr('LyricSync につないでいます…', 'Connecting to LyricSync…'), view: null };
     lyricSyncRun = run;
     run.view = showLyricSyncRun;
-    const stem = activeStem();
+    const vocals = leadVocalBySong.get(audio) ?? activeStem()?.file;
     const say = (msg: string): void => { if (lyricSyncRun !== run) return; run.msg = msg; run.view?.(); };
     const finish = (outcome: RunResult): void => { if (lyricSyncRun !== run) return; run.outcome = outcome; run.view?.(); };
     say(run.msg);
@@ -425,7 +450,7 @@ export function renderLyricsPanel(): HTMLElement {
       try {
         finish(await runLyricSyncJob({
           audio, audioName: audio.name,
-          vocals: stem?.file ?? null, vocalsName: stem?.file.name,
+          vocals: vocals ?? null, vocalsName: vocals?.name,
           lyrics: startLyrics.text,
           signal: run.ctrl.signal,
           onProgress: ({ elapsed, progress, message }) => {
@@ -481,6 +506,8 @@ export function renderLyricsPanel(): HTMLElement {
           el('li', { textContent: tr('準備完了後、デスクトップの「LyricSync Easy」を起動します。初回はモデルのダウンロード（約4GB）が必要です。', 'After setup, open LyricSync Easy on your desktop. First use downloads about 4 GB of models.') }),
           el('li', { textContent: tr('同じPCのChromeで曲を読み込み、歌詞を入力して「LyricSync で自動で合わせる」を押します。', 'In Chrome on the same PC, load a song, enter its lyrics, and choose Auto-sync with LyricSync.') }),
         ]),
+        el('p', { className: 'lyrics-help', textContent: tr('歌詞合わせに使う主旋律の歌声だけを選べます。元の曲と同じ開始位置・長さ（冒頭の無音も含む）の音源を使ってください。再生・書き出しは元の曲のままです。未指定なら有効なボーカルステム、なければ元の曲を使います。', 'For timing only, choose an isolated lead vocal with the same start and duration as the song, including leading silence. Playback and export keep the original mix. Without a reference, LyricSync uses the active vocal stem or separates the song itself.') }),
+        el('div', { className: 'row-gap lyrics-row-wrap' }, [leadLabel, leadStatus, leadRemove]),
         el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('自動で合わせる:', 'Auto-sync:') }), lyricSyncAuto, lyricSyncStop, lyricSyncBtn, lyricSyncInput]),
         lyricSyncMsg,
         lyricSyncSaveRaw,
@@ -737,6 +764,7 @@ export function renderLyricsPanel(): HTMLElement {
   const snapIsCurrent = (): boolean => lastSnapAll != null && history.current === lastSnapAll.after;
 
   function refresh(): void {
+    showLead();
     syncHistoryWithStore();
     const lyrics = currentLyrics();
     view = buildLyricsView(lyrics, store.audio.isLoaded ? store.audio.duration : undefined);

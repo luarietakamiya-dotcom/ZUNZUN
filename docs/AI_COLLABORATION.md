@@ -802,3 +802,6 @@ Codex: 質感つき `.c` の統合レビュー（特に `layerOf` のキャッ�
 
 ### Codex: LyricSync Easy 配布（歌詞パネル・public/downloads）
 PCの歌詞タブに日英の説明・手順・Windows ZIPへのリンクを追加。build / lint / 675 tests 通過、ビルド内ZIPは元ファイルと一致。別PCでの初回導入は未確認。
+
+### Codex: PC版LyricSyncの歌詞合わせ専用リードボーカル（lyrics.ts）
+専用参照は曲ごとのメモリ内に保持。既存ステムより優先して vocals に送る。build / lint / 単体675件通過。実曲の同期は未確認。
