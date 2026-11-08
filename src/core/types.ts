@@ -484,10 +484,10 @@ export interface LyricsMotion {
   sections?: LyricsSectionMotion;
   /**
    * 飾りの数字を消す（構図・装飾・HUD の「No.01」「128」、行の間のカウントダウンなど。歌詞の数字は残す）。
-   * 本家 JIZURA の「飾りの数字を消す」と同じ（core/lyrics/deco-text.ts）。古いプロジェクトには無い（無いときは消さない）
+   * JIZURA の「飾りの数字を消す」（fx.hideNo）。古いプロジェクトには無い（無いときは消さない）
    */
   hideNo?: boolean;
-  /** 飾りの時刻を消す（「00:12.34」「REC 1:05」など）。本家 JIZURA の「飾りの時刻を消す」と同じ */
+  /** 飾りの時刻を消す（「00:12.34」「REC 1:05」など）。JIZURA の「飾りの時刻を消す」（fx.hideTime） */
   hideTime?: boolean;
 }
 

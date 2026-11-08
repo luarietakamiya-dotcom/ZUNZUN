@@ -29,9 +29,21 @@ describe('computeLineTimes (JIZURA の J.computeTiming と同じ規則 + lineEnd
     expect(computeLineTimes(parsed, { lineTimes: { '1': 6.5 }, lineEnds: {} }).starts).toEqual([1, 6.5, 9]);
   });
 
-  it('タグの無い行が混ざると、タグは使わずに見積もる (JIZURA と同じ)', () => {
+  it('タグの無い行が混ざっても、タグは使う。タグの無い行は直前の行から見積もる (JIZURA 0.10 と同じ)', () => {
     const parsed = parseLyrics('[00:10.00]a\nb');
-    expect(computeLineTimes(parsed, none).starts[0]).toBeCloseTo(0.4);
+    const { starts } = computeLineTimes(parsed, none);
+    expect(starts[0]).toBeCloseTo(10);
+    expect(starts[1]).toBeCloseTo(10 + 1.3);
+  });
+
+  it('見積もりの行は次の決まった時刻までに詰める。決まった時刻は前より戻らない (JIZURA 0.10 と同じ)', () => {
+    const parsed = parseLyrics('a\nbbbbbbbbbbbbbbbbbbbb\ncccccccccccccccccccc\nd');
+    const { starts } = computeLineTimes(parsed, { lineTimes: { '0': 1, '3': 3 }, lineEnds: {} });
+    expect(starts[0]).toBe(1);
+    expect(starts[3]).toBe(3);
+    expect(starts[1]! > 1 && starts[2]! > starts[1]! && starts[2]! < 3).toBe(true);
+    const back = computeLineTimes(parseLyrics('a\nb'), { lineTimes: { '0': 5, '1': 2 }, lineEnds: {} });
+    expect(back.starts[1]).toBeCloseTo(5.05);
   });
 
   it('間奏は指定の秒数 (無ければ 4 秒) の長さ', () => {

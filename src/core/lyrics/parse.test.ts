@@ -89,6 +89,11 @@ describe('SRT', () => {
     expect(parsed.srtEnds).toEqual([3.25, 8]);
   });
 
+  it('LRC で時刻の無い行は、末尾に回さず直前の時刻つきの行のすぐ後ろに残す (JIZURA 0.10 と同じ)', () => {
+    const { lines } = parseLyrics('[00:05.00]二\n[間奏]\n手で足した\n[00:01.00]一\n[00:09.00]三');
+    expect(lines.map((l) => (l.interlude ? '間奏' : l.text))).toEqual(['一', '二', '間奏', '手で足した', '三']);
+  });
+
   it('1 時間を超える時刻も分に直す', () => {
     const { text } = srtToLrc('1\n01:02:03,004 --> 01:02:05,000\nlate');
     expect(text).toBe('[62:03.004]late');

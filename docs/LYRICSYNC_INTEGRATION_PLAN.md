@@ -93,3 +93,8 @@ LyricSync が作った `.lrc` を、歌詞タブの「ファイルから読み�
   - 見つけて直した不具合: 計算中（1〜2 分）にタブを替える・表示が切り替わる（画面の幅でスマホ表示⇔PC 表示）と、パネルが作り直されて、結果もエラーも出ず取り込まれなかった。仕事をパネルの外（`lyrics.ts` のモジュール）に持ち、作り直したパネルが引き継ぐようにした。
   - **成功の応答は本物ではまだ通っていない**: LyricSync 1.1.0 が THREE COUNT（2 つの音源・見出しあり/なし・ZUNZUN からでも curl からでも）で毎回 `ValueError: max() arg is an empty sequence` で止まる（「合わなかった行をその周りだけで合わせ直しています」の段階、進み 90%）。前に 1.0.0 で成功した音源でも同じなので、1.1.0 の退行と見ている（LyricSync 側で直してもらう）。代わりに、前に LyricSync が書き出した本物の結果（`.lyricsync.json` と `.zunzun-timing.json`）から、server.py と同じ形（`result.files.zunzun` は JSON の**文字列**）の応答を組み立ててページの fetch に返し、ボタン → 途中でタブを替える → 戻る、の流れで 61 行の開始・終了がすべて一致、自信の低い 5 行に橙の印が出ることを確かめた。
   - まだ確かめていないこと: 公開版（github.io）を PC の Chrome で開いたときの「ローカル ネットワークへのアクセス」の確認と接続。LyricSync の不具合が直ったあとの、本物の成功の応答。
+
+## 9. JIZURA 0.10.1 への更新の影響（2026-11-08）
+- ZUNZUN の `parseLyrics` を JIZURA 0.10 の並べ方に合わせた: **LRC で時刻の無い行（間奏・手で足した行）を、末尾に回さず書いた位置に残す。**
+- LyricSync の `lyricsync/lyrics.py` は ZUNZUN の古い `parse.ts` を写しているので、**時刻のある行と無い行が混ざった LRC を歌詞にしたときだけ**、行番号が ZUNZUN とずれる。ふつうの歌詞（タグ無し）・すべての行にタグがある LRC・SRT では変わらない。ずれても ZUNZUN は行の本文の照合で取り込みを断る（`readLyricSyncResult`）。
+- LyricSync 側へのお願い (g): `lyrics.py` の LRC の並べ方を ZUNZUN の新しい `parse.ts` に合わせ、`tests/parse_expected_zunzun.json` を作り直してほしい。

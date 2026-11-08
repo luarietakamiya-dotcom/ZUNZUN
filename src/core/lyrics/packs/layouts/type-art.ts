@@ -18,7 +18,8 @@ export function typeArtLayouts(J: PackJ, theme: TypeArtTheme): PackEffect[] {
 /** 本体と効果を別に描く。動きの時計は行全体で共有し、カット境界でリセットしない。 */
 function renderTypeArt(J: PackJ, env: LayoutEnv, theme: TypeArtTheme, variant: number): PackBox | null {
   const { W, H } = env, P = env.cut.params;
-  const chars = [...String(P.artText ?? env.cut.text).replace(/\s/g, '')];
+  const source = String(P.artText ?? env.cut.text).replace(/\s+/g, ' ').trim();
+  const chars = [...source.replace(/\s/g, '')];
   if (!chars.length) return null;
   const start = Number(P.artStart ?? env.cut.start), end = Number(P.artEnd ?? (env.cut.start + env.cut.dur));
   const now = env.t ?? (env.cut.start + env.lt), t = now - start, dur = end - start;
@@ -26,11 +27,22 @@ function renderTypeArt(J: PackJ, env: LayoutEnv, theme: TypeArtTheme, variant: n
   const fade = cap((end - now) / Math.min(0.18, Math.max(0.01, dur * 0.15)));
   const times = Array.isArray(P.artTimes) ? P.artTimes as number[] : chars.map(() => start);
   const font = theme === 'Hyper' ? 'dela' : 'tokumin';
-  const rows = chars.length <= 2 ? (W < H ? chars.length : 1) : Math.max(1, Math.min(chars.length,
+  // 英字を含む行は 1 字ずつの升目にしない（単語が割れて「Andthes / ilence」になった。2026-11-08 姫）。単語の切れ目で数行に分け、1 行ずつ枠に収める
+  const latinRows = /[A-Za-z]/.test(source) ? wordRows(J, source, chars.length, W, H) : null;
+  const rows = latinRows ? latinRows.length : chars.length <= 2 ? (W < H ? chars.length : 1) : Math.max(1, Math.min(chars.length,
     Math.round(Math.sqrt(chars.length * H / W)) + (variant === 1 && chars.length > 4 ? 1 : 0)));
   const cols = Math.ceil(chars.length / rows), cellH = H / rows;
   let bb: PackBox | null = null;
-  const cells = chars.map((ch, i) => {
+  const cells = latinRows ? latinRows.map((line, r) => {
+    const cellW = W;
+    const m = J.measure({ text: line.text, font, size: cellH, x: 0, y: 0 });
+    // 1 行が枠の幅に収まる大きさ。横に伸ばしすぎない（字形が崩れるため）
+    const size = Math.min(cellH * 0.94, cellH * cellW * 0.94 / Math.max(1, m.w));
+    const ms = J.measure({ text: line.text, font, size, x: 0, y: 0 });
+    const sx = Math.min(1.25, cellW * 0.94 / Math.max(1, ms.w));
+    const sy = Math.min(1.35, cellH * 0.94 / Math.max(1, ms.h));
+    return { ch: line.text, x: W / 2, y: (r + 0.5) * cellH, size, sx, sy, w: ms.w * sx, h: ms.h * sy, i: line.first };
+  }) : chars.map((ch, i) => {
     const row = Math.floor(i / cols), count = Math.min(cols, chars.length - row * cols), cellW = W / count;
     const size = Math.min(cellH * 0.94, cellW * 0.94);
     // 字形は書体のメトリクスで枠内へ。セルの幅に合わせるが極端な横伸ばしはしない。
@@ -87,4 +99,16 @@ function renderTypeArt(J: PackJ, env: LayoutEnv, theme: TypeArtTheme, variant: n
     bb = union(bb, P.artText && !P.artManual ? env.draw(body) : J.mainDraw(env, body));
   }
   return bb;
+}
+
+/** 英字を含む行を、単語の切れ目で数行に分ける。first は各行の最初の文字の番号（空白を除いた数え方。artTimes の番号） */
+function wordRows(J: PackJ, text: string, glyphs: number, W: number, H: number): { text: string; first: number }[] {
+  const want = Math.max(1, Math.min(4, Math.round(Math.sqrt(glyphs * H / W))));
+  const wrapped = want > 1 ? String(J.splitLines(text, Math.max(2, Math.ceil([...text].length / want)))) : text;
+  let first = 0;
+  return wrapped.split('\n').map(s => s.trim()).filter(Boolean).map(line => {
+    const row = { text: line, first };
+    first += [...line.replace(/\s/g, '')].length;
+    return row;
+  });
 }

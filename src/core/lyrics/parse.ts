@@ -4,7 +4,7 @@ import type { LyricsSource } from '../types';
  * 歌詞のパーサ。
  *
  * parseLyrics は 852wa/JIZURA (MIT License, © 2026 hakoniwa, https://github.com/852wa/JIZURA)
- * src/08_planner.js の `J.parseLyrics` を TypeScript に移植したもの (commit 8da975f 時点)。
+ * src/08_planner.js の `J.parseLyrics` を TypeScript に移植したもの (commit 8da975f 時点。2026-11-08 に v0.10.1 (fc16bfe) の LRC の並べ方に合わせた)。
  * 行番号 (= Project JSON の lyrics.timing.lineTimes のキー) が JIZURA とずれないよう、処理の順序と条件は変えていない。
  * SRT の読み込み (srtToLrc) は ZUNZUN で新規に書いた。JIZURA は SRT を扱わないため、LRC に変換してから渡す。
  *
@@ -148,7 +148,17 @@ export function parseLyrics(raw: string): ParsedLyrics {
     if (times.length) for (const t of times) lines.push({ ...base, lrc: t });
     else lines.push({ ...base, lrc: null });
   }
-  if (lines.some((l) => l.lrc != null)) lines.sort((a, b) => (a.lrc ?? 1e9) - (b.lrc ?? 1e9));
+  // LRC は時刻の順に並べる。時刻のない行（間奏・手で足した行）は、書いた位置（直前の時刻つきの行のすぐ後ろ）に残す。
+  // JIZURA 0.10 と同じ並べ方（それより前は末尾に回していた）。行番号が JIZURA とずれないよう、必ず合わせる
+  if (lines.some((l) => l.lrc != null)) {
+    let key = -1, k = 0;
+    const keyed = lines.map((l) => {
+      if (l.lrc != null) { key = l.lrc; k = 0; return { l, key: l.lrc }; }
+      return { l, key: key + 1e-6 * ++k };
+    });
+    keyed.sort((a, b) => a.key - b.key);
+    keyed.forEach((x, i) => { lines[i] = x.l; });
+  }
   return { lines, meta };
 }
 

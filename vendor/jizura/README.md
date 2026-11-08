@@ -1,9 +1,9 @@
 # vendor/jizura — JIZURA 字面 の歌詞モーションエンジン
 
 - 出典: https://github.com/852wa/JIZURA
-- コミット: `8da975fb362d966b065217618aedafd5a35a39e0`（2026-09-26、VERSION 0.9.0）
+- コミット: `fc16bfe43ea4a6c25a21f1caf04d17326de14f00`（2026-10-01、VERSION 0.10.1）
 - ライセンス: MIT（© 2026 hakoniwa）。全文は同じフォルダの `LICENSE`。
-- 取り込んだ日: 2026-09-28（ユーザーの了承のうえで GitHub からダウンロード）
+- 取り込んだ日: 2026-09-28（0.9.0、`8da975f`）。2026-11-08 に 0.10.1 へ更新（姫の了承。英字の歌詞が単語の途中で折り返される不具合が本家で直っていたため）
 
 ## 中身
 
@@ -18,13 +18,13 @@
 
 ## 改変
 
-**本文は改変していません。** `build.py` と同じく `@VERSION@` を `0.9.0` に置き換えただけです。
+**本文は改変していません。** `build.py` と同じく `@VERSION@` を `0.10.1` に置き換えただけです。
 
 ZUNZUN に合わせる必要があるところは、同梱ファイルではなく `src/core/lyrics/jizura-adapter.ts` 側で対応しています。
 
 - 決定論: `J.Renderer` は紙の質感とフィルムの粒を `Math.random()` で作るので、Renderer を作るときと紙の質感の下準備のときだけ `Math.random` を seed 付きの乱数に差し替える。
 - 行の終了（ZUNZUN の `lineEnds`）: `J.computeTiming` を包んで反映する。
-- 飾りの数字・時刻を消す: 本家 v0.10.0 の「飾りの数字を消す / 飾りの時刻を消す」（#32、`src/03_text.js` の `J.decoTextKind` / `J.hideDecoText`）を、`src/core/lyrics/deco-text.ts` に同じ判定で写し、`J.drawItem` を包んで足している（2026-11-05）。同梱版を更新してこの機能が入ったら、包むのをやめて本家のものを使う。
+- 折り返し: `J.splitLines` を包み、英字と日本語が混ざった行では英字のかたまり（RAB!T、won’t など）の途中で切らず、英語と日本語の境目を優先する（`src/core/lyrics/split-lines.ts`。2026-11-08）。本家 0.10.1 は英字だけの行は単語の間で切るが、混ざった行は文字数だけで切る。
 - フォント: JIZURA の実装どおり Google Fonts から読み込む（ZUNZUN で外部通信を許しているのはフォントの取得だけ。`docs/ARCHITECTURE.md` の技術選定を参照）。
 
 ## 更新のしかた

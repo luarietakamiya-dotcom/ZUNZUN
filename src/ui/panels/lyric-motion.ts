@@ -197,7 +197,7 @@ export function renderLyricMotionPanel(): HTMLElement {
     sectionGrid,
     sectionNote,
   ]);
-  // 飾りの数字・時刻を消す（本家 JIZURA と同じ設定。core/lyrics/deco-text.ts。2026-11-05 姫）
+  // 飾りの数字・時刻を消す（JIZURA 0.10 の fx.hideNo / fx.hideTime。2026-11-05 姫）
   const hideNo = el('input');
   hideNo.type = 'checkbox';
   hideNo.dataset.motion = 'hide-no';

@@ -40,7 +40,9 @@ export function directTypeArtPlan<T extends { cuts: unknown[] }>(plan: T, motion
     }
     for (const c of cuts) {
       c.layout = first.layout; c.seed = first.seed; c.trans = 'none'; c.morph = null;
-      c.params = { ...first.params, artText: full, artStart: first.start, artEnd: end, artTimes: times };
+      // artText は空白を残す（英字の行を単語で並べるため。2026-11-08）。artTimes は空白を除いた文字ごとの時刻
+      const shown = (first.lineText || cuts.map(x => x.text).join('')).replace(/\s+/g, ' ').trim();
+      c.params = { ...first.params, artText: shown, artStart: first.start, artEnd: end, artTimes: times };
     }
   }
   return plan;

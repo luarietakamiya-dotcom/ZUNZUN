@@ -5,7 +5,9 @@ import type { ParsedLyrics } from './parse';
  * 歌詞の各行の開始・終了時刻を決める。
  *
  * 852wa/JIZURA (MIT License, © 2026 hakoniwa) src/08_planner.js の `J.computeTiming` を移植したもの
- * (commit 8da975f 時点)。優先順位は JIZURA と同じで、手で決めた時刻 (lineTimes) > LRC のタグ > 文字数からの見積もり。
+ * (v0.10.1、commit fc16bfe 時点)。優先順位は JIZURA と同じで、手で決めた時刻 (lineTimes) > LRC のタグ > 文字数からの見積もり。
+ * v0.10 から: 決まった時刻 (手で決めた時刻か LRC のタグ) は前の決まった時刻より 0.05 秒以上あとにする (保存した値は変えない)。
+ * 見積もりの行は、次の決まった時刻までに収まるよう詰める。LRC のタグは一部の行にだけあっても使う。
  * JIZURA には無い lineEnds (行の終了) の反映だけを ZUNZUN で足している。L5 の JIZURA アダプタも同じ規則で
  * `J.computeTiming` を包むので、Lyrics タブのタイムラインと歌詞モーションの表示時刻は一致する。
  */
@@ -48,23 +50,50 @@ export function computeLineTimes(
   const bpm = opts.bpm ?? 0;
   const beat = bpm > 0 ? 60 / bpm : 0;
   const lineScale = opts.lineScale || 1;
-  const allLrc = lines.length > 0 && lines.every((l) => l.lrc != null);
-  const starts: number[] = [];
-
-  lines.forEach((l, i) => {
+  // 決まった時刻: 手で決めた時刻 (負なら 0) > LRC のタグ。無ければ null (見積もる)
+  const fixed = lines.map((l, i): number | null => {
     const man = lookup(timing.lineTimes, i);
-    let s: number;
-    if (man != null) s = man;
-    else if (allLrc) s = l.lrc!;
-    else if (i > 0) {
-      const pl = lines[i - 1]!;
-      const n = [...pl.text].length;
-      let d = pl.interlude ? (pl.secs != null && pl.secs > 0 ? pl.secs : 4) : clamp(0.8 + n * 0.17, 1.3, 5.2) * lineScale;
-      if (beat && !(pl.interlude && pl.secs != null && pl.secs > 0)) d = Math.max(2, Math.round(d / beat)) * beat;
-      s = starts[i - 1]! + d + (l.gapBefore ? (beat ? beat * 2 : 0.8) : 0);
-    } else s = opts.offset ?? 0.4;
-    starts.push(s);
+    if (man != null) return Math.max(0, man);
+    return l.lrc != null && Number.isFinite(l.lrc) ? l.lrc : null;
   });
+  // 決まった時刻は、前の決まった時刻より戻らない (0.05 秒あける)
+  let lastFix = -Infinity;
+  for (let i = 0; i < fixed.length; i++) {
+    const f = fixed[i];
+    if (f == null) continue;
+    fixed[i] = f < lastFix + 0.05 ? lastFix + 0.05 : f;
+    lastFix = fixed[i]!;
+  }
+  const natural = (i: number): number => {
+    const L = lines[i]!;
+    const n = [...L.text].length;
+    let d = L.interlude ? (L.secs != null && L.secs > 0 ? L.secs : 4) : clamp(0.8 + n * 0.17, 1.3, 5.2) * lineScale;
+    if (beat && !(L.interlude && L.secs != null && L.secs > 0)) d = Math.max(2, Math.round(d / beat)) * beat;
+    return d;
+  };
+  const gapOf = (i: number): number => (i > 0 && i < lines.length && lines[i]!.gapBefore ? (beat ? beat * 2 : 0.8) : 0);
+  const starts: number[] = new Array<number>(lines.length);
+  let i = 0;
+  let t = opts.offset ?? 0.4;
+  if (fixed.length && fixed[0] != null) t = fixed[0];
+  while (i < lines.length) {
+    const fi = fixed[i];
+    if (fi != null) { starts[i] = fi; t = fi; i++; continue; }
+    // 見積もる行のまとまり [i, j)。次の決まった時刻 (あれば) までに収める
+    let j = i;
+    while (j < lines.length && fixed[j] == null) j++;
+    if (i === 0 && j < lines.length && t >= fixed[j]!) t = 0;
+    const from = i > 0 ? starts[i - 1]! : t;
+    for (let k = i; k < j; k++) starts[k] = k > 0 ? starts[k - 1]! + natural(k - 1) + gapOf(k) : t;
+    if (j < lines.length) {
+      const room = fixed[j]! - from, need = starts[j - 1]! + natural(j - 1) + gapOf(j) - from;
+      if (need > room) {
+        const f = room > 0 ? room / need : 0;
+        for (let k = i; k < j; k++) starts[k] = from + (starts[k]! - from) * f;
+      }
+    }
+    i = j;
+  }
 
   const ends = starts.map((s, i) => {
     let e: number;
