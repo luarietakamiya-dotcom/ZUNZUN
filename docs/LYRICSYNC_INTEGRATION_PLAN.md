@@ -105,4 +105,4 @@ LyricSync が作った `.lrc` を、歌詞タブの「ファイルから読み�
 - `data.lines[].text` は必ず入る（間奏は ''）。ZUNZUN の照合（verified）がいつも効く。
 - (c) MMS（CC-BY-NC-4.0）は既定で使わない。使うのは `POST /jobs` に `mms=true` を渡したときだけ（使ったかは `data.settings.mms`）。**ZUNZUN は mms を送らない**（`lyricsync-remote.ts` にテストで固定）。
 - `clients/lyricsync-client.ts` も更新されたが、ZUNZUN はそれを使わず `lyricsync-remote.ts` で同じ窓口を呼ぶので、差し替えは不要。
-- 残りの確認（姫の PC で）: 1.2.0 での本物の成功の応答、公開版（github.io）を PC の Chrome で開いたときの接続。
+- **本物で成功（2026-11-08、姫の PC）**: 「LyricSync で自動で合わせる」で「39 行に時刻を入れました。自信の低い 4 行は…」。送信 → 計算 → 照合 → 取り込み → 要確認の印まで通った。姫には公開版（github.io）を PC の Chrome で開く手順で頼んだ（どちらで開いたかは、姫の報告の文面からは確定できていない）。
