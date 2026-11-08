@@ -103,6 +103,7 @@ test('「LyricSync で自動で合わせる」: LyricSync が起動していな�
   await expect.poll(() => page.evaluate(async () => (await import('/src/core/store.ts')).store.audio.isLoaded)).toBe(true);
   await page.locator('button', { hasText: /^歌詞$/ }).first().click();
   await page.fill('textarea.lyrics-textarea', LYRICS);
+  await page.waitForTimeout(300); // 歌詞の入力の反映を待つ（待たないと「先に歌詞を入れてください」になる）
   await page.getByRole('button', { name: 'LyricSync で自動で合わせる' }).click();
   await expect.poll(() => syncMessage(page)).toContain('ダブルクリックして起動');
   await expect(page.getByRole('button', { name: 'LyricSync で自動で合わせる' })).toBeEnabled();
