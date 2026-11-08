@@ -465,10 +465,27 @@ export function renderLyricsPanel(): HTMLElement {
   inputCard.append(
     el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('形式:', 'Format:') }), sourceSelect, el('span', { className: 'param-label', textContent: tr('ファイルから読み込む:', 'Load from file:') }), fileInput]),
     el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('今の歌詞と時刻を書き出す:', 'Export the lyrics with their times:') }), exportSrt, exportLrc]),
-    el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('自動で合わせる:', 'Auto-sync:') }), lyricSyncAuto, lyricSyncStop, lyricSyncBtn, lyricSyncInput]),
-    el('p', { className: 'lyrics-help', textContent: tr('LyricSync（PC で動く、歌詞の自動タイミング合わせのツール）を入れた人向けです。PC で LyricSync を起動しておき、PC の Chrome でこのページを開いて「LyricSync で自動で合わせる」を押すと、今の曲と歌詞から各行の時刻が入ります（曲も歌詞も PC の外には出ません）。LyricSync が書き出した結果（.json）を読み込むこともできます。入れていなくても、今までどおり手で合わせられます。', 'For people who have LyricSync (an automatic lyric-timing tool that runs on your PC). Start LyricSync on the PC, open this page in Chrome on the same PC and press "Auto-sync with LyricSync": each line gets its time from the current song and lyrics (nothing leaves your PC). You can also load a result (.json) written by LyricSync. Without it, sync by hand as before.') }),
-    lyricSyncMsg,
-    lyricSyncSaveRaw,
+    ...((/Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) ? [] : [
+      el('section', { className: 'lyrics-card' }, [
+        el('h3', { textContent: 'LyricSync' }),
+        el('p', { className: 'lyrics-help', textContent: tr('曲と入力した歌詞をこのPCで照合し、各行の歌い出しに時刻を付けます。要確認の行はタイムラインで直せます。', 'Match your lyrics to the song on this PC. Review flagged lines in the timeline.') }),
+        Object.assign(document.createElement('a'), {
+          className: 'tab-button',
+          href: import.meta.env.BASE_URL + 'downloads/LyricSync-Easy-Windows.zip',
+          download: 'LyricSync-Easy-Windows.zip',
+          textContent: tr('Windows 版をダウンロード（ZIP）', 'Download for Windows (ZIP)'),
+        }),
+        el('ol', {}, [
+          el('li', { textContent: tr('Intel / AMD の64ビットWindowsでZIPをすべて展開し、Setup.cmd を開きます。', 'On 64-bit Intel or AMD Windows, extract the ZIP and open Setup.cmd.') }),
+          el('li', { textContent: tr('準備完了後、デスクトップの「LyricSync Easy」を起動します。初回はモデルのダウンロード（約4GB）が必要です。', 'After setup, open LyricSync Easy on your desktop. First use downloads about 4 GB of models.') }),
+          el('li', { textContent: tr('同じPCのChromeで曲を読み込み、歌詞を入力して「LyricSync で自動で合わせる」を押します。', 'In Chrome on the same PC, load a song, enter its lyrics, and choose Auto-sync with LyricSync.') }),
+        ]),
+        el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('自動で合わせる:', 'Auto-sync:') }), lyricSyncAuto, lyricSyncStop, lyricSyncBtn, lyricSyncInput]),
+        lyricSyncMsg,
+        lyricSyncSaveRaw,
+      ]),
+    ]),
     textarea,
     syntax,
   );

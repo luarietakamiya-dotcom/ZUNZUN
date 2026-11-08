@@ -799,3 +799,6 @@ Codex: 質感つき `.c` の統合レビュー（特に `layerOf` のキャッ�
 - LyricSync 1.2.0 で、11/08 のお願い（LRC の並べ方・行の本文・MMS を既定で使わない）が入った（計画書 10 章）。ZUNZUN は mms を送らないことをコメントとテストで固定。ZUNZUN は LyricSync の TS クライアントを使っていないので差し替えは不要。
 - 検証: lyricsync-remote の単体テスト。未確認: 1.2.0 との本物の通信（姫の PC でしか試せない）。
 - 2026-11-08 追記: 姫の PC で LyricSync 1.2.0 との本物の通信が成功（39 行に時刻・要確認 4 行）。段階 2 は完成。
+
+### Codex: LyricSync Easy 配布（歌詞パネル・public/downloads）
+PCの歌詞タブに日英の説明・手順・Windows ZIPへのリンクを追加。build / lint / 675 tests 通過、ビルド内ZIPは元ファイルと一致。別PCでの初回導入は未確認。
