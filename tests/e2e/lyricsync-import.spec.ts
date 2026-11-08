@@ -104,6 +104,6 @@ test('「LyricSync で自動で合わせる」: LyricSync が起動していな�
   await page.locator('button', { hasText: /^歌詞$/ }).first().click();
   await page.fill('textarea.lyrics-textarea', LYRICS);
   await page.getByRole('button', { name: 'LyricSync で自動で合わせる' }).click();
-  await expect.poll(() => syncMessage(page)).toContain('lyricsync.exe serve');
+  await expect.poll(() => syncMessage(page)).toContain('ダブルクリックして起動');
   await expect(page.getByRole('button', { name: 'LyricSync で自動で合わせる' })).toBeEnabled();
 });
