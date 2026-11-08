@@ -98,3 +98,11 @@ LyricSync が作った `.lrc` を、歌詞タブの「ファイルから読み�
 - ZUNZUN の `parseLyrics` を JIZURA 0.10 の並べ方に合わせた: **LRC で時刻の無い行（間奏・手で足した行）を、末尾に回さず書いた位置に残す。**
 - LyricSync の `lyricsync/lyrics.py` は ZUNZUN の古い `parse.ts` を写しているので、**時刻のある行と無い行が混ざった LRC を歌詞にしたときだけ**、行番号が ZUNZUN とずれる。ふつうの歌詞（タグ無し）・すべての行にタグがある LRC・SRT では変わらない。ずれても ZUNZUN は行の本文の照合で取り込みを断る（`readLyricSyncResult`）。
 - LyricSync 側へのお願い (g): `lyrics.py` の LRC の並べ方を ZUNZUN の新しい `parse.ts` に合わせ、`tests/parse_expected_zunzun.json` を作り直してほしい。
+
+## 10. LyricSync 1.2.0（2026-11-08、LyricSync のコミット 2946114。姫の PC に入れ済み）
+- (g) LRC の並べ方を ZUNZUN の新しい parse.ts（071e582 以降）に合わせた。parse_expected_zunzun.json を作り直し、10 ケースで一致（LyricSync 側で確認）。
+- 1.1.0 の `max() arg is an empty sequence` は 1.1.1（10/16）で直っていた。ZUNZUN 側の 10/16 の試験は、直す前から動いていたサーバーだった可能性が高い。
+- `data.lines[].text` は必ず入る（間奏は ''）。ZUNZUN の照合（verified）がいつも効く。
+- (c) MMS（CC-BY-NC-4.0）は既定で使わない。使うのは `POST /jobs` に `mms=true` を渡したときだけ（使ったかは `data.settings.mms`）。**ZUNZUN は mms を送らない**（`lyricsync-remote.ts` にテストで固定）。
+- `clients/lyricsync-client.ts` も更新されたが、ZUNZUN はそれを使わず `lyricsync-remote.ts` で同じ窓口を呼ぶので、差し替えは不要。
+- 残りの確認（姫の PC で）: 1.2.0 での本物の成功の応答、公開版（github.io）を PC の Chrome で開いたときの接続。

@@ -63,6 +63,7 @@ describe('runLyricSyncJob', () => {
     expect(form.get('formats')).toBe('zunzun');
     expect(form.get('audio')).toBeInstanceOf(Blob);
     expect(form.get('vocals')).toBeNull();
+    expect(form.get('mms')).toBeNull(); // 非商用の MMS は使わない（LyricSync 1.2.0 は送らなければ使わない）
     expect(seen).toEqual([0.5]);
   });
   it('ボーカルのステムを渡すと分離を飛ばす', async () => {

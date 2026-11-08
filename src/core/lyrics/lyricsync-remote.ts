@@ -167,6 +167,7 @@ export async function runLyricSyncJob(o: RunOptions): Promise<RunResult> {
   // ボーカルのステムを渡すときは、LyricSync 側の分離を飛ばす（速く、精度も上がる。LyricSync の資料より）
   form.append('separate', o.vocals ? 'false' : 'true');
   form.append('formats', 'zunzun');
+  // mms は送らない: MMS の照合モデルは CC-BY-NC-4.0（非商用）。LyricSync 1.2.0 から既定で使わず、mms=true のときだけ使う（2026-11-08）
   try {
     if (o.signal?.aborted) return aborted(false);
     const sub = await getJson(fetchFn, `${base}/jobs`, { method: 'POST', body: form, signal: o.signal });
