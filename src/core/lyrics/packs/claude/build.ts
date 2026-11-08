@@ -14,6 +14,11 @@ export interface ClaudeSpec {
   fonts: { display: string[]; serif: string[]; body: string[] };
   scheme: PackScheme & { ink?: string };
   effects: (J: PackJ) => PackEffect[];
+  /**
+   * 歌詞の文字以外に、層の絵で直接使う書体と文字（[CSS の font, 文字]）。歌詞モーションの作成時に読み込みを待つ
+   * （jizura-adapter の prepareFonts）。待たないと 1 回目だけ別の書体で描かれ、同じ時刻の絵が一致しない。
+   */
+  preloadFonts?: [font: string, chars: string][];
 }
 
 export function claudePack(spec: ClaudeSpec): MotionPack {
@@ -35,6 +40,7 @@ export function claudePack(spec: ClaudeSpec): MotionPack {
       const bias: Record<string, Record<string, number>> = {};
       for (const e of own(J)) (bias[e.group] ??= {})[e.key] = 10;
       st.bias = bias; st.decor = {};
+      if (spec.preloadFonts) st.preloadFonts = spec.preloadFonts.map(([f, c]) => [f, c]);
       return st;
     },
     configure(project, J) {

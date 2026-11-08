@@ -13,13 +13,15 @@ import { layerOf, place, richOf } from './layer';
  * 試作: docs/art-studies/rich-compositions.html の D1〜D4。
  */
 const FONT = 'mincho_light', ICE = '#bfe3ff', SNOW = '#f3f9ff', MIST = '#a9c6e3';
+/** 背景の大きな「雪」の書体。歌詞に無い文字なので、作成時に読み込みを待つ（preloadFonts） */
+const SNOW_GLYPH = '雪', SNOW_GLYPH_FONT = (px: number) => `900 ${px}px "Noto Serif JP", serif`;
 
 function paintFar(g: G, W: number, H: number, v: number, seed: number): void {
   const u = Math.min(W, H);
   const bg = v === 3 ? g.createLinearGradient(0, 0, 0, H) : v === 2 ? g.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, Math.max(W, H) * 0.6) : g.createLinearGradient(0, 0, W * 0.3, H);
   if (v === 3) { bg.addColorStop(0, '#02050f'); bg.addColorStop(1, '#0a1c34'); } else if (v === 2) { bg.addColorStop(0, '#12284a'); bg.addColorStop(1, '#03060f'); } else { bg.addColorStop(0, '#0b1a34'); bg.addColorStop(1, '#03060f'); }
   g.fillStyle = bg; g.fillRect(0, 0, W, H);
-  if (v === 0) { g.save(); g.globalAlpha = 0.075; g.fillStyle = '#cfe6ff'; g.font = `900 ${u * 1.3}px "Noto Serif JP", serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('雪', W * 0.74, H * 0.58); g.restore(); }
+  if (v === 0) { g.save(); g.globalAlpha = 0.075; g.fillStyle = '#cfe6ff'; g.font = SNOW_GLYPH_FONT(u * 1.3); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(SNOW_GLYPH, W * 0.74, H * 0.58); g.restore(); }
   if (v === 2) {
     const cx = W / 2, cy = H / 2, R = u * 0.43;
     for (let a = 0; a < 6; a++) {
@@ -100,4 +102,5 @@ export const winterRichClaudePack = claudePack({
   fonts: { display: [FONT], body: [FONT], serif: [FONT] },
   scheme: { bg: '#050a14', fg: SNOW, sub: MIST, accent: ICE, accent2: '#7fffd0', dim: '#6f8fb0' },
   effects,
+  preloadFonts: [[SNOW_GLYPH_FONT(64), SNOW_GLYPH]],
 });

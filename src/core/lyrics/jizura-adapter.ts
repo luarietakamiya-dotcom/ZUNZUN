@@ -579,6 +579,21 @@ async function waitFontsIdle(timeoutMs: number): Promise<void> {
 }
 
 /**
+ * スタイルが歌詞の文字以外に使う書体 (演出パックの style.preloadFonts: [CSS の font, 文字]) を読み込む。
+ * 例: 冬・吹雪.c の背景の大きな「雪」。歌詞に無い文字は J.ensureFonts では読み込まれず、構図を後から差し替えると
+ * 下描きでも読み込みが始まらないので、1 回目だけ別の書体で描かれていた (同じ時刻の絵が一致しない)。
+ */
+async function loadStyleFonts(plan: JizuraPlan): Promise<void> {
+  const list = (plan.style as { preloadFonts?: unknown }).preloadFonts;
+  if (!Array.isArray(list) || typeof document === 'undefined' || !document.fonts?.load) return;
+  await Promise.all(
+    list
+      .filter((e): e is [string, string] => Array.isArray(e) && typeof e[0] === 'string' && typeof e[1] === 'string')
+      .map(([font, chars]) => document.fonts.load(font, chars).catch(() => undefined)),
+  );
+}
+
+/**
  * 書体の準備。J.ensureFonts で事前に読み込んでも、実際に描き始めてから読み込まれる書体がある
  * (Google Fonts は文字の範囲ごとに分けて配信している。E2E で、1 回目の描画だけ Noto Serif JP 700 が読み込み中で
  * 別の書体で描かれ、2 回目以降と画像が違っていた)。そこで、捨てる用の Renderer で全カットを小さく 1 回ずつ描いて
@@ -586,7 +601,7 @@ async function waitFontsIdle(timeoutMs: number): Promise<void> {
  */
 async function prepareFonts(J: JizuraApi, plan: JizuraPlan, text: string): Promise<void> {
   const deadline = Date.now() + FONT_TIMEOUT_MS;
-  await Promise.race([J.ensureFonts(text, J.fontsOfPlan(plan)).catch(() => undefined), sleep(FONT_TIMEOUT_MS)]);
+  await Promise.race([Promise.all([J.ensureFonts(text, J.fontsOfPlan(plan)).catch(() => undefined), loadStyleFonts(plan)]), sleep(FONT_TIMEOUT_MS)]);
   if (typeof document === 'undefined') return;
   const probe = document.createElement('canvas');
   probe.width = 320;

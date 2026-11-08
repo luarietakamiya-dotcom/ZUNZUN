@@ -119,3 +119,10 @@ it('登場・退場・表示中の動きは有限で、強さ 0 では文字が�
     }
   }
 });
+
+it('冬・吹雪.c は背景の「雪」の書体を作成時に読み込むよう、スタイルに preloadFonts を持つ (同じ時刻の絵の再現)', () => {
+  const st = J.STYLES['vs-winterx.c'] as unknown as { preloadFonts?: [string, string][] };
+  expect(st.preloadFonts).toEqual([['900 64px "Noto Serif JP", serif', '雪']]);
+  // 持たないスタイルには何も足さない
+  expect((J.STYLES['vs-hyper.c'] as unknown as { preloadFonts?: unknown }).preloadFonts).toBeUndefined();
+});

@@ -102,6 +102,7 @@ test('歌詞モーション: 重ねるときに使う場面転換・レイアウ
     const { defaultLyrics } = await import('/src/core/types.ts');
     const J = (await loadJizura()) as unknown as {
       order(group: string): string[];
+      registry(group: string): Record<string, { set?: string } | undefined>;
       plan(p: Record<string, unknown>, a: null): Parameters<typeof keepLightTextSchemes>[0];
       Renderer: new () => { frame(ctx: CanvasRenderingContext2D, plan: unknown, t: number, o: Record<string, unknown>): void };
       lum(c: string): number;
@@ -139,8 +140,14 @@ test('歌詞モーション: 重ねるときに使う場面転換・レイアウ
     // レイアウト: 場面転換を覆わないものに固定して、行の間に画面の 9 割以上を塗らない。
     // (COVERING_LAYOUTS は 8 割以上で決めたが、文字で埋める「wall」などは書体の読み込み具合で 8 割前後を行き来するので、
     //  見張りは背景ごと塗るものだけを確実に捕まえる 9 割にしている)
+    // 演出パック (ZUNZUN の .c / .g などのスタイル) の構図は、そのパックの部品セット (set) に属し、そのスタイルを選んだときにしか
+    // 使われない (他のスタイルではセットがオフで選ばれない)。質感つき .c や紙の .g、紙と朱.c は、背景ごと描くのがスタイルの作り
+    // (装飾を下げると透ける) なので、この見張りの対象 (= 他のスタイルで重ねるときに出る JIZURA の構図) から外す。
+    // COVERING_LAYOUTS に足すと enabled で無効になり、そのスタイル自身が構図を使えなくなるので足さない。
+    const { PACKS } = await import('/src/core/lyrics/packs/index.ts');
+    const packSets = new Set(PACKS.map((p) => p.set));
     const neutral = transitions[0]!;
-    const layouts = J.order('layout').filter((k) => !COVERING_LAYOUTS.includes(k));
+    const layouts = J.order('layout').filter((k) => !COVERING_LAYOUTS.includes(k) && !packSets.has(String(J.registry('layout')[k]?.set)));
     for (const k of layouts) {
       const v = maxCover({ layout: k, trans: neutral }, 3.05, 5.9);
       if (v >= 0.9) covering.push([`layout:${k}`, v]);
