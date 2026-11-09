@@ -1,3 +1,4 @@
+import {creditsFrom} from '../credits';
 import { sanitizeMotionEdits } from '../lyrics/motion-edit';
 import { formatGrouping, parseGrouping } from '../rhythm/grouping';
 import { normalizeBars } from '../rhythm/grid';
@@ -475,6 +476,7 @@ export function sanitizeProject(raw: unknown): ProjectFile {
       view: normalizeView(isPlainObject(visualizerRaw.view) ? (visualizerRaw.view as Partial<ViewSettings>) : null),
       image: sanitizePresetImage(visualizerRaw.image),
     },
+    ...(Array.isArray(raw.credits) ? {credits:creditsFrom(raw.credits)}:{}),
     overlays: sanitizeOverlays(raw.overlays),
     lyrics: sanitizeLyrics(raw.lyrics),
     rhythm: sanitizeRhythm(raw.rhythm),

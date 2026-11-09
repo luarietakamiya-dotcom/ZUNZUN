@@ -214,6 +214,7 @@ export function createLivePreview(opts: { onFrame?: () => void } = {}): LivePrev
     host.lyrics.setMotion(previewMotionNow());
     host.lyrics.setBlanks(store.lyrics?.timing.blanks);
     host.view = store.view;
+    host.credits.items=store.credits;
     host.composition = store.composition;
     if (frame) host.render(frame, renderParamsNow());
     requestAnimationFrame(tick);

@@ -70,6 +70,8 @@ class Store {
   /** プリセットだけの設定の値 (プリセットの id ごと)。Project JSON の visualizer.params に保存される */
   private _presetParams: Record<string, PresetParamValues> = {};
   private _expectedAudio: ProjectFile['audio'] = null;
+  credits: import('./credits').Credit[]=[];
+  setCredits(items: typeof this.credits){this.credits=items;this.emit();}
   private _overlays: OverlayLayer[] = [];
   private readonly overlayFiles = new Map<string, File>();
   private _exportSettings: ExportSettings = defaultProject().export;
@@ -607,6 +609,7 @@ class Store {
     this.mediaFiles.clear();
     this._composition = normalizeComposition(project.composition, { mediaIds: this._media.map((m) => m.id) });
     this._expectedAudio = project.audio;
+    this.credits=project.credits??[];
     this._overlays = project.overlays;
     this.overlayFiles.clear();
     this._exportSettings = { ...project.export };

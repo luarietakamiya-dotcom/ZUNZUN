@@ -200,6 +200,7 @@ export interface ProjectFile {
     /** プリセットに渡す画像 (manifest.imageSlot のあるプリセットだけが使う)。中身は保存せず、ファイル名と sha256 だけ */
     image?: PresetImage | null;
   };
+  credits?: import('./credits').Credit[];
   overlays: OverlayLayer[];
   /** 歌詞と、その同期タイミング・歌詞モーションの設定。歌詞を使わないプロジェクトは null */
   lyrics: LyricsSettings | null;

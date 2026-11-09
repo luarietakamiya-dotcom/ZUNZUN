@@ -35,6 +35,7 @@ export interface ProjectSourceState {
   audio: ProjectAudioSource;
   /** 音源をまだ選び直していない場合に保持する、読み込んだプロジェクトの参照 */
   expectedAudio?: ProjectFile['audio'];
+  credits?: import('../credits').Credit[];
   overlays: OverlayLayer[];
   /** 歌詞を使わない場合は null */
   lyrics: LyricsSettings | null;
@@ -83,6 +84,7 @@ export function buildProjectFile(state: ProjectSourceState): ProjectFile {
       view: { ...(state.view ?? defaultView()) },
       image: state.presetImage ? { ...state.presetImage } : null,
     },
+    ...(state.credits?.length ? {credits:state.credits.map(c=>({...c}))}:{}),
     overlays: state.overlays.map((o) => ({ ...o })),
     lyrics: state.lyrics
       ? {

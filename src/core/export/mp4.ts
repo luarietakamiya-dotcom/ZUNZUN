@@ -35,6 +35,7 @@ export interface Mp4ExportJob {
   preset: VisualizerModule;
   seed: number;
   params: CommonParams & Record<string, unknown>;
+  credits?: import('../credits').Credit[];
   overlays: { config: OverlayLayer; file: File }[];
   /** 歌詞と歌詞モーションの設定 (歌詞を使わなければ null) */
   lyrics: LyricsSettings | null;
@@ -116,6 +117,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
     await host.setPreset(job.preset, job.seed, job.params);
     if (job.presetImage && job.preset.manifest.imageSlot) await host.setPresetImage(job.presetImage);
     if (job.view) host.view = job.view;
+    host.credits.items=job.credits??[];
     if (job.composition) host.composition = job.composition;
     await host.overlay.loadFrom(job.overlays);
     // 背景の動画は、書き出す各フレームの時刻ちょうどの絵を取り出す (exact)

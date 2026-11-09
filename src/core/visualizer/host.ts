@@ -38,7 +38,9 @@ export interface VisualizerHostOptions {
  * 設計を守るため、Host はプリセット固有の状態を一切持たず、WebGLRenderer/PostFxStack と
  * 現在のプリセットのライフサイクルだけを管理する。
  */
+import {CreditsLayer} from '../render/credits-layer';
 export class VisualizerHost {
+  readonly credits=new CreditsLayer();
   private readonly renderer: THREE.WebGLRenderer;
   private readonly postfx: PostFxStack;
   /** PNG/WebP/JPG オーバーレイ。Bloom を通さず、プリセット本体の描画のあとに重ね描きする (Compositor の「前」層) */
@@ -241,9 +243,11 @@ export class VisualizerHost {
       else if (id === 'overlays') this.overlay.render(this.renderer);
       else if (isMediaLayer(id)) this.media.draw(this.renderer, id.slice(6));
     }
+    this.credits.render(this.renderer,frame.t);
   }
 
   dispose(): void {
+    this.credits.dispose();
     this.generation++; // 進行中の setPreset() の結果を無効化する
     this.presetImageGeneration++;
     this.current?.preset.dispose();

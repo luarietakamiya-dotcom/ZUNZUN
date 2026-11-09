@@ -805,3 +805,6 @@ PCの歌詞タブに日英の説明・手順・Windows ZIPへのリンクを追�
 
 ### Codex: PC版LyricSyncの歌詞合わせ専用リードボーカル（lyrics.ts）
 専用参照は曲ごとのメモリ内に保持。既存ステムより優先して vocals に送る。build / lint / 単体675件通過。実曲の同期は未確認。
+
+### Codex: 背景と素材の複数タイトル表示。credits / host / project / preview / export を担当。
+検証: build・lint・676 tests。Edgeで入力値の保存と、表示区間内のみ文字が描画されることをピクセルで確認。実曲MP4は未確認。

@@ -1,3 +1,4 @@
+import {creditsCard} from './credits-card';
 import { store } from '../../core/store';
 import { createBackgroundCard } from './background-card';
 import { createLayersCard } from './layers-card';
@@ -54,6 +55,7 @@ export function renderOverlayPanel(): HTMLElement {
   el.appendChild(split);
   // ここから下の欄は設定の列に入れる
   const body = controlsCol;
+  body.append(creditsCard());
 
   // 背景の一枚絵 (ビジュアライザーの奥)。オーバーレイ (前面) とは別の欄
   // レイヤーの順番 (手前が上)、背景の一枚絵・動画、素材 (素材を足したり外したりしたらレイヤーの一覧も作り直す)

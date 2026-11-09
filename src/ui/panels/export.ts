@@ -129,6 +129,7 @@ function createRunnerFromStore(): { runner: ExportRunner; fileName: string } {
   const settings = { ...store.exportSettings };
   // 共通の設定 + このビジュアライザーだけの設定
   const params = { ...store.params, ...resolvePresetParams(preset.manifest.controls, store.presetParams(preset.manifest.id)) } as CommonParams & Record<string, unknown>;
+  const credits=store.credits.map(c=>({...c}));
   const overlays = store.overlays
     .map((config) => ({ config: { ...config }, file: store.getOverlayFile(config.id) }))
     .filter((e): e is { config: OverlayLayer; file: File } => e.file != null);
@@ -154,6 +155,7 @@ function createRunnerFromStore(): { runner: ExportRunner; fileName: string } {
         preset,
         seed,
         params,
+        credits,
         overlays,
         lyrics,
         analysis,
