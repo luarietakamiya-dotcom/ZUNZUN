@@ -808,3 +808,5 @@ PCの歌詞タブに日英の説明・手順・Windows ZIPへのリンクを追�
 
 ### Codex: 背景と素材の複数タイトル表示。credits / host / project / preview / export を担当。
 検証: build・lint・676 tests。Edgeで入力値の保存と、表示区間内のみ文字が描画されることをピクセルで確認。実曲MP4は未確認。
+
+### Codex: タイトルのサイズ・書体・影・ふちどり・発光と、静止字幕のフェード10種。build / lint / 676 tests 通過。Edgeで全10種の描画と保持区間2時点の画像一致を確認。実曲MP4は未確認。

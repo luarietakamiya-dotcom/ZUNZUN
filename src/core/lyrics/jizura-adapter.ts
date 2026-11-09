@@ -14,6 +14,7 @@ import type { MotionLevel } from '../types';
 import { tr } from '../i18n';
 import { directTypeArtPlan } from './packs/type-art-plan';
 import { clearRichLayers } from './packs/claude/rich/layer';
+import { prepareFade } from './packs/subtitle-fades';
 import { prepareSubtitlePlan, subtitlePack } from './packs/gpt/subtitle';
 import { MOONFEATHER_STYLE_KEY, prepareMoonPlan } from './packs/claude/moonfeather';
 import { oneCutPerLine } from './mv-lines';
@@ -668,6 +669,7 @@ export class LyricMotion {
       const planFx = (plan.fx ?? {}) as Record<string, unknown>;
       fxSpans = spans.map((sp) => ({ start: sp.start, end: sp.end, fx: { ...planFx, ...levelFx(base, sp.level) } }));
     } else plan = makePlan();
+    prepareFade(plan, lyrics.motion.style === CUSTOM_STYLE_KEY ? lyrics.motion.custom?.base : lyrics.motion.style);
     directTypeArtPlan(plan, lyrics.motion);
     if (lyrics.motion.style === subtitlePack.styleKey || (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom?.base === subtitlePack.styleKey)) prepareSubtitlePlan(plan);
     if (lyrics.motion.style === moonFeatherPack.styleKey || (lyrics.motion.style === CUSTOM_STYLE_KEY && lyrics.motion.custom?.base === moonFeatherPack.styleKey)) prepareGptMoonPlan(plan, sections, lyricsView.times.starts);
