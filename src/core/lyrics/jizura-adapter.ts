@@ -348,6 +348,7 @@ export function buildJizuraProject(
     seed: opts.seed >>> 0,
     aspect: opts.aspect,
     fps: opts.fps,
+    extra2: lyrics.motion.extra2 === true,
     style: lyrics.motion.style,
     fx: { ...fx, motion: lyrics.motion.motion, decor: lyrics.motion.decor, density: lyrics.motion.density,
       // 飾りの数字・時刻を消す (JIZURA 0.10 の fx.hideNo / fx.hideTime)。オフのときは何も足さない

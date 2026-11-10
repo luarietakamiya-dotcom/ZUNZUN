@@ -202,6 +202,10 @@ export function renderLyricMotionPanel(): HTMLElement {
   hideNo.type = 'checkbox';
   hideNo.dataset.motion = 'hide-no';
   hideNo.addEventListener('change', () => updateMotion({ hideNo: hideNo.checked }));
+  const extra2 = el('input');
+  extra2.type = 'checkbox';
+  extra2.dataset.motion = 'extra2';
+  extra2.addEventListener('change', () => updateMotion({ extra2: extra2.checked }));
   const hideTime = el('input');
   hideTime.type = 'checkbox';
   hideTime.dataset.motion = 'hide-time';
@@ -209,6 +213,7 @@ export function renderLyricMotionPanel(): HTMLElement {
   const decoTextRow = el('div', {}, [
     el('div', { className: 'row-gap lyrics-row-wrap' }, [
       el('label', { className: 'row-gap param-label' }, [hideNo, tr('飾りの数字を消す', 'Hide decorative numbers')]),
+      el('label', { className: 'row-gap param-label' }, [extra2, tr('追加分2の演出も使う', 'Include additional JIZURA effects (set 2)')]),
       el('label', { className: 'row-gap param-label' }, [hideTime, tr('飾りの時刻を消す', 'Hide decorative times')]),
     ]),
     el('span', {
@@ -278,8 +283,9 @@ export function renderLyricMotionPanel(): HTMLElement {
       row.label.textContent = `${def.label}: ${m[def.key].toFixed(2)}`;
     }
     hideNo.checked = !!m.hideNo;
+    extra2.checked = !!m.extra2;
     hideTime.checked = !!m.hideTime;
-    for (const c of [styleSelect, hideNo, hideTime, ...[...motionInputs.values()].map((r) => r.input)]) c.disabled = !m.enabled;
+    for (const c of [styleSelect, hideNo, hideTime, extra2, ...[...motionInputs.values()].map((r) => r.input)]) c.disabled = !m.enabled;
     const sm = m.sections ?? defaultSectionMotion();
     sectionsOn.checked = sm.enabled;
     sectionsOn.disabled = !m.enabled;

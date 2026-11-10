@@ -232,6 +232,7 @@ function sanitizeLyricsMotion(raw: unknown): LyricsMotion {
     ...sanitizeMotionEdits(raw),
     ...(isPlainObject(raw.sections) ? { sections: sanitizeSectionMotion(raw.sections) } : {}),
     ...(typeof raw.hideNo === 'boolean' ? { hideNo: raw.hideNo } : {}),
+    ...(raw.extra2 === true ? { extra2: true } : {}),
     ...(typeof raw.hideTime === 'boolean' ? { hideTime: raw.hideTime } : {}),
   };
 }

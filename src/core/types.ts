@@ -490,6 +490,7 @@ export interface LyricsMotion {
   hideNo?: boolean;
   /** 飾りの時刻を消す（「00:12.34」「REC 1:05」など）。JIZURA の「飾りの時刻を消す」（fx.hideTime） */
   hideTime?: boolean;
+  extra2?: boolean;
 }
 
 /** 動きの強さ: 静か / ふつう / 激しい */

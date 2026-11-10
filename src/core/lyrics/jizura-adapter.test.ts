@@ -203,6 +203,8 @@ describe('buildJizuraProject', () => {
     expect(p.aspect).toBe('9:16');
     expect(p.fps).toBe(30);
     // 歌詞モーションの設定 (既定値) がスタイルと fx に入る
+    expect(p.extra2).toBe(false);
+    expect(buildJizuraProject({ ...lyrics, motion: { ...lyrics.motion, extra2: true } }, defaults, { seed: 99, aspect: '9:16', fps: 30 }).extra2).toBe(true);
     expect(p.style).toBe('noir');
     expect(p.fx).toEqual({ motion: 0.7, decor: 0.5, density: 0.55 });
     // 飾りの数字・時刻を消す設定は、オンのときだけ fx に入る (本家 JIZURA と同じ名前)
