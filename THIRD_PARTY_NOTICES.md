@@ -7,7 +7,7 @@ ZUNZUN が参照・移植・同梱するサードパーティのソフトウェ�
 
 - Source: https://github.com/852wa/JIZURA
 - 用途: 設計の参考、一部ロジックの移植（移植したファイルの冒頭に出典を記載。`src/core/lyrics/parse.ts`・`timing.ts`・`tap.ts` など）、
-  および歌詞モーションエンジンの同梱（`vendor/jizura/jizura-engine.js`、commit `fc16bfe43ea4a6c25a21f1caf04d17326de14f00`、VERSION 0.10.1）。
+  および歌詞モーションエンジンの同梱（`vendor/jizura/jizura-engine.js`、commit `4c8278cef161b38b132055e7b5efa112a5d41790`、VERSION 0.13.0）。
   同梱ファイルは本文を改変していない（`@VERSION@` の置き換えのみ）。詳細と LICENSE の全文は `vendor/jizura/README.md`・`vendor/jizura/LICENSE`。
 - JIZURA が使う書体（Noto Sans JP / Noto Serif JP / Dela Gothic One ほか、SIL Open Font License 1.1）は同梱せず、
   歌詞モーションを使うときに Google Fonts から読み込む（ZUNZUN で外部通信を許しているのはフォントの取得だけ）。
