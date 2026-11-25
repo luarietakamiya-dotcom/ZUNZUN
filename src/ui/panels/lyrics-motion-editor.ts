@@ -7,6 +7,7 @@ import { buildJizuraProject, COVERING_LAYOUTS, COVERING_TRANSITIONS, usesOddMete
 import { applyMotionPack } from '../../core/lyrics/packs';
 import type { PackJ } from '../../core/lyrics/packs/types';
 import { previewMotionNow } from './motion-apply';
+import { SimpleSubtitle } from '../../core/lyrics/simple-subtitle';
 import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 
 const LABELS: Record<LyricsEffectGroup, [string, string]> = {
@@ -186,7 +187,9 @@ export function createMotionEditor(update: (patch: Partial<LyricsMotion>) => voi
     lockButton.dataset.motionEditor = 'lock';
     lockButton.addEventListener('click', () => {
       if (lineValue().lock) { changeLine({ lock: undefined, lockedSeed: undefined, lockedCuts: undefined }); return; }
-      const motion = previewMotionNow();
+      const found = previewMotionNow();
+      // 行の固定は動く歌詞 (JIZURA) だけ (シンプル字幕には場面が無い)
+      const motion = found instanceof SimpleSubtitle ? null : found;
       if (!motion || previewMotionProvider.isBuilding || previewMotionProvider.hasPendingTiming || motion.plan.lines[selected]?.text !== selectedText()) {
         status.textContent = tr('見本の準備と時刻の反映が終わってから固定してください。', 'Wait for the preview and apply timing changes before locking.');
         return;

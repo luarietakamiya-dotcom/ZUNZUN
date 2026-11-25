@@ -1,15 +1,17 @@
 import { createMotionEditor } from './lyrics-motion-editor';
 import { tr } from '../../core/i18n';
-import { customFromStyle, jizuraStyles, loadJizura, LyricMotion, type JizuraApi } from '../../core/lyrics/jizura-adapter';
+import { customFromStyle, jizuraStyles, loadJizura, type JizuraApi } from '../../core/lyrics/jizura-adapter';
+import { createLyricRenderer, type LyricRenderer } from '../../core/lyrics/lyric-renderer';
 import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { blankAlpha } from '../../core/lyrics/blanks';
 import { store } from '../../core/store';
-import { CUSTOM_STYLE_KEY, defaultLyrics, type LyricsMotion, type LyricsSectionMotion, type LyricsSettings, type MotionLevel } from '../../core/types';
+import { CUSTOM_STYLE_KEY, defaultLyrics, defaultSubtitle, type LyricsEngine, type SubtitleSettings, type LyricsMotion, type LyricsSectionMotion, type LyricsSettings, type MotionLevel } from '../../core/types';
 import { defaultSectionMotion, levelOf, SECTION_KINDS } from '../../core/lyrics/section-motion';
 import type { SectionKind } from '../../core/lyrics/sections';
 import { buildLyricsView } from '../../core/lyrics/view';
 import { createStyleEditor } from './lyrics-style-editor';
 import { createMotionApplyNotice, previewMotionNow } from './motion-apply';
+import { createSubtitleEditor } from './subtitle-editor';
 
 /**
  * 「リリックモーション」タブ (歌詞の動き = JIZURA)。2026-10-01 に「歌詞」タブから分けた (「歌詞のメニューだけ縦に長い」)。
@@ -86,7 +88,7 @@ export function renderLyricMotionPanel(): HTMLElement {
   const motionCtx = motionCanvas.getContext('2d');
   const applyNotice = createMotionApplyNotice();
   let sampleActive = false, samplePlaying = true, sampleTime = 1, sampleClock = performance.now(), sampleGeneration = 0;
-  let sample: LyricMotion | null = null;
+  let sample: LyricRenderer | null = null;
   let sampleRebuild: ReturnType<typeof setTimeout> | undefined;
   let sampleStatus = '';
   const sampleSeek = el('input'); sampleSeek.type = 'range'; sampleSeek.min = '0'; sampleSeek.max = '16'; sampleSeek.step = '0.01'; sampleSeek.value = '1';
@@ -112,8 +114,11 @@ export function renderLyricMotionPanel(): HTMLElement {
     settings.timing.lineTimes = { '0': 0.4, '1': 4.4, '2': 8.4, '3': 12.4 };
     settings.timing.lineEnds = { '0': 4.3, '1': 8.3, '2': 12.3, '3': 15.9 };
     settings.motion = { ...currentLyrics().motion, lines: {}, effects: {}, sections: { enabled: false, levels: {} } };
+    // 描き方 (JIZURA / シンプル字幕) と字幕の見た目も今の設定で見せる
+    settings.engine = currentLyrics().engine;
+    if (currentLyrics().subtitle) settings.subtitle = currentLyrics().subtitle;
     try {
-      const next = await LyricMotion.create(settings, { duration: 16, beats: Array.from({ length: 32 }, (_, i) => i * 0.5), energy: new Float32Array(960).fill(0.5), energyRate: 60 }, { projectSeed: 41, width: sampleAspect.value === '9:16' ? 360 : 640, height: sampleAspect.value === '9:16' ? 640 : 360, fps: 30 });
+      const next = await createLyricRenderer(settings, { duration: 16, beats: Array.from({ length: 32 }, (_, i) => i * 0.5), energy: new Float32Array(960).fill(0.5), energyRate: 60 }, { projectSeed: 41, width: sampleAspect.value === '9:16' ? 360 : 640, height: sampleAspect.value === '9:16' ? 640 : 360, fps: 30 });
       if (generation !== sampleGeneration || !sampleActive || !root.isConnected) return;
       sample = next; sampleTime = 1; sampleClock = performance.now(); sampleStatus = tr('サンプル歌詞・見本のリズムで再生中', 'Playing sample lyrics with a sample rhythm');
     } catch (err) { if (generation === sampleGeneration) sampleStatus = `${tr('見本を作れませんでした', 'Could not build sample')}: ${String(err)}`; }
@@ -224,13 +229,34 @@ export function renderLyricMotionPanel(): HTMLElement {
       ),
     }),
   ]);
+  // 描き方: 動く歌詞 (JIZURA) / シンプル字幕 (JIZURA を使わない。2026-11-25 姫)
+  const engineSelect = el('select', { className: 'select' });
+  engineSelect.dataset.motion = 'engine';
+  for (const [v, ja, en] of [['jizura', '動く歌詞 (JIZURA)', 'Moving lyrics (JIZURA)'], ['subtitle', 'シンプル字幕 (JIZURA を使わない・動きなし)', 'Plain subtitles (no JIZURA, no motion)']] as const) {
+    const o = el('option', { textContent: tr(ja, en) });
+    o.value = v;
+    engineSelect.append(o);
+  }
+  const updateLyrics = (patch: Partial<LyricsSettings>): void => {
+    store.setLyrics({ ...currentLyrics(), ...patch });
+    refreshMotionControls();
+    if (sampleActive) { clearTimeout(sampleRebuild); sampleRebuild = setTimeout(() => void buildSample(), 180); }
+  };
+  engineSelect.addEventListener('change', () => updateLyrics({ engine: engineSelect.value as LyricsEngine }));
+  const subtitleEditor = createSubtitleEditor((patch: Partial<SubtitleSettings>) => updateLyrics({ subtitle: { ...defaultSubtitle(), ...(currentLyrics().subtitle ?? {}), ...patch } }));
   const noLyrics = el('div', { className: 'placeholder-card' });
-  const motionCard = el('div', { className: 'lyrics-card' }, [
-    el('label', { className: 'row-gap param-label' }, [motionEnabled, tr('ビジュアライザーの上に歌詞の動きを重ねる', 'Show lyric motion over the visuals')]),
+  // JIZURA (動く歌詞) のときだけ出す設定。シンプル字幕のときは隠す
+  const jizuraBlock = el('div', { className: 'lyrics-jizura' }, [
     el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('スタイル:', 'Style:') }), styleSelect, customBtn, motionStatus]),
     styleEditor.element,
     el('div', { className: 'param-grid lyrics-motion-grid' }, sliderRows),
     decoTextRow,
+  ]);
+  const motionCard = el('div', { className: 'lyrics-card' }, [
+    el('label', { className: 'row-gap param-label' }, [motionEnabled, tr('ビジュアライザーの上に歌詞の動きを重ねる', 'Show lyric motion over the visuals')]),
+    el('div', { className: 'row-gap lyrics-row-wrap' }, [el('span', { className: 'param-label', textContent: tr('描き方:', 'Rendering:') }), engineSelect]),
+    jizuraBlock,
+    subtitleEditor.element,
     applyNotice.element,
     sampleButton,
     sampleControls,
@@ -256,6 +282,14 @@ export function renderLyricMotionPanel(): HTMLElement {
     individualEditor.refresh();
     const m = currentLyrics().motion;
     motionEnabled.checked = m.enabled;
+    const subtitle = currentLyrics().engine === 'subtitle';
+    engineSelect.value = subtitle ? 'subtitle' : 'jizura';
+    engineSelect.disabled = !m.enabled;
+    jizuraBlock.hidden = subtitle;
+    subtitleEditor.element.hidden = !subtitle;
+    individualEditor.element.hidden = subtitle;
+    sectionCard.hidden = subtitle;
+    subtitleEditor.refresh(currentLyrics().subtitle, m.enabled);
     // マイスタイルがあれば、一覧の先頭に「★ 名前」で出す
     const options: [string, string][] = [
       ...(m.custom ? [[CUSTOM_STYLE_KEY, `★ ${m.custom.name}`] as [string, string]] : []),

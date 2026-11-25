@@ -1,4 +1,4 @@
-import type { LyricMotion } from '../../core/lyrics/jizura-adapter';
+import type { LyricRenderer } from '../../core/lyrics/lyric-renderer';
 import { previewMotionProvider } from '../../core/lyrics/motion-provider';
 import { backgroundPaletteNow } from '../../core/render/palette';
 import { store } from '../../core/store';
@@ -8,7 +8,7 @@ import { tr } from '../../core/i18n';
  * 今のプロジェクトの状態で、プレビュー用の歌詞の動きをもらう (曲が無ければ null)。
  * どのタブからも毎フレーム呼んでよい (同じ設定なら作り直さない)。歌詞タブも呼ぶので、時刻を変えたら「反映」ボタンが出る
  */
-export function previewMotionNow(opts: { build?: boolean } = {}): LyricMotion | null {
+export function previewMotionNow(opts: { build?: boolean } = {}): LyricRenderer | null {
   if (!store.audio.isLoaded) return null;
   return previewMotionProvider.get(
     {

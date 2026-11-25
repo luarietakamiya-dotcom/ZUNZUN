@@ -86,3 +86,43 @@ export function installSplitLinesPatch(J: { splitLines?: (text: string, maxPer: 
     return mixed || breaksInsideWord(text, r) ? splitLinesKeepWords(text, maxPer) : r;
   };
 }
+
+/** 英字が中心の行か (JIZURA の J.isLatinText と同じ: 空白を除いた文字の 6 割以上が英字) */
+export function isLatinText(text: string): boolean {
+  const s = text.replace(/\s/g, '');
+  if (!s) return false;
+  return (s.match(/[A-Za-zÀ-ɏḀ-ỿ]/g) ?? []).length / [...s].length >= 0.6;
+}
+
+/** 英字の行を単語の間で、行の長さがなるべくそろうように分ける (JIZURA 0.10 の splitWords と同じ考え方) */
+function splitWords(text: string, maxPer: number): string {
+  const ws = text.trim().split(/\s+/), n = ws.length;
+  const total = ws.reduce((a, w) => a + [...w].length, 0) + n - 1;
+  const nLines = Math.min(n, Math.ceil(total / maxPer));
+  if (nLines <= 1) return ws.join(' ');
+  const len = (a: number, b: number): number => ws.slice(a, b).reduce((s, w) => s + [...w].length, 0) + (b - a - 1);
+  const ideal = total / nLines, memo = new Map<string, { c: number; cuts: number[] }>();
+  const best = (i: number, l: number): { c: number; cuts: number[] } => {
+    if (l === 1) { const d = len(i, n) - ideal; return { c: d * d, cuts: [] }; }
+    const key = `${i},${l}`, hit = memo.get(key);
+    if (hit) return hit;
+    let r = { c: Infinity, cuts: [] as number[] };
+    for (let j = i + 1; j <= n - l + 1; j++) { const d = len(i, j) - ideal, sub = best(j, l - 1), c = d * d + sub.c; if (c < r.c) r = { c, cuts: [j, ...sub.cuts] }; }
+    memo.set(key, r);
+    return r;
+  };
+  const cuts = [0, ...best(0, nLines).cuts, n], out: string[] = [];
+  for (let k = 0; k < cuts.length - 1; k++) out.push(ws.slice(cuts[k], cuts[k + 1]).join(' '));
+  return out.join('\n');
+}
+
+/**
+ * JIZURA を使わずに、歌詞の 1 行を 1 行あたり maxPer 文字ほどで折り返す (シンプル字幕用)。
+ * 英字が中心の行は単語の間で、それ以外は JIZURA と同じ規則で英字のかたまりを切らずに折り返す
+ */
+export function wrapLyric(text: string, maxPer: number): string[] {
+  const t = text.trim();
+  if ([...t].length <= maxPer) return t ? [t] : [];
+  const wrapped = isLatinText(t) ? (/\s/.test(t) ? splitWords(t, maxPer) : t) : splitLinesKeepWords(t, maxPer);
+  return wrapped.split('\n').map((s) => s.trim()).filter(Boolean);
+}

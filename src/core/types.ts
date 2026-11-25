@@ -415,8 +415,40 @@ export interface LyricBlank {
   mode: 'none' | 'interlude';
 }
 
+/**
+ * 歌詞の描き方。'jizura' = 動く歌詞 (JIZURA)、'subtitle' = シンプル字幕 (JIZURA を使わず、今の行をそのまま描く。
+ * core/lyrics/simple-subtitle.ts。2026-11-25 姫「JIZURA 不使用の字幕もできるようにする」)
+ */
+export type LyricsEngine = 'jizura' | 'subtitle';
+
+/** シンプル字幕の見た目 (core/lyrics/simple-subtitle.ts)。古いプロジェクトには無い (無ければ既定値) */
+export interface SubtitleSettings {
+  /** 書体: SUBTITLE_FONTS のキー (Google Fonts から読み込む) か 'local:<書体名>' (この PC に入っている書体) */
+  font: string;
+  /** 太字 */
+  bold: boolean;
+  /** 置く高さ: 下 / 中央 / 上 */
+  position: 'bottom' | 'middle' | 'top';
+  /** 文字の大きさの倍率 (0.5..2) */
+  size: number;
+  /** 文字の色 (#rrggbb) */
+  color: string;
+  /** ふちどりの太さ (0..1。0 で無し) */
+  outline: number;
+  /** ふちどりの色 (#rrggbb) */
+  outlineColor: string;
+  /** 影の濃さ (0..1。0 で無し) */
+  shadow: number;
+  /** 出るとき・消えるときのフェードの長さ (秒、0..1。0 でパッと切り替え) */
+  fade: number;
+}
+
+export const defaultSubtitle = (): SubtitleSettings => ({ font: 'noto-sans', bold: true, position: 'bottom', size: 1, color: '#ffffff', outline: 0.35, outlineColor: '#000000', shadow: 0.6, fade: 0.2 });
+
 export interface LyricsSettings {
-  engine: 'jizura';
+  engine: LyricsEngine;
+  /** シンプル字幕の見た目 (engine が 'subtitle' のときに使う)。古いプロジェクトには無い */
+  subtitle?: SubtitleSettings;
   source: LyricsSource;
   /** 入力された歌詞そのもの (LRC/SRT のときはタグ付きの原文) */
   text: string;

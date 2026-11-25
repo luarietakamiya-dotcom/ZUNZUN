@@ -821,3 +821,9 @@ build / lint / 676 tests 通過。Edgeで追加分2は初期オフ、通常設�
 - 縦長（9:16）では 1 行が 12 字だと文字が小さすぎたので、動きなしだけ日本語 9 字・英字が中心の行は 16 字で折り返し、文字をひと回り大きく（短い辺の 7%）した。
 - 検証: 単体テスト 4 件、全 vitest 680 件・lint・build。開発版のブラウザで本物の JIZURA を使い、表示中の 2.4 秒間に変化する画素 0、フェードの濃さ（0 → 0.1 秒で約半分 → 0.2 秒で 1）、横長・縦長の見た目を確認。未確認: スマホ実機、書き出した MP4。
 - 同じコミットで THIRD_PARTY_NOTICES の JIZURA の版を 0.13.0 に直した（918dbcc で済み）。
+
+### 2026-11-25 Claude: シンプル字幕（JIZURA を使わない字幕）を追加（姫の承認。書体は Google Fonts + PC の書体、MV字幕・動きなしはしばらく残す）
+- 新規: `src/core/lyrics/simple-subtitle.ts`（本体）、`subtitle-fonts.ts`（書体の一覧・読み込み・PC の書体の一覧）、`lyric-renderer.ts`（JIZURA と字幕の選び分け）、`src/ui/panels/subtitle-editor.ts`（設定欄）、テスト `simple-subtitle.test.ts`・`tests/e2e/simple-subtitle.spec.ts`。
+- 変更: `types.ts`（`LyricsEngine`・`SubtitleSettings`）、`validate.ts`（engine と subtitle の検証）、`motion-provider.ts`（作り直しのキーに engine・subtitle、字幕は時刻の変更もすぐ反映）、`layer.ts`・`motion-apply.ts`・`export/mp4.ts`（型と作り方を共通に）、`lyrics-motion-editor.ts`（行の固定は JIZURA だけ）、`lyric-motion.ts`（描き方の切り替え。字幕のときは JIZURA の設定・行ごとの指定・区切りの強さを隠す）、`split-lines.ts`（`wrapLyric`・`isLatinText`）、`docs/ARCHITECTURE.md`（節を追加）。
+- 検証: 単体テスト 10 件（新規）、全 vitest 690 件、lint、build。E2E: 新規 1 件（切り替え → 字幕の設定が出る → プレビューに字幕 → 設定が保存される → 戻す）と、歌詞まわりの E2E 37 件が通過。未確認: 書き出した MP4（この環境は H.264 を書き出せない）、スマホ実機、PC の書体の一覧（Local Font Access の許可の画面）、Google Fonts の実際の読み込み（テスト環境は外へ出られない）。
+- **Codex へ**: `LyricLayer` などの型が `LyricMotion` から `LyricRenderer`（`LyricMotion | SimpleSubtitle`）になった。JIZURA だけの中身（`plan.cuts` など）を使うときは `instanceof SimpleSubtitle` で外してほしい。

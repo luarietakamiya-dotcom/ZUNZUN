@@ -30,8 +30,11 @@ import {
   type LyricBlank,
   type LyricsSectionMotion,
   type MotionLevel,
+  defaultSubtitle,
+  type SubtitleSettings,
 } from '../types';
 import { SECTION_KINDS } from '../lyrics/section-motion';
+import { isSubtitleFontKey } from '../lyrics/subtitle-fonts';
 import type { SectionKind } from '../lyrics/sections';
 import { MAX_BLANKS, normalizeBlanks } from '../lyrics/blanks';
 import { defaultSlideMotion, type SlideMotionSettings } from '../render/slide-motion';
@@ -195,7 +198,8 @@ function sanitizeLyrics(raw: unknown): LyricsSettings | null {
   const base = defaultLyrics();
   const timingRaw = isPlainObject(raw.timing) ? raw.timing : {};
   return {
-    engine: 'jizura',
+    engine: raw.engine === 'subtitle' ? 'subtitle' : 'jizura',
+    ...(isPlainObject(raw.subtitle) ? { subtitle: sanitizeSubtitle(raw.subtitle) } : {}),
     source: raw.source === 'text' || raw.source === 'lrc' || raw.source === 'srt' ? raw.source : base.source,
     text: typeof raw.text === 'string' ? raw.text.slice(0, MAX_LYRICS_LENGTH) : base.text,
     timing: {
@@ -207,6 +211,25 @@ function sanitizeLyrics(raw: unknown): LyricsSettings | null {
     },
     motion: sanitizeLyricsMotion(raw.motion),
     stem: sanitizeLyricsStem(raw.stem),
+  };
+}
+
+/** シンプル字幕の見た目。書体は一覧のキーか 'local:<書体名>' (書体名は CSS を壊す文字を除く)。数値は範囲に収める */
+function sanitizeSubtitle(raw: Record<string, unknown>): SubtitleSettings {
+  const d = defaultSubtitle();
+  const num = (v: unknown, fallback: number, lo: number, hi: number): number => (isFiniteNumber(v) ? clamp(v, lo, hi) : fallback);
+  const color = (v: unknown, fallback: string): string => (typeof v === 'string' && HEX_COLOR.test(v) ? v.toLowerCase() : fallback);
+  const font = typeof raw.font === 'string' && (isSubtitleFontKey(raw.font) || /^local:[^"'\\;{}<>]{1,100}$/.test(raw.font)) ? raw.font : d.font;
+  return {
+    font,
+    bold: typeof raw.bold === 'boolean' ? raw.bold : d.bold,
+    position: raw.position === 'middle' || raw.position === 'top' || raw.position === 'bottom' ? raw.position : d.position,
+    size: num(raw.size, d.size, 0.5, 2),
+    color: color(raw.color, d.color),
+    outline: num(raw.outline, d.outline, 0, 1),
+    outlineColor: color(raw.outlineColor, d.outlineColor),
+    shadow: num(raw.shadow, d.shadow, 0, 1),
+    fade: num(raw.fade, d.fade, 0, 1),
   };
 }
 

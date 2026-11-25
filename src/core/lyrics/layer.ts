@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { LyricBlank } from '../types';
 import { blankAlpha } from './blanks';
-import type { LyricMotion } from './jizura-adapter';
+import type { LyricRenderer } from './lyric-renderer';
 
 /**
  * 歌詞モーションの層 (docs/ARCHITECTURE.md の Compositor「中 = lyric texture」)。
@@ -28,7 +28,7 @@ export class LyricLayer {
   private readonly material: THREE.MeshBasicMaterial;
   private readonly mesh: THREE.Mesh;
   private texture: THREE.CanvasTexture | null = null;
-  private motion: LyricMotion | null = null;
+  private motion: LyricRenderer | null = null;
   private width = 1;
   private height = 1;
   private readonly resolutionScale: number;
@@ -60,12 +60,12 @@ export class LyricLayer {
     this.blanks = blanks ?? [];
   }
 
-  get currentMotion(): LyricMotion | null {
+  get currentMotion(): LyricRenderer | null {
     return this.motion;
   }
 
   /** 描く歌詞モーションを差し替える (null で歌詞を出さない)。同じものを渡したときは何もしない */
-  setMotion(motion: LyricMotion | null): void {
+  setMotion(motion: LyricRenderer | null): void {
     if (motion === this.motion) return;
     this.motion = motion;
     this.layout();

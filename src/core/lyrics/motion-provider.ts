@@ -1,6 +1,7 @@
 import type { AudioAnalysis } from '../audio/analyze';
 import type { LyricsSettings, RhythmSettings } from '../types';
-import { buildJizuraAudio, LyricMotion, motionRhythmGrid, nearestAspect } from './jizura-adapter';
+import { buildJizuraAudio, motionRhythmGrid, nearestAspect } from './jizura-adapter';
+import { createLyricRenderer, type LyricRenderer } from './lyric-renderer';
 import { motionUsesPalette } from './packs';
 import type { PackPalette } from './packs/types';
 
@@ -62,6 +63,9 @@ function motionKeyWithoutTiming(req: MotionRequest & { lyrics: LyricsSettings })
     lyrics.source,
     lyrics.text,
     lyrics.motion,
+    // 描き方 (JIZURA / シンプル字幕) と字幕の見た目が変わったら作り直す
+    lyrics.engine,
+    lyrics.subtitle ?? null,
     req.projectSeed >>> 0,
     nearestAspect(req.width, req.height),
     req.fps,
@@ -75,7 +79,7 @@ function motionKeyWithoutTiming(req: MotionRequest & { lyrics: LyricsSettings })
 
 export class LyricMotionProvider {
   private currentKey = '';
-  private current: LyricMotion | null = null;
+  private current: LyricRenderer | null = null;
   private requestedKey = '';
   private requestedAt = 0;
   /** 今の LyricMotion の、時刻を除いたキー */
@@ -91,7 +95,7 @@ export class LyricMotionProvider {
   constructor(private readonly now: () => number = () => performance.now()) {}
 
   /** 今の設定に合う (または作り直している間はひとつ前の) LyricMotion。出さない設定なら null */
-  get(req: MotionRequest, opts: { build?: boolean } = {}): LyricMotion | null {
+  get(req: MotionRequest, opts: { build?: boolean } = {}): LyricRenderer | null {
     if (!wantsMotion(req)) {
       this.requestedKey = '';
       return null;
@@ -110,6 +114,8 @@ export class LyricMotionProvider {
       this.requestedAt = this.now();
     }
     if (this.building) return this.current;
+    // シンプル字幕は作り直しがほぼ一瞬なので、時刻だけの変更も「反映」を待たずにすぐ作る (反映ボタンは JIZURA の重さのため)
+    if (req.lyrics.engine === 'subtitle' && this.timingOnly) this.applyRequested = true;
     // build: false = 作り直さずに、設定が変わったかだけ覚える (歌詞タブ。作り直しの間は画面が止まるので、打ち込み・ドラッグ中に作らない)
     if (opts.build === false) return this.current;
     if (this.applyRequested || (!this.timingOnly && this.now() - this.requestedAt >= DEBOUNCE_MS)) {
@@ -139,7 +145,7 @@ export class LyricMotionProvider {
     const base = motionKeyWithoutTiming(req);
     const rhythm = motionRhythmGrid(req.rhythm);
     const audio = req.analysis ? buildJizuraAudio(req.analysis, rhythm) : null;
-    LyricMotion.create(req.lyrics, audio, { projectSeed: req.projectSeed, width: req.width, height: req.height, fps: req.fps, rhythm, palette: req.palette ?? null })
+    createLyricRenderer(req.lyrics, audio, { projectSeed: req.projectSeed, width: req.width, height: req.height, fps: req.fps, rhythm, palette: req.palette ?? null })
       .then((motion) => {
         this.current = motion;
         this.currentKey = key;

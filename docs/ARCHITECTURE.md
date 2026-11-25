@@ -289,3 +289,11 @@ MVPへの影響
 - 空白 = `lyrics.timing.blanks: { start, end, mode }[]`（Project JSON。古いプロジェクトには無い）。`mode`: `'none'` は何も出さない（端は 0.3 秒でなめらかに消える・戻る）、`'interlude'` は JIZURA の間奏の場面をそのまま出す。
 - 歌詞の動きの作り直しの材料には入れない（描くかどうかだけ）。ビジュアライザーの上・リリックモーションの見本・書き出しのすべてに効く。
 - 作り方: 歌詞タブのタイムラインの下の「再生位置から空白を作る」。再生位置から次の行の始まりまで。行の途中ならその行はそこで終わらせる（行の終わりの変更は取り消しの履歴に積む）。タイムラインに斜線の帯で出し、端・真ん中のドラッグで動かす。選んで Delete で消す。
+
+## 歌詞の描き方: 動く歌詞（JIZURA）とシンプル字幕（2026-11-25 姫の承認「JIZURA 不使用の字幕もできるようにする」）
+- `lyrics.engine` で選ぶ。`'jizura'`（今まで・既定）= JIZURA の歌詞モーション。`'subtitle'` = シンプル字幕（`core/lyrics/simple-subtitle.ts`）。古いプロジェクトは `'jizura'` で開く。
+- シンプル字幕は JIZURA を使わず、歌詞タブの行の時刻（`buildLyricsView`）で今の行をそのまま描く。動きなし（位置・大きさ・色は固定、出入りのフェードだけ）。乱数を使わないので、プレビューと書き出しは同じ絵。
+- 両方とも `plan.W` / `plan.H` と `render(ctx, t)` を持ち、`LyricLayer`・プレビューの係（`motion-provider.ts`）・書き出し（`export/mp4.ts`）は `createLyricRenderer()`（`core/lyrics/lyric-renderer.ts`）で作って区別せずに使う。行ごとの指定（場面のロック）は JIZURA だけ。
+- 見た目の設定 `lyrics.subtitle`（書体・太字・位置・大きさ・色・ふちどり・影・フェード）。`sanitizeProject()` で範囲と形を確かめる。
+- 書体: 既定は Google Fonts の 7 書体（`core/lyrics/subtitle-fonts.ts`。どの PC でも同じ見た目）。この PC に入っている書体も選べる（`'local:<書体名>'`。Chrome / Edge は Local Font Access で一覧、それ以外は名前を手で入れる。ほかの PC では別の書体になる）。外への通信は書体の取得だけ、は変わらない。
+- 作り直しはほぼ一瞬なので、時刻だけの変更も「反映」を待たずに作り直す（反映ボタンは JIZURA の重さのため）。

@@ -13,7 +13,8 @@ import {
 } from 'mediabunny';
 import type { AudioAnalysis } from '../audio/analyze';
 import type { AudioTimeline } from '../audio/timeline';
-import { buildJizuraAudio, LyricMotion, motionRhythmGrid } from '../lyrics/jizura-adapter';
+import { buildJizuraAudio, motionRhythmGrid } from '../lyrics/jizura-adapter';
+import { createLyricRenderer } from '../lyrics/lyric-renderer';
 import { backgroundPalette } from '../render/palette';
 import { wantsMotion } from '../lyrics/motion-provider';
 import type { BackgroundSettings, CommonParams, ExportSettings, LyricsSettings, OverlayLayer, RhythmSettings, ViewSettings, CompositionSettings, MediaLayer } from '../types';
@@ -147,7 +148,7 @@ export async function renderMp4(job: Mp4ExportJob, ctx: ExportRunContext): Promi
       // 背景の色 (「余白」のスタイルが文字の色に使う。プレビューと同じく、背景のファイルから読み取る)
       const palette = await backgroundPalette(job.background?.config ?? null, job.background?.file ?? null);
       host.lyrics.setMotion(
-        await LyricMotion.create(lyricReq.lyrics, job.analysis ? buildJizuraAudio(job.analysis, rhythm) : null, { projectSeed: job.seed, width, height, fps, rhythm, palette }),
+        await createLyricRenderer(lyricReq.lyrics, job.analysis ? buildJizuraAudio(job.analysis, rhythm) : null, { projectSeed: job.seed, width, height, fps, rhythm, palette }),
       );
     }
     host.lyrics.setBlanks(job.lyrics?.timing.blanks);
